@@ -257,7 +257,7 @@ export default function CustomerOrders() {
       {selectedOrder && !isDesktop() && (
         <div className="fixed inset-0 z-50">
           <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={() => navigate('/shop/orders')} />
-          <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl max-h-[80vh] overflow-y-auto animate-slide-up">
+          <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl max-h-[80vh] overflow-y-auto animate-slide-up pb-safe">
             {/* Sheet Handle */}
             <div className="sticky top-0 bg-white rounded-t-3xl border-b border-slate-100 px-5 py-4 z-10">
               <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-3" />

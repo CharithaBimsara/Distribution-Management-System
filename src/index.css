@@ -132,7 +132,8 @@ body {
 .stagger-children > *:nth-child(8) { animation-delay: 420ms; }
 
 /* ===== Safe Area Utilities ===== */
-.pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+/* Add a small additional offset so our bottom navs/sheets sit above device gesture bars on phones/tablets */
+.pb-safe { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 10px); }
 .pt-safe { padding-top: env(safe-area-inset-top, 0px); }
 
 /* ===== Skeleton Loading ===== */

@@ -231,14 +231,14 @@ export default function RepLayout() {
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto pb-20 lg:pb-0">
           <div className="lg:p-6 lg:max-w-6xl lg:mx-auto">
             <Outlet />
           </div>
         </main>
 
         {/* ========== MOBILE BOTTOM NAV (hidden on lg+) ========== */}
-        <nav className="lg:hidden bg-white/90 backdrop-blur-xl border-t border-slate-200/60 flex-shrink-0 pb-safe">
+        <nav className="fixed bottom-0 left-0 right-0 z-40 lg:hidden bg-white/90 backdrop-blur-xl border-t border-slate-200/60 flex-shrink-0 pb-safe">
           <div className="flex justify-around px-2">
             {bottomNavItems.map((item) => (
               <NavLink

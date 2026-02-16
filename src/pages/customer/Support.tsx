@@ -122,7 +122,7 @@ export default function CustomerSupport() {
       {showForm && (
         <div className="fixed inset-0 z-50">
           <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowForm(false)} />
-          <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl max-h-[85vh] overflow-y-auto animate-slide-up">
+          <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl max-h-[85vh] overflow-y-auto animate-slide-up pb-safe">
             <div className="sticky top-0 bg-white rounded-t-3xl border-b border-slate-100 px-5 py-4 z-10">
               <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-3" />
               <div className="flex items-center justify-between">
