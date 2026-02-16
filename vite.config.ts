@@ -8,11 +8,11 @@ export default defineConfig({
     port: 3000,
     proxy: {
       '/api': {
-        target: 'http://localhost:5101',
+        target: 'https://largest-leena-nonlustrously.ngrok-free.dev',
         changeOrigin: true,
       },
       '/hubs': {
-        target: 'http://localhost:5101',
+        target: 'https://largest-leena-nonlustrously.ngrok-free.dev',
         changeOrigin: true,
         ws: true,
       },
