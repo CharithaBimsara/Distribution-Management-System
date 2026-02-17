@@ -17,10 +17,15 @@ import Register from './pages/auth/Register';
 // Admin pages
 import AdminDashboard from './pages/admin/Dashboard';
 import AdminProducts from './pages/admin/Products';
+import AdminProductEditor from './pages/admin/ProductEditor';
 import AdminOrders from './pages/admin/Orders';
 import AdminCustomers from './pages/admin/Customers';
 import AdminCustomerDetail from './pages/admin/CustomerDetail';
+import AdminCreateCustomer from './pages/admin/CreateCustomer';
 import AdminReps from './pages/admin/Reps';
+import CreateRep from './pages/admin/CreateRep';
+import CreateRoute from './pages/admin/CreateRoute';
+import AdminOrderDetail from './pages/admin/OrderDetail';
 import AdminPayments from './pages/admin/Payments';
 import AdminReports from './pages/admin/Reports';
 import AdminSupport from './pages/admin/Support';
@@ -36,8 +41,14 @@ import RepCustomers from './pages/rep/Customers';
 import RepCustomerDetail from './pages/rep/CustomerDetail';
 import RepPerformance from './pages/rep/Performance';
 import RepCreateOrder from './pages/rep/RepCreateOrder';
+import RepCreatePayment from './pages/rep/RepCreatePayment';
+import RepCreateCustomer from './pages/rep/RepCreateCustomer';
 import RepSelectCustomer from './pages/rep/RepSelectCustomer';
 import RepSelectProducts from './pages/rep/RepSelectProducts';
+import RepOrderDetail from './pages/rep/OrderDetail';
+import RepNotifications from './pages/rep/Notifications';
+import RepSupport from './pages/rep/Support';
+import RepCreateSupport from './pages/rep/RepCreateSupport';
 
 // Customer pages
 import CustomerHome from './pages/customer/Home';
@@ -50,6 +61,7 @@ import CustomerOrderDetail from './pages/customer/OrderDetail';
 import CustomerProfile from './pages/customer/Profile';
 import CustomerNotifications from './pages/customer/Notifications';
 import CustomerSupport from './pages/customer/Support';
+import CustomerCreateSupport from './pages/customer/CustomerCreateSupport';
 
 // Error pages
 import NotFound from './pages/NotFound';
@@ -79,10 +91,16 @@ export default function App() {
         <Route path="/admin" element={<ProtectedRoute allowedRoles={['Admin']}><AdminLayout /></ProtectedRoute>}>
           <Route index element={<AdminDashboard />} />
           <Route path="products" element={<AdminProducts />} />
+          <Route path="products/new" element={<AdminProductEditor />} />
+          <Route path="products/:id/edit" element={<AdminProductEditor />} />
           <Route path="orders" element={<AdminOrders />} />
+          <Route path="orders/:id" element={<AdminOrderDetail />} />
           <Route path="customers" element={<AdminCustomers />} />
+          <Route path="customers/new" element={<AdminCreateCustomer />} />
           <Route path="customers/:id" element={<AdminCustomerDetail />} />
           <Route path="reps" element={<AdminReps />} />
+          <Route path="reps/new" element={<CreateRep />} />
+          <Route path="routes/new" element={<CreateRoute />} />
           <Route path="payments" element={<AdminPayments />} />
           <Route path="reports" element={<AdminReports />} />
           <Route path="support" element={<AdminSupport />} />
@@ -94,14 +112,21 @@ export default function App() {
         <Route path="/rep" element={<ProtectedRoute allowedRoles={['SalesRep']}><RepLayout /></ProtectedRoute>}>
           <Route index element={<RepDashboard />} />
           <Route path="payments" element={<RepPayments />} />
+          <Route path="payments/new" element={<RepCreatePayment />} />
           <Route path="routes" element={<RepRoutes />} />
-          <Route path="orders" element={<RepOrders />} />
+          <Route path="orders" element={<RepOrders />}>
+            <Route path=":id" element={<RepOrderDetail />} />
+          </Route>
           <Route path="orders/new" element={<RepCreateOrder />} />
           <Route path="orders/new/customers" element={<RepSelectCustomer />} />
           <Route path="orders/new/products" element={<RepSelectProducts />} />
           <Route path="customers" element={<RepCustomers />} />
+          <Route path="customers/new" element={<RepCreateCustomer />} />
           <Route path="customers/:id" element={<RepCustomerDetail />} />
           <Route path="performance" element={<RepPerformance />} />
+          <Route path="notifications" element={<RepNotifications />} />
+          <Route path="support" element={<RepSupport />} />
+          <Route path="support/new" element={<RepCreateSupport />} />
         </Route>
 
         {/* Customer routes */}
@@ -116,6 +141,7 @@ export default function App() {
           <Route path="ledger" element={<CustomerLedger />} />
           <Route path="notifications" element={<CustomerNotifications />} />
           <Route path="support" element={<CustomerSupport />} />
+          <Route path="support/new" element={<CustomerCreateSupport />} />
           <Route path="profile" element={<CustomerProfile />} />
         </Route>
 

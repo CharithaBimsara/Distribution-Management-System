@@ -1,36 +1,32 @@
-import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { useQuery } from '@tanstack/react-query';
 import { supportApi } from '../../services/api/supportApi';
 import { formatDate } from '../../utils/formatters';
-import { MessageCircle, Plus, X, Loader2, AlertCircle, CheckCircle, Clock } from 'lucide-react';
 import type { Complaint } from '../../types/common.types';
+import { MessageCircle, Plus, X, CheckCircle, Clock, AlertCircle } from 'lucide-react';
+import CustomerSupportForm from './CustomerSupportForm';
 import toast from 'react-hot-toast';
 
 export default function CustomerSupport() {
-  const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ subject: '', description: '', priority: 'Medium', orderId: '' });
 
   const { data: complaints, isLoading } = useQuery({
     queryKey: ['customer-complaints'],
     queryFn: () => supportApi.customerGetComplaints().then(r => r.data.data),
   });
 
-  const createMut = useMutation({
-    mutationFn: () => supportApi.customerCreateComplaint({
-      subject: form.subject,
-      description: form.description,
-      priority: form.priority,
-      orderId: form.orderId || undefined,
-    }),
-    onSuccess: () => {
-      toast.success('Complaint submitted');
-      queryClient.invalidateQueries({ queryKey: ['customer-complaints'] });
-      setShowForm(false);
-      setForm({ subject: '', description: '', priority: 'Medium', orderId: '' });
-    },
-    onError: () => toast.error('Failed to submit complaint'),
-  });
+  useEffect(() => {
+    const isDesktop = () => typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches;
+    if (typeof document === 'undefined') return;
+    if (showForm && !isDesktop()) {
+      document.body.style.overflow = 'hidden';
+      try { window.scrollTo({ top: 0, behavior: 'instant' as any }); } catch {}
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => { document.body.style.overflow = ''; };
+  }, [showForm]);
 
   const statusIcon = (status: string) => {
     switch (status) {
@@ -67,7 +63,7 @@ export default function CustomerSupport() {
       <div className="px-4 -mt-5 relative z-10 pb-6 space-y-4">
         {/* New Complaint Button */}
         <button
-          onClick={() => setShowForm(true)}
+          onClick={() => { if (typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches) { window.location.href = '/shop/support/new'; } else { setShowForm(true); } }}
           className="w-full bg-white rounded-2xl shadow-sm border border-slate-100 p-4 flex items-center justify-center gap-2 text-sm font-semibold text-orange-600 hover:bg-orange-50 active:scale-[0.98] transition-all"
         >
           <Plus className="w-4 h-4" /> New Complaint
@@ -118,79 +114,25 @@ export default function CustomerSupport() {
         )}
       </div>
 
-      {/* New Complaint Bottom Sheet */}
-      {showForm && (
-        <div className="fixed inset-0 z-50">
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowForm(false)} />
-          <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl max-h-[85vh] overflow-y-auto animate-slide-up pb-safe">
-            <div className="sticky top-0 bg-white rounded-t-3xl border-b border-slate-100 px-5 py-4 z-10">
+      {/* Mobile: bottom-sheet (portal) */}
+      {showForm && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-50 pointer-events-none">
+          <div className="fixed inset-0 bottom-16 bg-slate-900/60 backdrop-blur-sm pointer-events-auto" onClick={() => setShowForm(false)} />
+          <div className="fixed bottom-16 left-0 right-0 bg-white rounded-t-3xl h-auto overflow-y-auto animate-slide-up pb-safe pointer-events-auto" style={{ maxHeight: 'calc(100vh - 4rem)' }}>
+            <div className="sticky top-0 bg-white pt-3 pb-2 px-6 border-b border-slate-100 z-10">
               <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-3" />
               <div className="flex items-center justify-between">
                 <h2 className="font-bold text-slate-900">New Complaint</h2>
-                <button onClick={() => setShowForm(false)} className="p-1.5 hover:bg-slate-100 rounded-xl transition">
-                  <X className="w-5 h-5 text-slate-400" />
-                </button>
+                <button onClick={() => setShowForm(false)} className="p-2 hover:bg-slate-100 rounded-xl"><X className="w-5 h-5 text-slate-400" /></button>
               </div>
             </div>
-            <div className="p-5 space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1.5">Subject</label>
-                <input
-                  value={form.subject}
-                  onChange={(e) => setForm(prev => ({ ...prev, subject: e.target.value }))}
-                  placeholder="Brief description of the issue"
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400 outline-none transition"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1.5">Description</label>
-                <textarea
-                  value={form.description}
-                  onChange={(e) => setForm(prev => ({ ...prev, description: e.target.value }))}
-                  placeholder="Provide details about the issue..."
-                  rows={4}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400 outline-none resize-none transition"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1.5">Priority</label>
-                <div className="flex gap-2">
-                  {['Low', 'Medium', 'High'].map(p => (
-                    <button
-                      key={p}
-                      onClick={() => setForm(prev => ({ ...prev, priority: p }))}
-                      className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all ${
-                        form.priority === p
-                          ? p === 'High' ? 'bg-red-500 text-white' : p === 'Low' ? 'bg-slate-700 text-white' : 'bg-orange-500 text-white'
-                          : 'bg-slate-50 text-slate-500 border border-slate-200'
-                      }`}
-                    >
-                      {p}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1.5">
-                  Order ID <span className="text-slate-400 font-normal">(optional)</span>
-                </label>
-                <input
-                  value={form.orderId}
-                  onChange={(e) => setForm(prev => ({ ...prev, orderId: e.target.value }))}
-                  placeholder="Related order ID"
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400 outline-none transition"
-                />
-              </div>
-              <button
-                onClick={() => createMut.mutate()}
-                disabled={createMut.isPending || !form.subject || !form.description}
-                className="w-full py-3.5 bg-gradient-to-r from-orange-500 to-rose-500 text-white rounded-xl text-sm font-semibold shadow-lg shadow-orange-500/25 hover:shadow-xl active:scale-[0.98] transition-all disabled:opacity-60 flex items-center justify-center gap-2"
-              >
-                {createMut.isPending ? <><Loader2 className="w-4 h-4 animate-spin" /> Submitting...</> : 'Submit Complaint'}
-              </button>
+
+            <div className="p-6">
+              <CustomerSupportForm onSuccess={() => setShowForm(false)} onCancel={() => setShowForm(false)} />
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

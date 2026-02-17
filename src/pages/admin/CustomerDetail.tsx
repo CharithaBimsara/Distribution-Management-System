@@ -1,9 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { customersApi } from '../../services/api/customersApi';
+import { repsApi } from '../../services/api/repsApi';
 import { useParams, useNavigate } from 'react-router-dom';
-import { formatCurrency, formatDate } from '../../utils/formatters';
-import { ArrowLeft, Store, MapPin, CreditCard, User, Calendar, TrendingUp, ShoppingBag, DollarSign, Settings, ToggleLeft, ToggleRight } from 'lucide-react';
+import { formatCurrency, formatDate, statusColor } from '../../utils/formatters';
+import { ArrowLeft, Store, MapPin, CreditCard, User, Calendar, TrendingUp, ShoppingBag, DollarSign, Settings, ToggleLeft, ToggleRight, X, Map } from 'lucide-react';
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
+import AdminRouteForm from './AdminRouteForm';
 import toast from 'react-hot-toast';
 
 export default function AdminCustomerDetail() {
@@ -12,6 +15,12 @@ export default function AdminCustomerDetail() {
   const queryClient = useQueryClient();
   const [showCreditModal, setShowCreditModal] = useState(false);
   const [creditLimit, setCreditLimit] = useState('');
+
+  const [showAssignRoute, setShowAssignRoute] = useState(false);
+  const [selectedRouteId, setSelectedRouteId] = useState<string>('');
+  const [visitOrder, setVisitOrder] = useState<string>('1');
+  const [visitFrequency, setVisitFrequency] = useState<string>('Weekly');
+  const [showCreateRouteInline, setShowCreateRouteInline] = useState(false);
 
   const { data: summary, isLoading } = useQuery({
     queryKey: ['admin-customer-summary', id],
@@ -41,6 +50,34 @@ export default function AdminCustomerDetail() {
     onError: () => toast.error('Failed to update credit limit'),
   });
 
+  const { data: routes, isLoading: loadingRoutes } = useQuery({
+    queryKey: ['admin-routes'],
+    queryFn: () => repsApi.adminGetRoutes().then(r => r.data.data),
+  });
+
+  const addCustomerToRouteMut = useMutation({
+    mutationFn: ({ routeId, payload }: { routeId: string; payload: { customerId: string; visitOrder: number; visitFrequency?: string } }) => repsApi.adminAddCustomerToRoute(routeId, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-routes'] });
+      toast.success('Customer added to route');
+      setShowAssignRoute(false);
+      setSelectedRouteId('');
+    },
+    onError: () => toast.error('Failed to add customer to route'),
+  });
+
+  const createRouteMut = useMutation({
+    mutationFn: (data: { name: string; description?: string; repId: string; daysOfWeek: string; estimatedDurationMinutes: number }) => repsApi.adminCreateRoute(data),
+    onSuccess: (res: any) => {
+      const created = res?.data?.data;
+      queryClient.invalidateQueries({ queryKey: ['admin-routes'] });
+      if (created?.id) {
+        addCustomerToRouteMut.mutate({ routeId: created.id, payload: { customerId: customer?.id!, visitOrder: 1 } });
+      }
+    },
+    onError: () => toast.error('Failed to create route'),
+  });
+
   const customer = summary?.customer;
 
   if (isLoading) {
@@ -68,38 +105,53 @@ export default function AdminCustomerDetail() {
   return (
     <div className="animate-fade-in space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <button onClick={() => navigate('/admin/customers')} className="p-2 hover:bg-slate-100 rounded-lg transition">
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">{customer.shopName}</h1>
-            <p className="text-sm text-slate-500 mt-1">Customer Details</p>
-          </div>
-        </div>
+  <div className="flex items-start justify-between gap-4">
+    <div className="flex items-center gap-4">
+      <button onClick={() => navigate('/admin/customers')} className="p-2 hover:bg-slate-100 rounded-lg transition">
+        <ArrowLeft className="w-5 h-5" />
+      </button>
+      <div>
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => toggleStatusMut.mutate(!customer.isActive)}
-            disabled={toggleStatusMut.isPending}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition ${
-              customer.isActive
-                ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}
-          >
-            {customer.isActive ? <ToggleRight className="w-5 h-5" /> : <ToggleLeft className="w-5 h-5" />}
-            {customer.isActive ? 'Active' : 'Inactive'}
-          </button>
-          <button
-            onClick={() => { setCreditLimit(customer.creditLimit.toString()); setShowCreditModal(true); }}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition"
-          >
-            <Settings className="w-4 h-4" />
-            Set Credit Limit
-          </button>
+          <h1 className="text-lg lg:text-2xl font-bold text-slate-900">{customer.shopName}</h1>
+          {/* mobile: simple status badge; desktop keeps the toggle control */}
+          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${statusColor(customer.isActive ? 'Active' : 'Inactive')} lg:hidden`}>{customer.isActive ? 'Active' : 'Inactive'}</span>
         </div>
+        <p className="text-xs text-slate-400 mt-1">Customer Details</p>
       </div>
+    </div>
+
+    <div className="flex items-center gap-3">
+      {/* desktop toggle control (hidden on mobile) */}
+      <button
+        onClick={() => toggleStatusMut.mutate(!customer.isActive)}
+        disabled={toggleStatusMut.isPending}
+        className={`hidden lg:inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition ${
+          customer.isActive ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+        }`}
+      >
+        {customer.isActive ? <ToggleRight className="w-5 h-5" /> : <ToggleLeft className="w-5 h-5" />}
+        {customer.isActive ? 'Active' : 'Inactive'}
+      </button>
+
+      {/* desktop: Assign to Route (hidden on mobile) */}
+      <button
+        onClick={() => setShowAssignRoute(true)}
+        className="hidden lg:inline-flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-700 rounded-lg text-sm font-medium hover:bg-emerald-100 transition"
+      >
+        <Map className="w-4 h-4" />
+        <span>Assign to Route</span>
+      </button>
+
+      {/* prominent mobile-friendly Set Credit Limit button */}
+      <button
+        onClick={() => { setCreditLimit(customer.creditLimit.toString()); setShowCreditModal(true); }}
+        className="px-4 py-3 lg:py-2 bg-indigo-600 text-white rounded-2xl lg:rounded-lg shadow-md lg:shadow-none flex items-center gap-2 hover:bg-indigo-600 transition"
+      >
+        <Settings className="w-4 h-4" />
+        <span className="text-sm font-semibold">Set Credit Limit</span>
+      </button>
+    </div>
+  </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Customer Info */}
@@ -229,38 +281,174 @@ export default function AdminCustomerDetail() {
         </div>
       </div>
 
-      {/* Credit Limit Modal */}
+      {/* Credit Limit Modal (desktop) / Bottom‑sheet (mobile) */}
       {showCreditModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl p-6 max-w-md w-full">
-            <h3 className="text-lg font-bold text-slate-900 mb-4">Set Credit Limit</h3>
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-slate-700 mb-2">Credit Limit</label>
-              <input
-                type="number"
-                value={creditLimit}
-                onChange={(e) => setCreditLimit(e.target.value)}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-                placeholder="Enter credit limit"
-              />
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowCreditModal(false)}
-                className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => updateCreditMut.mutate(parseFloat(creditLimit))}
-                disabled={!creditLimit || updateCreditMut.isPending}
-                className="flex-1 px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition disabled:opacity-50"
-              >
-                Update
-              </button>
+        (typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches) ? (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl p-6 max-w-md w-full">
+              <h3 className="text-lg font-bold text-slate-900 mb-4">Set Credit Limit</h3>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-slate-700 mb-2">Credit Limit</label>
+                <input
+                  type="number"
+                  value={creditLimit}
+                  onChange={(e) => setCreditLimit(e.target.value)}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                  placeholder="Enter credit limit"
+                />
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowCreditModal(false)}
+                  className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => updateCreditMut.mutate(parseFloat(creditLimit))}
+                  disabled={!creditLimit || updateCreditMut.isPending}
+                  className="flex-1 px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition disabled:opacity-50"
+                >
+                  Update
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        ) : (
+          createPortal(
+            <div className="fixed inset-0 z-50 pointer-events-none">
+              <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm pointer-events-auto" onClick={() => setShowCreditModal(false)} />
+              <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl max-h-[80vh] overflow-y-auto animate-slide-up pb-safe pointer-events-auto">
+                <div className="sticky top-0 bg-white pt-3 pb-2 px-6 border-b border-slate-100 z-10">
+                  <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-3" />
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-bold text-slate-900">Set Credit Limit</h3>
+                    <button onClick={() => setShowCreditModal(false)} className="p-2 hover:bg-slate-100 rounded-xl"><span className="sr-only">Close</span><X className="w-5 h-5 text-slate-400" /></button>
+                  </div>
+                </div>
+
+                <div className="p-6 space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">Credit Limit</label>
+                    <input
+                      type="number"
+                      value={creditLimit}
+                      onChange={(e) => setCreditLimit(e.target.value)}
+                      className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none"
+                      placeholder="Enter credit limit"
+                    />
+                  </div>
+
+                  <div className="flex gap-3 mt-4">
+                    <button onClick={() => setShowCreditModal(false)} className="flex-1 py-2.5 bg-slate-50 border border-slate-100 rounded-lg text-sm text-slate-600">Cancel</button>
+                    <button onClick={() => updateCreditMut.mutate(parseFloat(creditLimit))} disabled={!creditLimit || updateCreditMut.isPending} className="flex-1 py-2.5 bg-indigo-600 text-white rounded-lg text-sm disabled:opacity-50">Update</button>
+                  </div>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )
+        )
+      )}
+
+      {/* Assign to Route Modal / Bottom-sheet */}
+      {showAssignRoute && (
+        (typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches) ? (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl p-6 max-w-md w-full">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-slate-900">Assign to Route</h3>
+                <button onClick={() => { setShowAssignRoute(false); setShowCreateRouteInline(false); }} className="p-2 hover:bg-slate-100 rounded-lg"><X className="w-5 h-5 text-slate-400" /></button>
+              </div>
+
+              {!showCreateRouteInline ? (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">Select Route</label>
+                    <div className="flex gap-2">
+                      <select value={selectedRouteId} onChange={(e) => { setSelectedRouteId(e.target.value); const r = (routes || []).find((x: any) => x.id === e.target.value); setVisitOrder(r ? String((r.customers?.length || 0) + 1) : '1'); }} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
+                        <option value="">Choose route</option>
+                        {(routes || []).map((r: any) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                      </select>
+                      <button onClick={() => setShowCreateRouteInline(true)} className="px-3 py-2 bg-slate-50 border border-slate-100 rounded-lg text-sm text-slate-700">New</button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">Visit Order</label>
+                      <input type="number" value={visitOrder} onChange={e => setVisitOrder(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">Frequency</label>
+                      <select value={visitFrequency} onChange={e => setVisitFrequency(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"><option>Weekly</option><option>Biweekly</option><option>Monthly</option></select>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3 mt-4">
+                    <button onClick={() => { setShowAssignRoute(false); setShowCreateRouteInline(false); }} className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-medium">Cancel</button>
+                    <button onClick={() => addCustomerToRouteMut.mutate({ routeId: selectedRouteId, payload: { customerId: customer.id, visitOrder: parseInt(visitOrder || '1'), visitFrequency } })} disabled={!selectedRouteId || addCustomerToRouteMut.isPending} className="flex-1 py-2.5 bg-emerald-600 text-white hover:bg-emerald-700 rounded-lg text-sm font-medium disabled:opacity-50">Add to Route</button>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <AdminRouteForm reps={[]} onSubmit={(d) => createRouteMut.mutate(d)} onCancel={() => setShowCreateRouteInline(false)} isPending={createRouteMut.isPending} />
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          createPortal(
+            <div className="fixed inset-0 z-50 pointer-events-none">
+              <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm pointer-events-auto" onClick={() => { setShowAssignRoute(false); setShowCreateRouteInline(false); }} />
+              <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl max-h-[80vh] overflow-y-auto animate-slide-up pb-safe pointer-events-auto">
+                <div className="sticky top-0 bg-white pt-3 pb-2 px-6 border-b border-slate-100 z-10">
+                  <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-3" />
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-bold text-slate-900">Assign to Route</h3>
+                    <button onClick={() => { setShowAssignRoute(false); setShowCreateRouteInline(false); }} className="p-2 hover:bg-slate-100 rounded-xl"><X className="w-5 h-5 text-slate-400" /></button>
+                  </div>
+                </div>
+
+                <div className="p-6 space-y-4">
+                  {!showCreateRouteInline ? (
+                    <>
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="block text-sm font-medium text-slate-700">Select Route</label>
+                          <button onClick={() => setShowCreateRouteInline(true)} className="text-xs text-indigo-600">Create route</button>
+                        </div>
+                        <select value={selectedRouteId} onChange={(e) => { setSelectedRouteId(e.target.value); const r = (routes || []).find((x: any) => x.id === e.target.value); setVisitOrder(r ? String((r.customers?.length || 0) + 1) : '1'); }} className="w-full px-3 py-3 border border-slate-300 rounded-xl text-sm bg-white">
+                          <option value="">Choose route</option>
+                          {(routes || []).map((r: any) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                        </select>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-2">Visit Order</label>
+                          <input type="number" value={visitOrder} onChange={e => setVisitOrder(e.target.value)} className="w-full px-3 py-3 border border-slate-300 rounded-xl text-sm" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-2">Frequency</label>
+                          <select value={visitFrequency} onChange={e => setVisitFrequency(e.target.value)} className="w-full px-3 py-3 border border-slate-300 rounded-xl text-sm bg-white"><option>Weekly</option><option>Biweekly</option><option>Monthly</option></select>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-3 mt-4">
+                        <button onClick={() => { setShowAssignRoute(false); setShowCreateRouteInline(false); }} className="flex-1 py-2.5 bg-slate-50 border border-slate-100 rounded-lg text-sm text-slate-700">Cancel</button>
+                        <button onClick={() => addCustomerToRouteMut.mutate({ routeId: selectedRouteId, payload: { customerId: customer.id, visitOrder: parseInt(visitOrder || '1'), visitFrequency } })} disabled={!selectedRouteId || addCustomerToRouteMut.isPending} className="flex-1 py-2.5 bg-emerald-600 text-white rounded-lg text-sm disabled:opacity-50">Add to Route</button>
+                      </div>
+                    </>
+                  ) : (
+                    <AdminRouteForm reps={[]} onSubmit={(d) => createRouteMut.mutate(d)} onCancel={() => setShowCreateRouteInline(false)} isPending={createRouteMut.isPending} />
+                  )}
+                </div>
+              </div>
+            </div>,
+            document.body
+          )
+        )
       )}
     </div>
   );

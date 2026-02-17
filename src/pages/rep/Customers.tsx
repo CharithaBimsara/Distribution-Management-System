@@ -1,9 +1,12 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { customersApi } from '../../services/api/customersApi';
 import { formatCurrency } from '../../utils/formatters';
-import { Users, MapPin, Search } from 'lucide-react';
-import { useState } from 'react';
+import { Users, MapPin, Search, Plus, X } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
+import RepCustomerForm from './RepCustomerForm';
 import type { Customer } from '../../types/customer.types';
 
 export default function RepCustomers() {
@@ -16,20 +19,49 @@ export default function RepCustomers() {
     queryFn: () => customersApi.repGetCustomers({ page, pageSize: 20, search: search || undefined }).then(r => r.data.data),
   });
 
+  const queryClient = useQueryClient();
   const customers = data?.items || [];
   const totalPages = data ? Math.ceil(data.totalCount / data.pageSize) : 0;
+
+  const [showCreate, setShowCreate] = useState(false);
+
+  const isDesktop = () => typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches;
 
   const filtered = customers.filter((c: Customer) =>
     !search || c.shopName.toLowerCase().includes(search.toLowerCase())
   );
 
+  // lock background scroll while mobile bottom-sheet is open (match payments behavior)
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    if (showCreate && !isDesktop()) {
+      document.body.style.overflow = 'hidden';
+      try { window.scrollTo({ top: 0, behavior: 'instant' as any }); } catch {}
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => { document.body.style.overflow = ''; };
+  }, [showCreate]);
+
+
+
   return (
     <div className="animate-fade-in">
       {/* Header */}
-      <div className="bg-gradient-to-br from-violet-600 via-purple-500 to-indigo-500 px-5 pt-5 pb-6 relative overflow-hidden">
+      <div className="bg-gradient-to-br from-emerald-600 via-emerald-500 to-teal-500 px-5 pt-5 pb-6 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/4" />
-        <h1 className="text-white text-xl font-bold">My Customers</h1>
-        <p className="text-violet-200 text-sm mt-0.5">{data?.totalCount || 0} assigned customers</p>
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-white text-xl font-bold">My Customers</h1>
+            <p className="text-emerald-200 text-sm mt-0.5">{data?.totalCount || 0} assigned customers</p>
+          </div>
+          <div className="ml-4">
+            <button onClick={() => { if (isDesktop()) { navigate('/rep/customers/new'); } else { setShowCreate(true); } }} className="inline-flex items-center gap-2 px-3 py-2 bg-white/10 text-white text-sm rounded-lg hover:bg-white/20 transition">
+              <Plus className="w-4 h-4" />
+              Register Customer
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="px-4 space-y-4 -mt-3 pb-6">
@@ -52,7 +84,7 @@ export default function RepCustomers() {
         ) : filtered.length === 0 ? (
           <div className="text-center py-16">
             <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-3">
-              <Users className="w-8 h-8 text-slate-300" />
+              <Users className="w-8 h-8 text-emerald-400" />
             </div>
             <p className="text-slate-500 font-medium">No customers found</p>
           </div>
@@ -65,7 +97,7 @@ export default function RepCustomers() {
                 className="card p-4 cursor-pointer active:scale-[0.98] transition-transform"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-violet-500/15">
+                  <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center flex-shrink-0 shadow-lg shadow-emerald-500/15">
                     <span className="text-white font-bold text-sm">{customer.shopName[0]}</span>
                   </div>
                   <div className="flex-1 min-w-0">
@@ -105,6 +137,27 @@ export default function RepCustomers() {
                 )}
               </div>
             ))}
+
+            {/* Mobile: Register customer bottom-sheet (desktop navigates to /rep/customers/new) */}
+            {showCreate && typeof document !== 'undefined' && createPortal(
+              <div className="fixed inset-0 z-50 pointer-events-none">
+                <div className="fixed inset-0 bottom-16 bg-slate-900/60 backdrop-blur-sm pointer-events-auto" onClick={() => setShowCreate(false)} />
+                <div className="fixed bottom-16 left-0 right-0 bg-white rounded-t-3xl h-auto overflow-y-auto animate-slide-up pb-safe pointer-events-auto" style={{ maxHeight: 'calc(100vh - 4rem)' }}>
+                  <div className="sticky top-0 bg-white pt-3 pb-2 px-6 border-b border-slate-100 z-10">
+                    <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-3" />
+                    <div className="flex items-center justify-between">
+                      <h2 className="font-bold text-slate-900 text-lg">Register Customer</h2>
+                      <button onClick={() => setShowCreate(false)} className="p-2 hover:bg-slate-100 rounded-xl"><X className="w-5 h-5 text-slate-400" /></button>
+                    </div>
+                  </div>
+
+                  <div className="p-6">
+                    <RepCustomerForm onSuccess={() => setShowCreate(false)} onCancel={() => setShowCreate(false)} />
+                  </div>
+                </div>
+              </div>,
+              document.body
+            )}
           </div>
         )}
       </div>

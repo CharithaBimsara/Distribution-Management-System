@@ -4,6 +4,7 @@ import { customersApi } from '../../services/api/customersApi';
 import { authApi } from '../../services/api/authApi';
 import { useAuth } from '../../hooks/useAuth';
 import { User, MapPin, CreditCard, Store, LogOut, Shield, Phone, Mail, Edit3, Lock, X, Loader2, ChevronRight } from 'lucide-react';
+import ConfirmModal from '../../components/common/ConfirmModal';
 import { formatCurrency } from '../../utils/formatters';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
@@ -14,6 +15,7 @@ export default function CustomerProfile() {
   const queryClient = useQueryClient();
   const [editOpen, setEditOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
 
   const { data: profile, isLoading } = useQuery({
     queryKey: ['customer-profile'],
@@ -247,7 +249,7 @@ export default function CustomerProfile() {
 
         {/* Logout */}
         <button
-          onClick={() => logout()}
+          onClick={() => setLogoutConfirmOpen(true)}
           className="w-full py-3.5 bg-white border-2 border-red-200 text-red-600 rounded-2xl text-sm font-semibold hover:bg-red-50 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
         >
           <LogOut className="w-4 h-4" /> Sign Out
@@ -296,6 +298,18 @@ export default function CustomerProfile() {
             </div>
           </div>
         </div>
+      )}
+
+      {logoutConfirmOpen && (
+        <ConfirmModal
+          open={logoutConfirmOpen}
+          title="Sign out"
+          description="Are you sure you want to sign out?"
+          confirmLabel="Sign out"
+          confirmVariant="orange"
+          onConfirm={() => { setLogoutConfirmOpen(false); logout().then(() => navigate('/login')); }}
+          onCancel={() => setLogoutConfirmOpen(false)}
+        />
       )}
 
       {/* Change Password Bottom Sheet */}

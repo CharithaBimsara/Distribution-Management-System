@@ -40,22 +40,24 @@ export default function RepCustomerDetail() {
 
   return (
     <div className="animate-fade-in space-y-6 pb-6">
-      {/* Header */}
-      <div className="bg-gradient-to-br from-violet-600 via-purple-500 to-indigo-500 px-5 pt-5 pb-20 relative overflow-hidden -mx-4 -mt-6">
+      {/* Header (green, reduced height, lower z-index) */}
+      <div className="bg-gradient-to-br from-emerald-600 via-emerald-500 to-teal-500 px-5 pt-6 lg:pt-4 pb-12 relative overflow-hidden -mx-4 -mt-4 z-0">
         <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/4" />
-        <button onClick={() => navigate('/rep/customers')} className="text-white mb-4 flex items-center gap-2 hover:opacity-80 transition">
-          <ArrowLeft className="w-5 h-5" />
-          <span className="text-sm">Back</span>
-        </button>
-        <h1 className="text-white text-xl font-bold">{customer.shopName}</h1>
-        <p className="text-violet-200 text-sm mt-0.5">Customer Details</p>
+        {typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches && (
+          <button onClick={() => navigate('/rep/customers')} className="text-white mb-3 flex items-center gap-2 hover:opacity-80 transition">
+            <ArrowLeft className="w-5 h-5" />
+            <span className="text-sm">Back</span>
+          </button>
+        )}
+        <h1 className="text-white text-xl font-bold ml-3 mt-2 lg:mt-0">{customer.shopName}</h1>
+        <p className="text-emerald-200 text-sm mt-2 lg:mt-0.5 ml-3">Customer Details</p>
       </div>
 
-      <div className="px-4 -mt-12 space-y-4">
+      <div className="px-4 -mt-8 space-y-4 relative z-10">
         {/* Customer Info */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 space-y-4">
           <h2 className="font-bold text-slate-900 flex items-center gap-2 text-sm">
-            <Store className="w-4 h-4 text-violet-500" />
+            <Store className="w-4 h-4 text-emerald-500" />
             Basic Information
           </h2>
           <div className="space-y-3">
@@ -75,7 +77,7 @@ export default function RepCustomerDetail() {
             {customer.customerSegment && (
               <div>
                 <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Segment</p>
-                <span className="inline-block px-2 py-1 bg-violet-50 text-violet-700 text-xs font-semibold rounded">
+                <span className="inline-block px-2 py-1 bg-emerald-50 text-emerald-700 text-xs font-semibold rounded">
                   {customer.customerSegment}
                 </span>
               </div>
@@ -139,16 +141,16 @@ export default function RepCustomerDetail() {
         {/* Statistics */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 space-y-4">
           <h2 className="font-bold text-slate-900 flex items-center gap-2 text-sm">
-            <TrendingUp className="w-4 h-4 text-orange-500" />
+            <TrendingUp className="w-4 h-4 text-emerald-500" />
             Order Statistics
           </h2>
           <div className="grid grid-cols-2 gap-3">
-            <div className="p-3.5 bg-gradient-to-br from-indigo-50 to-violet-50 rounded-xl">
+            <div className="p-3.5 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl">
               <div className="flex items-center gap-1.5 mb-1.5">
-                <ShoppingBag className="w-3.5 h-3.5 text-indigo-600" />
-                <span className="text-[10px] text-indigo-600 font-medium uppercase">Orders</span>
+                <ShoppingBag className="w-3.5 h-3.5 text-emerald-600" />
+                <span className="text-[10px] text-emerald-600 font-medium uppercase">Orders</span>
               </div>
-              <p className="text-2xl font-bold text-indigo-900">{summary.totalOrders}</p>
+              <p className="text-2xl font-bold text-emerald-900">{summary.totalOrders}</p>
             </div>
             <div className="p-3.5 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl">
               <div className="flex items-center gap-1.5 mb-1.5">
@@ -158,12 +160,12 @@ export default function RepCustomerDetail() {
               <p className="text-2xl font-bold text-emerald-900">{formatCurrency(summary.totalPurchases)}</p>
             </div>
           </div>
-          <div className="p-3.5 bg-gradient-to-br from-orange-50 to-rose-50 rounded-xl">
+          <div className="p-3.5 bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-xl">
             <div className="flex items-center gap-1.5 mb-1.5">
-              <CreditCard className="w-3.5 h-3.5 text-orange-600" />
-              <span className="text-[10px] text-orange-600 font-medium uppercase">Outstanding Balance</span>
+              <CreditCard className="w-3.5 h-3.5 text-emerald-600" />
+              <span className="text-[10px] text-emerald-600 font-medium uppercase">Outstanding Balance</span>
             </div>
-            <p className="text-2xl font-bold text-orange-900">{formatCurrency(summary.outstandingBalance)}</p>
+            <p className="text-2xl font-bold text-emerald-900">{formatCurrency(summary.outstandingBalance)}</p>
           </div>
           {summary.lastOrderDate && (
             <div className="pt-2">

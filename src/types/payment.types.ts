@@ -18,7 +18,8 @@ export interface PaymentRecord {
   customerId: string;
   orderId?: string;
   amount: number;
-  paymentMethod: string;
+  // backend expects numeric enum value for PaymentMethod; allow number here
+  paymentMethod: number | string;
   referenceNumber?: string;
   chequeNumber?: string;
   bankName?: string;

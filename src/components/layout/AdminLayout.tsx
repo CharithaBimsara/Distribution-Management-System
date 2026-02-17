@@ -9,6 +9,7 @@ import {
   BarChart3, Bell, Settings, LogOut, Menu, X, ChevronLeft, Search,
   DollarSign, MessageSquare
 } from 'lucide-react';
+import ConfirmModal from '../common/ConfirmModal';
 
 const navItems = [
   { to: '/admin', icon: LayoutDashboard, label: 'Dashboard', end: true },
@@ -26,6 +27,7 @@ const navItems = [
 export default function AdminLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const { user, logout } = useAuth();
   useSignalR();
   const navigate = useNavigate();
@@ -37,10 +39,9 @@ export default function AdminLayout() {
     refetchInterval: 30000,
   });
 
-  const handleLogout = async () => {
-    await logout();
-    navigate('/login');
-  };
+  const handleLogout = () => setLogoutConfirmOpen(true);
+
+  const handleConfirmLogout = () => { setLogoutConfirmOpen(false); logout().then(() => navigate('/login')); }; 
 
   const currentPage = navItems.find(item =>
     item.end ? location.pathname === item.to : location.pathname.startsWith(item.to)
@@ -161,6 +162,17 @@ export default function AdminLayout() {
       )}
 
       {/* Main Content */}
+      {logoutConfirmOpen && (
+        <ConfirmModal
+          open={logoutConfirmOpen}
+          title="Sign out"
+          description="Are you sure you want to sign out?"
+          confirmLabel="Sign out"
+          confirmVariant="indigo"
+          onConfirm={handleConfirmLogout}
+          onCancel={() => setLogoutConfirmOpen(false)}
+        />
+      )}
       <div className="flex-1 flex flex-col min-w-0">
         <header className="h-16 bg-white/80 backdrop-blur-xl border-b border-slate-200/60 flex items-center justify-between px-4 lg:px-6 sticky top-0 z-30">
           <div className="flex items-center gap-3">

@@ -1,6 +1,11 @@
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { repsApi } from '../../services/api/repsApi';
-import { MapPin, Clock, CheckCircle, PlayCircle, Users, Navigation, Route } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import ConfirmModal from '../../components/common/ConfirmModal';
+import { orderDraftUtils } from '../../utils/orderDraft';
+import { MapPin, Clock, CheckCircle, PlayCircle, Users, Navigation, Route, ExternalLink, FilePlus } from 'lucide-react';
+import { formatDateTime } from '../../utils/formatters';
 import type { Route as RouteType, Visit } from '../../types/common.types';
 
 export default function RepRoutes() {
@@ -26,20 +31,85 @@ export default function RepRoutes() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['rep-today-visits'] }),
   });
 
+  // Local UI state for improved route workflow
+  const [checkoutModalOpen, setCheckoutModalOpen] = useState(false);
+  const [visitToCheckout, setVisitToCheckout] = useState<Visit | null>(null);
+  const navigate = useNavigate();
+
+  const handleNavigate = (v: Visit) => {
+    if (!v) return;
+    if (v.latitude && v.longitude) {
+      window.open(`https://www.google.com/maps/dir/?api=1&destination=${v.latitude},${v.longitude}`, '_blank');
+      return;
+    }
+    // fallback to search by name
+    window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(v.customerName || '')}`, '_blank');
+  };
+
+  const handleAddOrder = (v: Visit) => {
+    orderDraftUtils.setCustomer(v.customerId, v.customerName || '');
+    navigate('/rep/orders/new');
+  };
+
+  const handleConfirmCheckout = () => {
+    if (!visitToCheckout) return;
+    checkOutMut.mutate({ visitId: visitToCheckout.id, data: { notes: visitToCheckout.notes || 'Visit completed' } });
+    setCheckoutModalOpen(false);
+    setVisitToCheckout(null);
+  }; 
+
   return (
     <div className="animate-fade-in">
       {/* Header */}
-      <div className="bg-gradient-to-br from-blue-600 via-blue-500 to-indigo-500 px-5 pt-5 pb-6 relative overflow-hidden">
+      <div className="bg-gradient-to-br from-emerald-600 via-emerald-500 to-teal-500 px-5 pt-5 pb-6 relative z-0 overflow-hidden lg:rounded-2xl lg:pb-6">
         <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/4" />
         <h1 className="text-white text-xl font-bold">Routes & Visits</h1>
-        <p className="text-blue-200 text-sm mt-0.5">Manage your daily route plan</p>
+        <p className="text-emerald-200 text-sm mt-0.5">Manage your daily route plan</p>
       </div>
 
-      <div className="px-4 space-y-4 -mt-3 pb-6">
+      <div className="px-4 space-y-4 -mt-3 pb-6 relative z-10">
+        {/* Route summary (real-world) */}
+        <div className="card p-4 mb-2 shadow-lg">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-slate-400">Route progress</p>
+              <h3 className="text-sm font-semibold text-slate-800 truncate">
+                Next stop: { (todayVisits && todayVisits.find(v => v.status !== 'Completed')) ? (todayVisits.find(v => v.status !== 'Completed')!.customerName) : '—' }
+              </h3>
+              <p className="text-[11px] text-slate-400 mt-1">
+                { (todayVisits?.filter(v => v.status === 'Completed').length || 0) }/{ todayVisits?.length || 0 } visits complete
+                { (todayVisits && todayVisits.find(v => v.status !== 'Completed')) && (
+                  <span> • Next: { formatDateTime(todayVisits.find(v => v.status !== 'Completed')!.plannedDate || new Date()) }</span>
+                ) }
+              </p>
+              <div className="w-full h-2 bg-slate-100 rounded-full mt-3 overflow-hidden">
+                <div className="h-full bg-gradient-to-r from-emerald-500 to-teal-500" style={{ width: `${todayVisits && todayVisits.length ? Math.round((todayVisits.filter(v => v.status === 'Completed').length / todayVisits.length) * 100) : 0}%` }} />
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              {todayVisits && todayVisits.find(v => v.status !== 'Completed') && (
+                <>
+                  <button onClick={() => handleNavigate(todayVisits.find(v => v.status !== 'Completed')!)} className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-100 bg-white/50 hover:bg-slate-50 text-sm">
+                    <ExternalLink className="w-4 h-4 text-emerald-600" /> Navigate
+                  </button>
+                  <button onClick={() => handleAddOrder(todayVisits.find(v => v.status !== 'Completed')!)} className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 text-sm">
+                    <FilePlus className="w-4 h-4" /> Add order
+                  </button>
+                </>
+              )}
+
+              <button onClick={() => { const el = document.querySelector('#assigned-routes'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }} className="px-3 py-2 rounded-xl border border-slate-100 text-sm bg-white/50 hover:bg-slate-50">
+                View route
+              </button>
+            </div>
+          </div>
+        </div>
+
         {/* Today's Visits */}
         <div className="card overflow-hidden shadow-lg shadow-slate-200/50">
           <div className="flex items-center gap-2 p-4 pb-2">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center">
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center">
               <Clock className="w-3.5 h-3.5 text-white" />
             </div>
             <h2 className="font-bold text-sm text-slate-800">Today&apos;s Visits</h2>
@@ -63,23 +133,35 @@ export default function RepRoutes() {
                         <p className="text-[11px] text-slate-400 mt-0.5">{visit.status}</p>
                       </div>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 items-center">
+                      <button onClick={() => handleNavigate(visit)} className="flex items-center gap-1 px-3 py-2 bg-white border rounded-xl text-xs text-emerald-600 hover:bg-emerald-50 transition">
+                        <ExternalLink className="w-3.5 h-3.5" /> Navigate
+                      </button>
+
+                      <button onClick={() => handleAddOrder(visit)} className="flex items-center gap-1 px-3 py-2 bg-emerald-600 text-white rounded-xl text-xs font-semibold hover:bg-emerald-700 transition">
+                        <FilePlus className="w-3.5 h-3.5" /> Add Order
+                      </button>
+
                       {!visit.checkInTime && visit.status !== 'Completed' && (
                         <button
                           onClick={() => checkInMut.mutate({ customerId: visit.customerId })}
-                          className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-xl text-xs font-semibold shadow-lg shadow-emerald-500/20 active:scale-95 transition-all"
+                          disabled={checkInMut.isPending}
+                          className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-xl text-xs font-semibold shadow-lg shadow-emerald-500/20 active:scale-95 transition-all disabled:opacity-60"
                         >
-                          <PlayCircle className="w-3.5 h-3.5" /> Check In
+                          {checkInMut.isPending ? 'Checking in...' : <><PlayCircle className="w-3.5 h-3.5" /> Check In</>}
                         </button>
                       )}
+
                       {visit.checkInTime && !visit.checkOutTime && (
                         <button
-                          onClick={() => checkOutMut.mutate({ visitId: visit.id, data: { notes: 'Visit completed' } })}
-                          className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-xl text-xs font-semibold shadow-lg shadow-blue-500/20 active:scale-95 transition-all"
+                          onClick={() => { setVisitToCheckout(visit); setCheckoutModalOpen(true); }}
+                          disabled={checkOutMut.isPending}
+                          className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-xl text-xs font-semibold shadow-lg shadow-emerald-500/20 active:scale-95 transition-all disabled:opacity-60"
                         >
-                          <CheckCircle className="w-3.5 h-3.5" /> Check Out
+                          {checkOutMut.isPending && visitToCheckout?.id === visit.id ? 'Completing...' : <><CheckCircle className="w-3.5 h-3.5" /> Check Out</>}
                         </button>
                       )}
+
                       {visit.status === 'Completed' && (
                         <span className="flex items-center gap-1 text-xs text-emerald-600 font-semibold bg-emerald-50 px-2.5 py-1.5 rounded-xl">
                           <CheckCircle className="w-3.5 h-3.5" /> Done
@@ -147,6 +229,16 @@ export default function RepRoutes() {
             </div>
           )}
         </div>
+
+        <ConfirmModal
+          open={checkoutModalOpen}
+          title="Complete visit?"
+          description={`Mark visit to ${visitToCheckout?.customerName || 'customer'} as completed?`}
+          confirmLabel="Complete"
+          cancelLabel="Cancel"
+          onConfirm={handleConfirmCheckout}
+          onCancel={() => { setCheckoutModalOpen(false); setVisitToCheckout(null); }}
+        />
       </div>
     </div>
   );

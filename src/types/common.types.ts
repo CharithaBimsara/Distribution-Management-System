@@ -61,6 +61,7 @@ export interface Visit {
   repId: string;
   customerId: string;
   customerName?: string;
+  plannedDate?: string;
   checkInTime?: string;
   checkOutTime?: string;
   status: string;

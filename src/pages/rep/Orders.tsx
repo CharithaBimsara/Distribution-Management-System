@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import { useParams, Outlet } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { ordersApi } from '../../services/api/ordersApi';
@@ -18,10 +20,56 @@ export default function RepOrders() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
+  // route-aware selection (desktop -> navigate to /rep/orders/:id, mobile -> bottom sheet)
+  const { id: routeOrderId } = useParams();
+  const detailPanelRef = useRef<HTMLDivElement | null>(null);
+  const isDesktop = () => typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches;
+  const isWide = () => typeof window !== 'undefined' && window.matchMedia('(min-width: 1280px)').matches;
+
   const { data, isLoading } = useQuery({
     queryKey: ['rep-orders', page, status],
     queryFn: () => ordersApi.repGetAll({ page, pageSize: 20, status: status || undefined }).then(r => r.data.data),
   });
+
+  // keep mobile bottom-sheet in sync with route (so direct links work on phones)
+  useEffect(() => {
+    if (!routeOrderId) return setSelectedOrder(null);
+    const found = data?.items?.find(o => o.id === routeOrderId);
+    if (found) {
+      setSelectedOrder(found);
+      const row = document.getElementById(`order-${found.id}`);
+      row?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      detailPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      return;
+    }
+    (async () => {
+      try {
+        const res = await ordersApi.repGetById(routeOrderId);
+        setSelectedOrder(res.data.data);
+        detailPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      } catch (e) {
+        setSelectedOrder(null);
+      }
+    })();
+  }, [routeOrderId, data]);
+
+  useEffect(() => {
+    if (!selectedOrder) return;
+    const row = document.getElementById(`order-${selectedOrder.id}`);
+    row?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    detailPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [selectedOrder]);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    if (selectedOrder && !isDesktop()) {
+      document.body.style.overflow = 'hidden';
+      try { window.scrollTo({ top: 0, behavior: 'instant' as any }); } catch {}
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => { document.body.style.overflow = ''; };
+  }, [selectedOrder]);
 
   const cancelMut = useMutation({
     mutationFn: ({ id, reason }: { id: string; reason: string }) => ordersApi.repCancel(id, reason),
@@ -38,7 +86,7 @@ export default function RepOrders() {
   return (
     <div className="animate-fade-in">
       {/* Header */}
-      <div className="bg-gradient-to-br from-emerald-600 via-emerald-500 to-teal-500 px-5 pt-5 pb-6 relative overflow-hidden">
+      <div className="bg-gradient-to-br from-emerald-600 via-emerald-500 to-teal-500 px-5 pt-5 pb-8 relative z-0 overflow-hidden lg:rounded-2xl lg:pb-6">
         <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/4" />
         <div className="flex items-center justify-between">
           <div><h1 className="text-white text-xl font-bold">My Orders</h1><p className="text-emerald-200 text-sm mt-0.5">Orders placed for customers</p></div>
@@ -46,7 +94,7 @@ export default function RepOrders() {
         </div>
       </div>
 
-      <div className="px-4 space-y-4 -mt-3 pb-6">
+      <div className="px-4 lg:px-0 space-y-4 lg:space-y-6 -mt-3 lg:mt-6 pb-6 lg:pb-0 relative z-10">
         {/* Filter Pills */}
         <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
           {['', 'Pending', 'Approved', 'Processing', 'Dispatched', 'Delivered'].map(s => (
@@ -57,39 +105,141 @@ export default function RepOrders() {
         {isLoading ? <div className="space-y-3">{[1,2,3].map(i => <div key={i} className="skeleton h-24 rounded-2xl" />)}</div> : !data?.items?.length ? (
           <div className="text-center py-16"><div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-3"><ShoppingCart className="w-8 h-8 text-slate-300" /></div><p className="text-slate-500 font-medium">No orders found</p><p className="text-xs text-slate-400 mt-1">Try changing the filter</p></div>
         ) : (
-          <div className="space-y-2.5">
-            {data.items.map((order: Order) => (
-              <div key={order.id} onClick={() => setSelectedOrder(order)} className="card p-4 active:scale-[0.98] cursor-pointer transition-all">
-                <div className="flex items-center justify-between mb-2"><span className="text-sm font-bold text-slate-800">{order.orderNumber}</span><span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${statusColor(order.status)}`}>{order.status}</span></div>
-                <p className="text-sm text-slate-600">{order.customerName}</p>
-                <div className="flex items-center justify-between mt-2.5"><span className="text-[11px] text-slate-400">{formatDate(order.orderDate)}</span><span className="text-sm font-bold text-slate-800">{formatCurrency(order.totalAmount)}</span></div>
-              </div>
-            ))}
-            {data.totalPages > 1 && <div className="flex items-center justify-between pt-2"><span className="text-xs text-slate-400">Page {page} of {data.totalPages}</span><div className="flex gap-2"><button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="px-4 py-2 text-xs font-semibold bg-white border border-slate-200 rounded-xl disabled:opacity-40 active:scale-95 transition">Prev</button><button onClick={() => setPage(p => p + 1)} disabled={page >= data.totalPages} className="px-4 py-2 text-xs font-semibold bg-white border border-slate-200 rounded-xl disabled:opacity-40 active:scale-95 transition">Next</button></div></div>}
+          <div className="xl:grid xl:grid-cols-[420px_1fr] xl:gap-6 space-y-3 xl:space-y-0">
+            {/* Left: list */}
+            <div className="space-y-2.5">
+              {data.items.map((order: Order) => (
+                <div
+                  id={`order-${order.id}`}
+                  key={order.id}
+                  onClick={() => {
+                    if (isWide()) {
+                      navigate(`/rep/orders/${order.id}`);
+                    } else if (isDesktop()) {
+                      navigate(`/rep/orders/${order.id}`);
+                    } else {
+                      setSelectedOrder(order);
+                    }
+                  }}
+                  className={`card p-4 active:scale-[0.98] cursor-pointer transition-all ${routeOrderId === order.id ? 'ring-2 ring-emerald-200 bg-emerald-50' : ''}`}
+                >
+                  <div className="flex items-center justify-between mb-2"><span className="text-sm font-bold text-slate-800">{order.orderNumber}</span><span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${statusColor(order.status)}`}>{order.status}</span></div>
+                  <p className="text-sm text-slate-600">{order.customerName}</p>
+                  <div className="flex items-center justify-between mt-2.5"><span className="text-[11px] text-slate-400">{formatDate(order.orderDate)}</span><span className="text-sm font-bold text-slate-800">{formatCurrency(order.totalAmount)}</span></div>
+                </div>
+              ))}
+
+              {data.totalPages > 1 && <div className="flex items-center justify-between pt-2"><span className="text-xs text-slate-400">Page {page} of {data.totalPages}</span><div className="flex gap-2"><button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="px-4 py-2 text-xs font-semibold bg-white border border-slate-200 rounded-xl disabled:opacity-40 active:scale-95 transition">Prev</button><button onClick={() => setPage(p => p + 1)} disabled={page >= data.totalPages} className="px-4 py-2 text-xs font-semibold bg-white border border-slate-200 rounded-xl disabled:opacity-40 active:scale-95 transition">Next</button></div></div>}
+            </div>
+
+            {/* Right: inline detail (wide screens) */}
+            <div className="hidden xl:block" ref={detailPanelRef}>
+              {routeOrderId ? (
+                <div className="slide-in-right-desktop"><Outlet /></div>
+              ) : selectedOrder ? (
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 slide-in-right-desktop">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <h3 className="text-sm font-semibold text-slate-900">{selectedOrder.orderNumber}</h3>
+                      <p className="text-xs text-slate-400">{formatDate(selectedOrder.orderDate)}</p>
+                    </div>
+                    <div className={`text-[11px] px-2.5 py-1 rounded-full font-semibold ${statusColor(selectedOrder.status)}`}>{selectedOrder.status}</div>
+                  </div>
+
+                  <div className="divide-y divide-slate-100 space-y-4">
+                    <div>
+                      <h4 className="text-xs text-slate-500 font-medium mb-2">Items</h4>
+                      <div className="bg-slate-50 rounded-xl divide-y divide-slate-100">
+                        {selectedOrder.items?.map(item => (
+                          <div key={item.id} className="flex items-center justify-between p-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0"><Package className="w-4 h-4 text-slate-400" /></div>
+                              <div>
+                                <div className="text-sm font-medium text-slate-800">{item.productName}</div>
+                                <div className="text-xs text-slate-400">Qty: {item.quantity}</div>
+                              </div>
+                            </div>
+                            <div className="font-semibold text-slate-900">{formatCurrency(item.lineTotal)}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-slate-900">Total</span>
+                        <span className="text-lg font-bold text-emerald-600">{formatCurrency(selectedOrder.totalAmount)}</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      {(selectedOrder.status === 'Pending' || selectedOrder.status === 'Approved') && (
+                        <button onClick={() => { const reason = prompt('Cancellation reason:'); if (reason) cancelMut.mutate({ id: selectedOrder.id, reason }); }} disabled={cancelMut.isPending} className="w-full flex items-center justify-center gap-2 py-3 bg-red-50 text-red-600 font-semibold rounded-xl hover:bg-red-100 transition active:scale-95">
+                          <XCircle className="w-4 h-4" /> {cancelMut.isPending ? 'Cancelling...' : 'Cancel Order'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-8 text-center text-slate-400">Select an order to see details</div>
+              )}
+            </div>
+
           </div>
         )}
       </div>
 
-      {/* Order Detail Bottom Sheet */}
-      {selectedOrder && (
-        <div className="fixed inset-0 z-50"><div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setSelectedOrder(null)} /><div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl max-h-[85vh] overflow-y-auto animate-slide-up pb-safe">
-          <div className="sticky top-0 bg-white pt-3 pb-2 px-6 border-b border-slate-100"><div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-3" /><div className="flex items-center justify-between"><div><h2 className="font-bold text-slate-900">Order {selectedOrder.orderNumber}</h2><p className="text-sm text-slate-400">{selectedOrder.customerName}</p></div><button onClick={() => setSelectedOrder(null)} className="p-2 hover:bg-slate-100 rounded-xl transition"><X className="w-5 h-5 text-slate-400" /></button></div></div>
-          <div className="p-6 space-y-5">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-slate-50 rounded-xl p-3"><p className="text-[11px] text-slate-400 font-medium">Date</p><p className="text-sm font-semibold text-slate-800 mt-0.5">{formatDate(selectedOrder.orderDate)}</p></div>
-              <div className="bg-slate-50 rounded-xl p-3"><p className="text-[11px] text-slate-400 font-medium">Status</p><span className={`text-xs font-semibold px-2 py-0.5 rounded-full inline-block mt-1 ${statusColor(selectedOrder.status)}`}>{selectedOrder.status}</span></div>
+      {/* Order Detail Bottom Sheet (mobile only) - copied from Customer portal pattern */}
+      {selectedOrder && !isDesktop() && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-50 pointer-events-none">
+          {/* overlay stops above bottom nav (bottom-16) so nav remains visible/clickable */}
+          <div className="fixed inset-0 bottom-16 bg-black/40 backdrop-blur-sm pointer-events-auto" onClick={() => { setSelectedOrder(null); navigate('/rep/orders'); }} />
+          <div className="fixed bottom-16 left-0 right-0 bg-white rounded-t-3xl max-h-[80vh] overflow-y-auto animate-slide-up pb-safe pointer-events-auto">
+            <div className="sticky top-0 bg-white rounded-t-3xl border-b border-slate-100 px-5 py-4 z-10">
+              <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-3" />
+              <div className="flex items-center justify-between">
+                <h2 className="font-bold text-slate-900">{selectedOrder.orderNumber}</h2>
+                <button onClick={() => { setSelectedOrder(null); navigate('/rep/orders'); }} className="p-1.5 hover:bg-slate-100 rounded-xl transition"><X className="w-5 h-5 text-slate-400" /></button>
+              </div>
             </div>
-            <div><h3 className="font-semibold text-slate-800 text-sm mb-3">Items</h3><div className="space-y-2.5">{selectedOrder.items?.map(item => (
-              <div key={item.id} className="flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0"><Package className="w-4 h-4 text-slate-400" /></div><div className="flex-1 min-w-0"><p className="text-sm font-medium text-slate-800 truncate">{item.productName}</p><p className="text-[11px] text-slate-400">Qty: {item.quantity}</p></div><span className="text-sm font-bold text-slate-800">{formatCurrency(item.lineTotal)}</span></div>
-            ))}</div></div>
-            <div className="border-t border-slate-100 pt-4 flex justify-between items-center"><span className="font-bold text-slate-800">Total</span><span className="text-lg font-bold text-emerald-600">{formatCurrency(selectedOrder.totalAmount)}</span></div>
-            {(selectedOrder.status === 'Pending' || selectedOrder.status === 'Approved') && (
-              <button onClick={() => { const reason = prompt('Cancellation reason:'); if (reason) cancelMut.mutate({ id: selectedOrder.id, reason }); }} disabled={cancelMut.isPending} className="w-full flex items-center justify-center gap-2 py-3 bg-red-50 text-red-600 font-semibold rounded-xl hover:bg-red-100 transition active:scale-95">
-                <XCircle className="w-4 h-4" /> {cancelMut.isPending ? 'Cancelling...' : 'Cancel Order'}
-              </button>
-            )}
+
+            <div className="p-5 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-slate-50 rounded-xl p-3"><p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">Date</p><p className="text-sm font-semibold text-slate-900 mt-0.5">{formatDate(selectedOrder.orderDate)}</p></div>
+                <div className="bg-slate-50 rounded-xl p-3"><p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">Status</p><span className={`inline-block mt-1 text-[10px] px-2.5 py-1 rounded-full font-semibold ${statusColor(selectedOrder.status)}`}>{selectedOrder.status}</span></div>
+              </div>
+
+              <div>
+                <h3 className="font-semibold text-slate-900 text-sm mb-2">Items</h3>
+                <div className="bg-slate-50 rounded-xl divide-y divide-slate-100">
+                  {selectedOrder.items?.map(item => (
+                    <div key={item.id} className="flex items-center justify-between p-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center"><Package className="w-4 h-4 text-emerald-400" /></div>
+                        <div><span className="text-sm text-slate-700">{item.productName}</span><span className="text-xs text-slate-400 ml-1">x{item.quantity}</span></div>
+                      </div>
+                      <span className="text-sm font-semibold text-slate-900">{formatCurrency(item.lineTotal)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl p-4 flex justify-between items-center">
+                <span className="font-bold text-slate-900">Total</span>
+                <span className="text-lg font-bold text-emerald-600">{formatCurrency(selectedOrder.totalAmount)}</span>
+              </div>
+
+              {(selectedOrder.status === 'Pending' || selectedOrder.status === 'Approved') && (
+                <button onClick={() => { const reason = prompt('Cancellation reason:'); if (reason) cancelMut.mutate({ id: selectedOrder.id, reason }); }} disabled={cancelMut.isPending} className="w-full py-3 border-2 border-red-200 text-red-600 rounded-xl text-sm font-semibold hover:bg-red-50 active:scale-[0.98] transition-all">
+                  {cancelMut.isPending ? 'Cancelling...' : 'Cancel Order'}
+                </button>
+              )}
+
+            </div>
           </div>
-        </div></div>
+        </div>,
+        document.body
       )}
 
       {/* Create Order Modal */}

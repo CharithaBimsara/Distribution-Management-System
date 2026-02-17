@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { repsApi } from '../../services/api/repsApi';
+import { customersApi } from '../../services/api/customersApi';
 import { ordersApi } from '../../services/api/ordersApi';
 import { formatCurrency } from '../../utils/formatters';
 import { ShoppingCart, Users, MapPin, TrendingUp, Target, Clock, ChevronRight, Zap, ArrowUpRight } from 'lucide-react';
@@ -23,10 +24,17 @@ export default function RepDashboard() {
     queryFn: () => ordersApi.repGetAll({ page: 1, pageSize: 5 }).then(r => r.data.data),
   });
 
+  // Fallback: if backend doesn't return totalCustomers, fetch rep customers (pageSize=1) to get totalCount
+  const { data: customersCount } = useQuery({
+    queryKey: ['rep-customers-count'],
+    queryFn: () => customersApi.repGetCustomers({ page: 1, pageSize: 1 }).then(r => r.data.data),
+    enabled: performance?.totalCustomers === undefined,
+  });
+
   return (
     <div className="animate-fade-in">
       {/* Hero Section — full bleed mobile, card on desktop */}
-      <div className="bg-gradient-to-br from-emerald-600 via-emerald-500 to-teal-500 px-5 pt-5 pb-8 relative overflow-hidden lg:rounded-2xl lg:pb-6">
+      <div className="bg-gradient-to-br from-emerald-600 via-emerald-500 to-teal-500 px-5 pt-5 pb-8 relative z-0 overflow-hidden lg:rounded-2xl lg:pb-6">
         <div className="absolute top-0 right-0 w-40 h-40 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/4" />
         <div className="absolute bottom-0 left-0 w-32 h-32 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/4" />
         <div className="relative">
@@ -39,7 +47,7 @@ export default function RepDashboard() {
           {[
             { label: 'Total Sales', value: formatCurrency(performance?.totalSales || 0), icon: TrendingUp },
             { label: 'Orders', value: performance?.totalOrders || 0, icon: ShoppingCart },
-            { label: 'Customers', value: performance?.totalCustomers || 0, icon: Users },
+            { label: 'Customers', value: performance?.totalCustomers ?? customersCount?.totalCount ?? 0, icon: Users },
             { label: 'Target', value: `${(performance?.achievementPercentage || 0).toFixed(0)}%`, icon: Target },
           ].map((stat) => (
             <div key={stat.label} className="bg-gradient-to-br from-white/15 to-white/5 backdrop-blur-sm rounded-2xl p-3.5 border border-white/10 hover:from-white/20 hover:to-white/10 transition-colors">
@@ -53,12 +61,12 @@ export default function RepDashboard() {
         </div>
       </div>
 
-      <div className="px-4 lg:px-0 space-y-4 lg:space-y-6 -mt-3 lg:mt-6 pb-6 lg:pb-0">
+      <div className="px-4 lg:px-0 space-y-4 lg:space-y-6 -mt-3 lg:mt-6 pb-6 lg:pb-0 relative z-10">
         {/* Target Progress + Quick Actions — side by side on desktop */}
         <div className="lg:grid lg:grid-cols-2 lg:gap-6 space-y-4 lg:space-y-0">
           {/* Target Progress */}
           {performance && performance.targetAmount > 0 && (
-            <div className="card p-4 shadow-lg shadow-slate-200/50 lg:shadow-sm">
+            <div className="card p-4 shadow-lg shadow-slate-200/50 lg:shadow-sm relative z-20">
               <div className="flex items-center justify-between mb-2.5">
                 <div className="flex items-center gap-2">
                   <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center">
@@ -92,9 +100,9 @@ export default function RepDashboard() {
           )}
 
           {/* Quick Actions */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3 relative z-20">
             <button
-              onClick={() => navigate('/rep/orders')}
+              onClick={() => navigate('/rep/orders/new')}
               className="card p-4 text-left group active:scale-[0.97] hover:shadow-md hover:border-slate-200 transition-all"
             >
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20 mb-3 group-hover:scale-110 transition-transform">
@@ -119,7 +127,7 @@ export default function RepDashboard() {
         {/* Visits + Recent Orders — side by side on desktop */}
         <div className="lg:grid lg:grid-cols-2 lg:gap-6 space-y-4 lg:space-y-0">
           {/* Today's Visits */}
-          <div className="card overflow-hidden">
+          <div className="card overflow-hidden relative z-20">
             <div className="flex items-center justify-between p-4 pb-3">
               <h2 className="text-sm font-bold text-slate-800">Today&apos;s Visits</h2>
               <span className="text-xs text-emerald-600 font-semibold bg-emerald-50 px-2 py-0.5 rounded-full">{todayVisits?.length || 0} visits</span>
@@ -161,7 +169,7 @@ export default function RepDashboard() {
           </div>
 
           {/* Recent Orders */}
-          <div className="card overflow-hidden">
+          <div className="card overflow-hidden relative z-20">
             <div className="flex items-center justify-between p-4 pb-3">
               <h2 className="text-sm font-bold text-slate-800">Recent Orders</h2>
               <button onClick={() => navigate('/rep/orders')} className="text-xs text-emerald-600 font-semibold flex items-center gap-0.5">

@@ -1,9 +1,11 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { customersApi } from '../../services/api/customersApi';
 import { formatCurrency, formatDate, statusColor } from '../../utils/formatters';
-import { Users, Search, MapPin, Phone, ChevronUp, ChevronDown, Filter, X, Calendar, DollarSign } from 'lucide-react';
+import { Users, Search, MapPin, Phone, ChevronUp, ChevronDown, Filter, X, Calendar, DollarSign, Plus } from 'lucide-react';
+import AdminCustomerForm from './AdminCustomerForm';
 import type { Customer, CustomerFilterOptions } from '../../types/customer.types';
 
 type SortField = 'shopname' | 'location' | 'assignedrep' | 'creditlimit' | 'balance' | 'status' | 'createdat';
@@ -18,6 +20,8 @@ export default function AdminCustomers() {
 
   // Filter states
   const [showFilters, setShowFilters] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [assignedRepFilter, setAssignedRepFilter] = useState<string>('');
   const [segmentFilter, setSegmentFilter] = useState<string>('');
@@ -79,11 +83,23 @@ export default function AdminCustomers() {
       <ChevronDown className="w-4 h-4 ml-1" />;
   };
 
+  const isDesktop = () => typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches;
+
   return (
     <div className="animate-fade-in space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Customers</h1>
-        <p className="text-slate-500 text-sm mt-1">Manage your customer base</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Customers</h1>
+          <p className="text-slate-500 text-sm mt-1">Manage your customer base</p>
+        </div>
+        <div>
+          <button
+            onClick={() => { if (isDesktop()) navigate('/admin/customers/new'); else setShowCreate(true); }}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition"
+          >
+            <Plus className="w-4 h-4" /> Add Customer
+          </button>
+        </div>
       </div>
 
       {/* Search and Filters Section */}
@@ -231,6 +247,39 @@ export default function AdminCustomers() {
           </div>
         ) : (
           <>
+            {/* Mobile: customer cards (mobile-first) */}
+            <div className="lg:hidden divide-y divide-slate-100">
+              {data.items.map((customer: Customer) => (
+                <div key={customer.id} className="p-3 flex items-center gap-3 bg-white border border-slate-200 rounded-xl">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0 flex items-center gap-3">
+                        <div className="w-9 h-9 bg-purple-100 rounded-full flex items-center justify-center">
+                          <span className="text-purple-700 font-medium text-sm">{customer.shopName?.[0] || '?'}</span>
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-medium text-slate-900 truncate">{customer.shopName}</p>
+                          <p className="text-xs text-slate-400 mt-0.5">{customer.customerSegment || 'General'} • {customer.city || 'N/A'}</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-semibold text-slate-900">{formatCurrency(customer.currentBalance)}</p>
+                        <p className={`text-xs mt-1 font-medium ${customer.currentBalance > customer.creditLimit * 0.8 ? 'text-red-600' : 'text-slate-500'}`}>Limit {formatCurrency(customer.creditLimit)}</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 border-t border-slate-100" />
+
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      <button onClick={() => setSelectedCustomer(customer)} className="w-full h-8 rounded-md text-[11px] font-semibold flex items-center justify-center gap-1.5 bg-slate-50 text-slate-700 border border-slate-100 hover:bg-slate-100 transition" aria-label={`View ${customer.shopName}`}><Users className="w-3 h-3" /> <span>View</span></button>
+
+                      <button onClick={() => { if (customer.phoneNumber) window.location.href = `tel:${customer.phoneNumber}`; }} disabled={!customer.phoneNumber} className={`w-full h-8 rounded-md text-[11px] font-semibold flex items-center justify-center gap-1.5 ${customer.phoneNumber ? 'bg-slate-50 text-slate-700 border border-slate-100 hover:bg-slate-100' : 'bg-slate-50 text-slate-400 border border-slate-100 cursor-not-allowed' } transition`} aria-label={`Call ${customer.shopName}`}><Phone className="w-3 h-3" /> <span>Call</span></button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -349,6 +398,66 @@ export default function AdminCustomers() {
                   <button onClick={() => setPage(p => Math.min(data.totalPages, p + 1))} disabled={page === data.totalPages} className="px-3 py-1.5 text-sm border rounded-lg disabled:opacity-50 hover:bg-slate-50">Next</button>
                 </div>
               </div>
+            )}
+
+            {selectedCustomer && createPortal(
+              <div className="fixed inset-0 z-50 pointer-events-none">
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm pointer-events-auto" onClick={() => setSelectedCustomer(null)} />
+                <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl max-h-[90vh] overflow-y-auto animate-slide-up pb-safe pointer-events-auto">
+                  <div className="sticky top-0 bg-white pt-3 pb-2 px-6 border-b border-slate-100 z-10">
+                    <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-3" />
+                    <div className="flex items-center justify-between">
+                      <h2 className="font-bold text-slate-900 text-lg">{selectedCustomer.shopName}</h2>
+                      <button onClick={() => setSelectedCustomer(null)} className="p-2 hover:bg-slate-100 rounded-xl"><X className="w-5 h-5 text-slate-400" /></button>
+                    </div>
+                  </div>
+
+                  <div className="p-6 space-y-4">
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between"><span className="text-slate-500">Location</span><span className="font-medium">{[selectedCustomer.street, selectedCustomer.city, selectedCustomer.state].filter(Boolean).join(', ') || 'N/A'}</span></div>
+                      <div className="flex justify-between"><span className="text-slate-500">Assigned Rep</span><span>{selectedCustomer.assignedRepName || 'Unassigned'}</span></div>
+                      <div className="flex justify-between"><span className="text-slate-500">Status</span><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColor(selectedCustomer.isActive ? 'Active' : 'Inactive')}`}>{selectedCustomer.isActive ? 'Active' : 'Inactive'}</span></div>
+                      <div className="flex justify-between"><span className="text-slate-500">Phone</span><span>{selectedCustomer.phoneNumber || 'N/A'}</span></div>
+                    </div>
+
+                    <hr className="my-4" />
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs text-slate-400">Credit limit</p>
+                        <p className="font-bold text-slate-900">{formatCurrency(selectedCustomer.creditLimit)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-400">Balance</p>
+                        <p className="font-bold text-slate-900">{formatCurrency(selectedCustomer.currentBalance)}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-3 mt-4">
+                      <button onClick={() => { if (selectedCustomer.phoneNumber) window.location.href = `tel:${selectedCustomer.phoneNumber}`; }} disabled={!selectedCustomer.phoneNumber} className="flex-1 py-2.5 bg-slate-50 border border-slate-100 rounded-lg text-sm text-slate-700">Call</button>
+                      <button onClick={() => { setSelectedCustomer(null); navigate(`/admin/customers/${selectedCustomer.id}`); }} className="flex-1 py-2.5 bg-indigo-600 text-white rounded-lg text-sm">Open</button>
+                    </div>
+                  </div>
+                </div>
+              </div>, document.body
+            )}
+
+            {showCreate && !isDesktop() && typeof document !== 'undefined' && createPortal(
+              <div className="fixed inset-0 z-50 pointer-events-none">
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm pointer-events-auto" onClick={() => setShowCreate(false)} />
+                <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl max-h-[90vh] overflow-y-auto animate-slide-up pb-safe pointer-events-auto">
+                  <div className="sticky top-0 bg-white pt-3 pb-2 px-6 border-b border-slate-100 z-10">
+                    <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-3" />
+                    <div className="flex items-center justify-between">
+                      <h2 className="font-bold text-slate-900 text-lg">New Customer</h2>
+                      <button onClick={() => setShowCreate(false)} className="p-2 hover:bg-slate-100 rounded-xl"><X className="w-5 h-5 text-slate-400" /></button>
+                    </div>
+                  </div>
+
+                  <div className="p-6">
+                    <AdminCustomerForm onSuccess={() => setShowCreate(false)} onCancel={() => setShowCreate(false)} />
+                  </div>
+                </div>
+              </div>, document.body
             )}
           </>
         )}

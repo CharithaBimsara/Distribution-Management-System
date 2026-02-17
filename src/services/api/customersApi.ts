@@ -40,6 +40,10 @@ export const customersApi = {
   repGetSummary: (id: string) =>
     api.get<ApiResponse<CustomerSummary>>(`/rep/customers/${id}/summary`),
 
+  // Rep create customer
+  repCreate: (data: Record<string, unknown>) =>
+    api.post<ApiResponse<Customer>>('/rep/customers', data),
+
   // Customer
   customerGetProfile: () =>
     api.get<ApiResponse<Customer>>('/customer/profile'),

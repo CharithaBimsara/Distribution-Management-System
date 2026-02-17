@@ -49,6 +49,9 @@ export const repsApi = {
   adminAssignRoute: (routeId: string, data: { repId: string }) =>
     api.post<ApiResponse<string>>(`/admin/routes/${routeId}/assign`, data),
 
+  adminDeleteRoute: (routeId: string) =>
+    api.delete<ApiResponse<string>>(`/admin/routes/${routeId}`),
+
   // Rep self
   repGetProfile: () =>
     api.get<ApiResponse<unknown>>('/rep/profile'),
