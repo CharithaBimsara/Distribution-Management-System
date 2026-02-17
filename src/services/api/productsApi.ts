@@ -48,6 +48,9 @@ export const productsApi = {
   customerGetById: (id: string) =>
     api.get<ApiResponse<Product>>(`/customer/products/${id}`),
 
+  customerTopSelling: (params?: Record<string, unknown>) =>
+    api.get<ApiResponse<Product[]>>('/customer/products/best-selling', { params }),
+
   customerCategories: () =>
     api.get<ApiResponse<Category[]>>('/categories'),
 

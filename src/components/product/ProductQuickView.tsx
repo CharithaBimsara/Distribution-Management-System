@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import toast from 'react-hot-toast';
 import type { Product } from '../../types/product.types';
 import { formatCurrency } from '../../utils/formatters';
 import { X, ShoppingCart } from 'lucide-react';
@@ -50,7 +51,19 @@ export default function ProductQuickView({ product, open, onClose, onAdd }: Prop
           <div className="space-y-4">
             <p className="text-sm text-slate-700 leading-relaxed">{product.description || 'No description available.'}</p>
             <div className="flex items-center gap-3">
-              <button onClick={() => { setIsPopping(true); onAdd(product); setTimeout(() => setIsPopping(false), 420); }} className={`flex items-center gap-2 px-4 py-2 bg-gradient-to-br from-orange-500 to-rose-500 text-white rounded-xl shadow-md sparkle ${isPopping ? 'animate-pop sparkle-on' : ''}`}>
+              <button onClick={() => {
+                const outOfStock = product.availability !== 'InStock' || (typeof product.stockQuantity === 'number' && product.stockQuantity <= 0);
+                if (outOfStock && !product.allowBackorder) {
+                  toast.error('Product is out of stock');
+                  return;
+                }
+                // if backorder would occur show confirmation inside modal
+                if (outOfStock && product.allowBackorder) {
+                  // open a simple confirm dialog
+                  if (!confirm(`Only ${product.stockQuantity ?? 0} in stock — the rest will be backordered. ETA ${product.backorderLeadTimeDays ?? 'TBD'} days. Continue?`)) return;
+                }
+                setIsPopping(true); onAdd(product); setTimeout(() => setIsPopping(false), 420);
+              }} className={`flex items-center gap-2 px-4 py-2 bg-gradient-to-br from-orange-500 to-rose-500 text-white rounded-xl shadow-md sparkle ${isPopping ? 'animate-pop sparkle-on' : ''}`}>
                 <ShoppingCart className="w-4 h-4" /> Add to cart
               </button>
               <div className="text-sm text-slate-500">Unit: <span className="font-semibold text-slate-700">{product.unit}</span></div>

@@ -35,6 +35,9 @@ import RepPayments from './pages/rep/Payments';
 import RepCustomers from './pages/rep/Customers';
 import RepCustomerDetail from './pages/rep/CustomerDetail';
 import RepPerformance from './pages/rep/Performance';
+import RepCreateOrder from './pages/rep/RepCreateOrder';
+import RepSelectCustomer from './pages/rep/RepSelectCustomer';
+import RepSelectProducts from './pages/rep/RepSelectProducts';
 
 // Customer pages
 import CustomerHome from './pages/customer/Home';
@@ -93,6 +96,9 @@ export default function App() {
           <Route path="payments" element={<RepPayments />} />
           <Route path="routes" element={<RepRoutes />} />
           <Route path="orders" element={<RepOrders />} />
+          <Route path="orders/new" element={<RepCreateOrder />} />
+          <Route path="orders/new/customers" element={<RepSelectCustomer />} />
+          <Route path="orders/new/products" element={<RepSelectProducts />} />
           <Route path="customers" element={<RepCustomers />} />
           <Route path="customers/:id" element={<RepCustomerDetail />} />
           <Route path="performance" element={<RepPerformance />} />

@@ -7,6 +7,12 @@ export interface CartItem {
   quantity: number;
   unit: string;
   imageUrl?: string;
+  // optional snapshot of stock when item was added — used to prevent over-adding in UI
+  stockQuantity?: number;
+  // backorder snapshot (copied from product at add-to-cart time)
+  allowBackorder?: boolean;
+  backorderLeadTimeDays?: number;
+  backorderLimit?: number;
 }
 
 interface CartState {
@@ -39,11 +45,41 @@ const cartSlice = createSlice({
     updateQuantity(state, action: PayloadAction<{ productId: string; quantity: number }>) {
       const item = state.items.find(i => i.productId === action.payload.productId);
       if (item) {
-        item.quantity = action.payload.quantity;
+        const requested = action.payload.quantity;
+
+        // determine maximum allowed for this cart item (product-level backorderLimit if set,
+        // otherwise if backorder not allowed enforce stockQuantity)
+        let maxAllowed: number | undefined = undefined;
+        if (typeof item.backorderLimit === 'number') maxAllowed = item.backorderLimit;
+        else if (!item.allowBackorder && typeof item.stockQuantity === 'number') maxAllowed = item.stockQuantity;
+
+        if (typeof maxAllowed === 'number' && requested > maxAllowed) {
+          // clamp silently to maxAllowed to keep state consistent (UI also prevents exceed)
+          item.quantity = maxAllowed;
+        } else {
+          item.quantity = requested;
+        }
+
         if (item.quantity <= 0) {
           state.items = state.items.filter(i => i.productId !== action.payload.productId);
         }
       }
+      persist(state);
+    },
+
+    // refresh a cart item's product snapshot (stock / backorder flags) from server
+    updateItemSnapshot(state, action: PayloadAction<{ productId: string; stockQuantity?: number; allowBackorder?: boolean; backorderLeadTimeDays?: number | null; backorderLimit?: number | null }>) {
+      const item = state.items.find(i => i.productId === action.payload.productId);
+      if (!item) return;
+      if (typeof action.payload.stockQuantity === 'number') item.stockQuantity = action.payload.stockQuantity;
+      if (typeof action.payload.allowBackorder === 'boolean') item.allowBackorder = action.payload.allowBackorder;
+      if (typeof action.payload.backorderLeadTimeDays !== 'undefined') item.backorderLeadTimeDays = action.payload.backorderLeadTimeDays ?? undefined;
+      if (typeof action.payload.backorderLimit !== 'undefined') item.backorderLimit = action.payload.backorderLimit ?? undefined;
+      // ensure quantity still respects latest limits
+      let maxAllowed: number | undefined = undefined;
+      if (typeof item.backorderLimit === 'number') maxAllowed = item.backorderLimit;
+      else if (!item.allowBackorder && typeof item.stockQuantity === 'number') maxAllowed = item.stockQuantity;
+      if (typeof maxAllowed === 'number' && item.quantity > maxAllowed) item.quantity = maxAllowed;
       persist(state);
     },
     removeFromCart(state, action: PayloadAction<string>) {
@@ -58,5 +94,5 @@ const cartSlice = createSlice({
   },
 });
 
-export const { setCartCustomer, addToCart, updateQuantity, removeFromCart, clearCart } = cartSlice.actions;
+export const { setCartCustomer, addToCart, updateQuantity, updateItemSnapshot, removeFromCart, clearCart } = cartSlice.actions;
 export default cartSlice.reducer;

@@ -12,9 +12,6 @@ export default function FloatingCartButton() {
   const [pulse, setPulse] = useState(false);
   const prevCountRef = useRef<number | null>(null);
 
-  // hide floating button on the cart page (and any nested cart route)
-  if (location.pathname.startsWith('/shop/cart')) return null;
-
   const itemCount = items.reduce((s, i) => s + (i.quantity || 0), 0);
   const total = items.reduce((s, i) => s + (i.quantity * i.unitPrice || 0), 0);
 
@@ -30,6 +27,9 @@ export default function FloatingCartButton() {
     }
     prevCountRef.current = itemCount;
   }, [itemCount]);
+
+  // hide floating button on the cart page (and any nested cart route)
+  if (location.pathname.startsWith('/shop/cart')) return null;
 
   if (!itemCount) return null;
 

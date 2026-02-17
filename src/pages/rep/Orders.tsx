@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { ordersApi } from '../../services/api/ordersApi';
 import { productsApi } from '../../services/api/productsApi';
 import { customersApi } from '../../services/api/customersApi';
@@ -14,6 +15,7 @@ export default function RepOrders() {
   const [status, setStatus] = useState('');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [showCreateOrder, setShowCreateOrder] = useState(false);
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
@@ -40,7 +42,7 @@ export default function RepOrders() {
         <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/4" />
         <div className="flex items-center justify-between">
           <div><h1 className="text-white text-xl font-bold">My Orders</h1><p className="text-emerald-200 text-sm mt-0.5">Orders placed for customers</p></div>
-          <button onClick={() => setShowCreateOrder(true)} className="flex items-center gap-1.5 px-4 py-2 bg-white/20 backdrop-blur-sm text-white rounded-xl text-sm font-semibold hover:bg-white/30 transition active:scale-95"><Plus className="w-4 h-4" /> New Order</button>
+          <button onClick={() => navigate('/rep/orders/new')} className="flex items-center gap-1.5 px-4 py-2 bg-white/20 backdrop-blur-sm text-white rounded-xl text-sm font-semibold hover:bg-white/30 transition active:scale-95"><Plus className="w-4 h-4" /> New Order</button>
         </div>
       </div>
 

@@ -1,16 +1,116 @@
 import { useSelector, useDispatch } from 'react-redux';
+import { useEffect, useState, useRef } from 'react';
 import type { RootState } from '../../store/store';
-import { updateQuantity, removeFromCart, clearCart } from '../../store/slices/cartSlice';
+import { updateQuantity, removeFromCart, clearCart, updateItemSnapshot } from '../../store/slices/cartSlice';
 import { formatCurrency } from '../../utils/formatters';
+import toast from 'react-hot-toast';
 import { Minus, Plus, Trash2, ShoppingCart, ArrowRight, ShoppingBag, Package } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { productsApi } from '../../services/api/productsApi';
+import QuantityModal from '../../components/common/QuantityModal';
 
 export default function CustomerCart() {
   const { items } = useSelector((state: RootState) => state.cart);
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
+  const [qtyModalOpen, setQtyModalOpen] = useState(false);
+  const [qtyModalProductId, setQtyModalProductId] = useState<string | null>(null);
+  const [qtyModalValue, setQtyModalValue] = useState(1);
+  const pressTimers = useRef<Record<string, number | null>>({});
+  const pressTriggered = useRef<Record<string, boolean>>({});
+
+  const QuantityEditor = ({ productId, qty, maxAllowed, onSave }: { productId: string; qty: number; maxAllowed?: number; onSave: (q: number) => void }) => {
+    const [editing, setEditing] = useState(false);
+    const [value, setValue] = useState(String(qty));
+    useEffect(() => setValue(String(qty)), [qty]);
+    useEffect(() => { if (editingProductId === productId) setEditing(true); else setEditing(false); }, [editingProductId, productId]);
+    const save = () => {
+      let n = Math.max(1, Math.floor(Number(value) || 1));
+      if (typeof maxAllowed === 'number' && n > maxAllowed) n = maxAllowed;
+      onSave(n);
+      setEditing(false); setEditingProductId(null);
+    };
+    return editing ? (
+      <input
+        autoFocus
+        inputMode="numeric"
+        type="number"
+        min={1}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={save}
+        onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') { setEditing(false); setEditingProductId(null); setValue(String(qty)); } }}
+        className="w-12 text-sm font-bold text-center border border-slate-200 rounded-md px-1"
+      />
+    ) : (
+      <button onClick={() => setEditingProductId(productId)} className="text-sm font-bold w-8 text-center text-slate-900">{qty}</button>
+    );
+  };
 
   const total = items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+
+  const openQtyModalForItem = (itemId: string, qty: number, max?: number) => {
+    setQtyModalProductId(itemId);
+    setQtyModalValue(qty);
+    setQtyModalOpen(true);
+  };
+
+  const startPressForItem = (id: string, itemQty: number, max?: number) => {
+    pressTimers.current[id] = window.setTimeout(() => {
+      pressTriggered.current[id] = true;
+      openQtyModalForItem(id, itemQty, max);
+    }, 600);
+  };
+
+  const cancelPressForItem = (id: string) => {
+    const t = pressTimers.current[id];
+    if (t) { clearTimeout(t); pressTimers.current[id] = null; }
+    pressTriggered.current[id] = false;
+  };
+
+  const handlePlusMouseUpForItem = (id: string, itemQty: number, addFn: () => void) => {
+    const triggered = !!pressTriggered.current[id];
+    cancelPressForItem(id);
+    if (triggered) { pressTriggered.current[id] = false; return; }
+    addFn();
+  };
+
+  const handleQtyModalConfirm = (value: number) => {
+    if (!qtyModalProductId) { setQtyModalOpen(false); return; }
+    dispatch(updateQuantity({ productId: qtyModalProductId, quantity: value }));
+    setQtyModalOpen(false);
+  };
+
+  // Refresh cart snapshots on mount to ensure UI enforces current server rules (stock / backorder)
+  useEffect(() => {
+    if (!items.length) return;
+    (async () => {
+      try {
+        await Promise.all(items.map(async (it) => {
+          try {
+            const res = await productsApi.customerGetById(it.productId);
+            const p = res.data.data;
+            dispatch(updateItemSnapshot({
+              productId: it.productId,
+              stockQuantity: p.stockQuantity,
+              allowBackorder: !!p.allowBackorder,
+              backorderLeadTimeDays: p.backorderLeadTimeDays ?? null,
+              backorderLimit: p.backorderLimit ?? null,
+            }));
+            // if quantity was clamped by the snapshot reducer, notify user
+            const updatedQty = (document.querySelector(`[data-cart-qty-${it.productId}]`) as HTMLElement | null)?.innerText;
+            // (we cannot reliably read updated state synchronously here, so show a generic toast when snapshot differs)
+          } catch (err) {
+            // ignore per-item failures
+          }
+        }));
+      } catch (err) {
+        // ignore
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (items.length === 0) {
     return (
@@ -75,9 +175,30 @@ export default function CustomerCart() {
                     >
                       <Minus className="w-3.5 h-3.5" />
                     </button>
-                    <span className="text-sm font-bold w-8 text-center text-slate-900">{item.quantity}</span>
+
+                    <QuantityEditor
+                      productId={item.productId}
+                      qty={item.quantity}
+                      maxAllowed={typeof item.backorderLimit === 'number' ? item.backorderLimit : (!item.allowBackorder ? item.stockQuantity : undefined)}
+                      onSave={(q) => dispatch(updateQuantity({ productId: item.productId, quantity: q }))}
+                    />
+
                     <button
-                      onClick={() => dispatch(updateQuantity({ productId: item.productId, quantity: item.quantity + 1 }))}
+                      onMouseDown={() => startPressForItem(item.productId, item.quantity, typeof item.backorderLimit === 'number' ? item.backorderLimit : undefined)}
+                      onMouseUp={() => handlePlusMouseUpForItem(item.productId, item.quantity, () => {
+                        if (typeof item.backorderLimit === 'number' && item.quantity >= item.backorderLimit) {
+                          toast.error(`Maximum allowed quantity is ${item.backorderLimit}`);
+                          return;
+                        }
+                        if (!item.allowBackorder && typeof item.stockQuantity === 'number' && item.quantity >= item.stockQuantity) {
+                          toast.error(`Only ${item.stockQuantity} left in stock`);
+                          return;
+                        }
+                        dispatch(updateQuantity({ productId: item.productId, quantity: item.quantity + 1 }));
+                      })}
+                      onMouseLeave={() => cancelPressForItem(item.productId)}
+                      onTouchStart={() => startPressForItem(item.productId, item.quantity, typeof item.backorderLimit === 'number' ? item.backorderLimit : undefined)}
+                      onTouchEnd={() => handlePlusMouseUpForItem(item.productId, item.quantity, () => dispatch(updateQuantity({ productId: item.productId, quantity: item.quantity + 1 })))}
                       className="w-8 h-8 rounded-lg bg-gradient-to-br from-orange-500 to-rose-500 flex items-center justify-center text-white shadow-sm shadow-orange-500/20 hover:shadow-md transition active:scale-90"
                     >
                       <Plus className="w-3.5 h-3.5" />
@@ -114,6 +235,16 @@ export default function CustomerCart() {
           Checkout &bull; {formatCurrency(total * 1.08)} <ArrowRight className="w-4 h-4" />
         </button>
       </div>
+
+      <QuantityModal
+        open={qtyModalOpen}
+        initial={qtyModalValue}
+        min={1}
+        max={undefined}
+        description={qtyModalProductId ? `Edit quantity` : undefined}
+        onConfirm={handleQtyModalConfirm}
+        onCancel={() => setQtyModalOpen(false)}
+      />
     </div>
   );
 }

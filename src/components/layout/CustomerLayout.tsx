@@ -11,7 +11,6 @@ import {
   Wallet, User, ShoppingCart, Bell, LogOut, Menu, X, ChevronLeft,
   MessageSquare, Sparkles
 } from 'lucide-react';
-import FloatingCartButton from '../../components/cart/FloatingCartButton';
 
 const navItems = [
   { to: '/shop', icon: Home, label: 'Home', end: true },
@@ -279,12 +278,7 @@ export default function CustomerLayout() {
           </div>
         </nav>
 
-        {/* Floating cart button (responsive) */}
-        <div className="pointer-events-none">
-          <div className="pointer-events-auto">
-            <FloatingCartButton />
-          </div>
-        </div>
+
       </div>
     </div>
   );

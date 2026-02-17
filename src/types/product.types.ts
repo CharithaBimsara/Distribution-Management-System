@@ -18,6 +18,12 @@ export interface Product {
   isFeatured: boolean;
   availability: string;
   stockQuantity: number;
+
+  // Backorder / pre-order support
+  allowBackorder?: boolean;           // whether customer can order beyond current stock
+  backorderLeadTimeDays?: number;     // estimated lead time for backordered units
+  backorderLimit?: number;            // optional product-level cap for total quantity allowed
+
   createdAt: string;
 }
 

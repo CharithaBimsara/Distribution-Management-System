@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { ordersApi } from '../../services/api/ordersApi';
 import { formatCurrency, formatDate, statusColor } from '../../utils/formatters';
@@ -58,6 +59,19 @@ export default function CustomerOrders() {
     const row = document.getElementById(`order-${selectedOrder.id}`);
     row?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     detailPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [selectedOrder]);
+
+  // Prevent background scrolling and ensure sheet is visible on mobile when bottom-sheet is open
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    if (selectedOrder && !isDesktop()) {
+      // lock body scroll while sheet is open and ensure viewport is at top for consistent placement
+      document.body.style.overflow = 'hidden';
+      try { window.scrollTo({ top: 0, behavior: 'instant' as any }); } catch {}
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => { document.body.style.overflow = ''; };
   }, [selectedOrder]);
 
   const reorderMut = useMutation({
@@ -254,16 +268,17 @@ export default function CustomerOrders() {
       </div>
 
       {/* Order Detail Bottom Sheet (mobile only) */}
-      {selectedOrder && !isDesktop() && (
-        <div className="fixed inset-0 z-50">
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={() => navigate('/shop/orders')} />
-          <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl max-h-[80vh] overflow-y-auto animate-slide-up pb-safe">
+      {selectedOrder && !isDesktop() && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-50 pointer-events-none">
+          {/* overlay stops above bottom nav (bottom-14) so nav remains visible/clickable */}
+          <div className="fixed inset-0 bottom-16 bg-black/40 backdrop-blur-sm pointer-events-auto" onClick={() => { setSelectedOrder(null); navigate('/shop/orders'); }} />
+          <div className="fixed bottom-16 left-0 right-0 bg-white rounded-t-3xl max-h-[80vh] overflow-y-auto animate-slide-up pb-safe pointer-events-auto">
             {/* Sheet Handle */}
             <div className="sticky top-0 bg-white rounded-t-3xl border-b border-slate-100 px-5 py-4 z-10">
               <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-3" />
               <div className="flex items-center justify-between">
                 <h2 className="font-bold text-slate-900">{selectedOrder.orderNumber}</h2>
-                <button onClick={() => navigate('/shop/orders')} className="p-1.5 hover:bg-slate-100 rounded-xl transition">
+                <button onClick={() => { setSelectedOrder(null); navigate('/shop/orders'); }} className="p-1.5 hover:bg-slate-100 rounded-xl transition">
                   <X className="w-5 h-5 text-slate-400" />
                 </button>
               </div>
@@ -372,7 +387,8 @@ export default function CustomerOrders() {
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
