@@ -290,7 +290,11 @@ export default function AdminReps() {
       {showRepForm && <RepFormModal rep={editRep} onClose={() => { setShowRepForm(false); setEditRep(null); }} onSubmit={d => editRep ? updateRepMut.mutate({ id: editRep.id, data: d }) : createRepMut.mutate(d as any)} isPending={createRepMut.isPending || updateRepMut.isPending} />}
       {showTargetModal && <TargetModal rep={showTargetModal} onClose={() => setShowTargetModal(null)} onSubmit={d => setTargetMut.mutate({ id: showTargetModal.id, data: d })} isPending={setTargetMut.isPending} />}
       {showRouteForm && <RouteFormModal reps={repList} onClose={() => setShowRouteForm(false)} onSubmit={d => createRouteMut.mutate(d)} isPending={createRouteMut.isPending} />}
-      {showAddCustomer && <AddCustomerModal route={showAddCustomer} onClose={() => setShowAddCustomer(null)} onSubmit={d => addCustMut.mutate({ routeId: showAddCustomer.id, data: d })} isPending={addCustMut.isPending} />}
+      {showAddCustomer && <AddCustomerModal route={showAddCustomer} onClose={() => setShowAddCustomer(null)} onSubmit={records => {
+          // send one mutation per selected customer
+          records.forEach(r => addCustMut.mutate({ routeId: showAddCustomer.id, data: r }));
+          setShowAddCustomer(null);
+        }} isPending={addCustMut.isPending} />}
       {editRoute && <EditRouteModal route={editRoute} reps={repList} onClose={() => setEditRoute(null)} onSubmit={(repId) => assignRouteMut.mutate({ routeId: editRoute.id, data: { repId } })} isPending={assignRouteMut.isPending} />}
       <ConfirmModal open={!!routeToDelete} title="Delete route" description={routeToDelete ? `Delete route \"${routeToDelete.name}\"? This will hide the route from lists.` : undefined} confirmLabel="Delete" confirmVariant="orange" onConfirm={() => routeToDelete && deleteRouteMut.mutate(routeToDelete.id)} onCancel={() => setRouteToDelete(null)} />
 
@@ -770,12 +774,11 @@ function EditRouteModal({ route, reps, onClose, onSubmit, isPending }: { route: 
   );
 }
 
-function AddCustomerModal({ route, onClose, onSubmit, isPending }: { route: Route; onClose: () => void; onSubmit: (d: { customerId: string; visitOrder: number; visitFrequency?: string }) => void; isPending: boolean }) {
-  const [customerId, setCustomerId] = useState('');
+function AddCustomerModal({ route, onClose, onSubmit, isPending }: { route: Route; onClose: () => void; onSubmit: (records: { customerId: string; visitOrder: number; visitFrequency?: string }[]) => void; isPending: boolean }) {
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [visitOrder, setVisitOrder] = useState(((route.customers?.length || 0) + 1).toString());
   const [freq, setFreq] = useState('Weekly');
-  const [search, setSearch] = useState('');
-  const { data: customers } = useQuery({ queryKey: ['admin-customers-lookup', search], queryFn: () => customersApi.adminGetAll({ search, pageSize: 10 }).then(r => r.data.data), enabled: search.length > 1 });
+  const { data: customers } = useQuery({ queryKey: ['admin-customers-all'], queryFn: () => customersApi.adminGetAll({ page: 1, pageSize: 200 }).then(r => r.data.data) });
   const [showCreateInline, setShowCreateInline] = useState(false);
   const cls = 'w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500/20 outline-none';
   const isDesktopLocal = () => typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches;
@@ -788,14 +791,21 @@ function AddCustomerModal({ route, onClose, onSubmit, isPending }: { route: Rout
         {!showCreateInline ? (
           <div>
             <div className="flex items-center justify-between mb-2">
-              <label className="block text-sm font-medium text-slate-700">Search Customer</label>
+              <label className="block text-sm font-medium text-slate-700">Select Customers</label>
               <button onClick={() => setShowCreateInline(true)} className="text-xs text-indigo-600 hover:underline">Create new customer</button>
             </div>
-            <input value={search} onChange={e => setSearch(e.target.value)} className={cls} placeholder="Type to search..." />
             {customers && (customers as any).items?.length > 0 && (
-              <div className="border border-slate-200 rounded-lg mt-1 max-h-40 overflow-y-auto divide-y divide-slate-100">{(customers as any).items.map((c: any) => (
-                <button key={c.id} onClick={() => { setCustomerId(c.id); setSearch(c.shopName || c.contactPerson || c.id); }} className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-50 ${customerId === c.id ? 'bg-indigo-50 text-indigo-700' : ''}`}>{c.shopName || c.contactPerson} - {c.city}</button>
-              ))}</div>
+              <div className="border border-slate-200 rounded-lg mt-1 max-h-48 overflow-y-auto">
+                {(customers as any).items.map((c: any) => {
+                  const sel = selectedIds.includes(c.id);
+                  return (
+                    <label key={c.id} className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50">
+                      <input type="checkbox" checked={sel} onChange={() => sel ? setSelectedIds(ids => ids.filter(i => i !== c.id)) : setSelectedIds(ids => [...ids, c.id])} />
+                      <span className="text-sm">{c.shopName || c.contactPerson} - {c.city}</span>
+                    </label>
+                  );
+                })}
+              </div>
             )}
           </div>
         ) : (
@@ -807,7 +817,7 @@ function AddCustomerModal({ route, onClose, onSubmit, isPending }: { route: Rout
                   <h3 className="text-lg font-bold text-slate-900">New Customer</h3>
                   <button onClick={() => setShowCreateInline(false)} className="p-2 hover:bg-slate-100 rounded-xl"><X className="w-5 h-5 text-slate-400" /></button>
                 </div>
-                <AdminCustomerForm onSuccess={(created) => { if (created?.id) { setCustomerId(created.id); setShowCreateInline(false); setSearch(created.shopName || created.id); } }} onCancel={() => setShowCreateInline(false)} />
+                <AdminCustomerForm onSuccess={(created) => { if (created?.id) { setSelectedIds(ids => [...ids, created.id]); setShowCreateInline(false); } }} onCancel={() => setShowCreateInline(false)} />
               </div>
             </div>,
             document.body
@@ -823,7 +833,7 @@ function AddCustomerModal({ route, onClose, onSubmit, isPending }: { route: Rout
                   </div>
                 </div>
                 <div className="p-6">
-                  <AdminCustomerForm onSuccess={(created) => { if (created?.id) { setCustomerId(created.id); setShowCreateInline(false); setSearch(created.shopName || created.id); } }} onCancel={() => setShowCreateInline(false)} />
+                  <AdminCustomerForm onSuccess={(created) => { if (created?.id) { setSelectedIds(ids => [...ids, created.id]); setShowCreateInline(false); } }} onCancel={() => setShowCreateInline(false)} />
                 </div>
               </div>
             </div>,
@@ -835,7 +845,7 @@ function AddCustomerModal({ route, onClose, onSubmit, isPending }: { route: Rout
           <div><label className="block text-sm font-medium text-slate-700 mb-1">Frequency</label><select value={freq} onChange={e => setFreq(e.target.value)} className={cls + ' bg-white'}><option>Weekly</option><option>Biweekly</option><option>Monthly</option></select></div>
         </div>
       </div>
-      <div className="flex gap-3 mt-6"><button onClick={onClose} className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-medium transition">Cancel</button><button onClick={() => onSubmit({ customerId, visitOrder: parseInt(visitOrder), visitFrequency: freq })} disabled={isPending || !customerId} className="flex-1 py-2.5 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg text-sm font-medium transition disabled:opacity-50">{isPending ? 'Adding...' : 'Add Customer'}</button></div>
+      <div className="flex gap-3 mt-6"><button onClick={onClose} className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-medium transition">Cancel</button><button onClick={() => onSubmit(selectedIds.map(id => ({ customerId: id, visitOrder: parseInt(visitOrder), visitFrequency: freq })))} disabled={isPending || selectedIds.length === 0} className="flex-1 py-2.5 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg text-sm font-medium transition disabled:opacity-50">{isPending ? 'Adding...' : `Add ${selectedIds.length} Customer${selectedIds.length>1?'s':''}`}</button></div>
     </div>
   );
 

@@ -6,4 +6,5 @@ export interface Notification {
   isRead: boolean;
   readAt?: string;
   createdAt: string;
+  metadata?: Record<string, any>;
 }

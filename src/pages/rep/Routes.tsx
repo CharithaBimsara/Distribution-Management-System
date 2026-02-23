@@ -1,10 +1,9 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { repsApi } from '../../services/api/repsApi';
+import { customersApi } from '../../services/api/customersApi';
 import { useNavigate } from 'react-router-dom';
-import ConfirmModal from '../../components/common/ConfirmModal';
-import { orderDraftUtils } from '../../utils/orderDraft';
-import { MapPin, Clock, CheckCircle, PlayCircle, Users, Navigation, Route, ExternalLink, FilePlus } from 'lucide-react';
+import { MapPin, Clock, Users, Navigation, Route, ExternalLink, FilePlus } from 'lucide-react';
 import { formatDateTime } from '../../utils/formatters';
 import type { Route as RouteType, Visit } from '../../types/common.types';
 
@@ -21,42 +20,39 @@ export default function RepRoutes() {
     queryFn: () => repsApi.repGetTodayVisits().then(r => r.data.data),
   });
 
+
+  const addAdHocMut = useMutation({
+    mutationFn: (data: { customerId: string; notes?: string }) => repsApi.repAddAdHocVisit(data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['rep-today-visits'] }),
+  });
+
   const checkInMut = useMutation({
-    mutationFn: (data: Record<string, unknown>) => repsApi.repCheckIn(data),
+    mutationFn: (data: { customerId: string }) => repsApi.repCheckIn(data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['rep-today-visits'] }),
   });
-
   const checkOutMut = useMutation({
-    mutationFn: ({ visitId, data }: { visitId: string; data: Record<string, unknown> }) => repsApi.repCheckOut(visitId, data),
+    mutationFn: ({ visitId, data }: { visitId: string; data: Record<string, unknown> }) =>
+      repsApi.repCheckOut(visitId, data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['rep-today-visits'] }),
   });
 
-  // Local UI state for improved route workflow
-  const [checkoutModalOpen, setCheckoutModalOpen] = useState(false);
-  const [visitToCheckout, setVisitToCheckout] = useState<Visit | null>(null);
+  const { data: customerList } = useQuery({
+    queryKey: ['rep-customers-list'],
+    queryFn: () =>
+      customersApi
+        .repGetCustomers({ page: 1, pageSize: 200 })
+        .then(r => r.data.data.items),
+  });
+
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [selectedCustomerId, setSelectedCustomerId] = useState('');
+  const [addNotes, setAddNotes] = useState('');
+
+  const handleAddAdHoc = () => {
+    setAddModalOpen(true);
+  };  
+
   const navigate = useNavigate();
-
-  const handleNavigate = (v: Visit) => {
-    if (!v) return;
-    if (v.latitude && v.longitude) {
-      window.open(`https://www.google.com/maps/dir/?api=1&destination=${v.latitude},${v.longitude}`, '_blank');
-      return;
-    }
-    // fallback to search by name
-    window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(v.customerName || '')}`, '_blank');
-  };
-
-  const handleAddOrder = (v: Visit) => {
-    orderDraftUtils.setCustomer(v.customerId, v.customerName || '');
-    navigate('/rep/orders/new');
-  };
-
-  const handleConfirmCheckout = () => {
-    if (!visitToCheckout) return;
-    checkOutMut.mutate({ visitId: visitToCheckout.id, data: { notes: visitToCheckout.notes || 'Visit completed' } });
-    setCheckoutModalOpen(false);
-    setVisitToCheckout(null);
-  }; 
 
   return (
     <div className="animate-fade-in">
@@ -88,17 +84,67 @@ export default function RepRoutes() {
             </div>
 
             <div className="flex gap-2">
-              {todayVisits && todayVisits.find(v => v.status !== 'Completed') && (
-                <>
-                  <button onClick={() => handleNavigate(todayVisits.find(v => v.status !== 'Completed')!)} className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-100 bg-white/50 hover:bg-slate-50 text-sm">
-                    <ExternalLink className="w-4 h-4 text-emerald-600" /> Navigate
-                  </button>
-                  <button onClick={() => handleAddOrder(todayVisits.find(v => v.status !== 'Completed')!)} className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 text-sm">
-                    <FilePlus className="w-4 h-4" /> Add order
-                  </button>
-                </>
-              )}
 
+
+                      <button onClick={() => handleAddAdHoc()} className="px-3 py-2 rounded-xl border border-slate-100 text-sm bg-white/50 hover:bg-slate-50">
+                Add ad-hoc
+              </button>
+              {/* add visit modal */}
+              {addModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center">
+                  <div className="absolute inset-0 bg-black/40" onClick={() => setAddModalOpen(false)} />
+                  <div className="bg-white rounded-lg p-6 w-full max-w-sm z-10">
+                    <h3 className="text-lg font-semibold mb-4">New visit</h3>
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Customer</label>
+                      <select
+                        value={selectedCustomerId}
+                        onChange={e => setSelectedCustomerId(e.target.value)}
+                        className="w-full border border-slate-300 rounded-md p-2"
+                      >
+                        <option value="">-- select --</option>
+                        {customerList?.map(c => (
+                          <option key={c.id} value={c.id}>
+                            {c.shopName || c.email}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Notes (optional)</label>
+                      <textarea
+                        value={addNotes}
+                        onChange={e => setAddNotes(e.target.value)}
+                        className="w-full border border-slate-300 rounded-md p-2"
+                      />
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <button
+                        onClick={() => {
+                          setAddModalOpen(false);
+                          setSelectedCustomerId('');
+                          setAddNotes('');
+                        }}
+                        className="py-2 px-4 bg-slate-100 rounded-md hover:bg-slate-200"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        disabled={!selectedCustomerId}
+                        onClick={() => {
+                          addAdHocMut.mutate({ customerId: selectedCustomerId, notes: addNotes });
+                          setAddModalOpen(false);
+                          setSelectedCustomerId('');
+                          setAddNotes('');
+                        }}
+                        className="py-2 px-4 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 disabled:opacity-50"
+                      >
+                        Create
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
               <button onClick={() => { const el = document.querySelector('#assigned-routes'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }} className="px-3 py-2 rounded-xl border border-slate-100 text-sm bg-white/50 hover:bg-slate-50">
                 View route
               </button>
@@ -130,42 +176,28 @@ export default function RepRoutes() {
                       }`} />
                       <div>
                         <p className="text-sm font-semibold text-slate-800">{visit.customerName || 'Customer'}</p>
-                        <p className="text-[11px] text-slate-400 mt-0.5">{visit.status}</p>
                       </div>
                     </div>
                     <div className="flex gap-2 items-center">
-                      <button onClick={() => handleNavigate(visit)} className="flex items-center gap-1 px-3 py-2 bg-white border rounded-xl text-xs text-emerald-600 hover:bg-emerald-50 transition">
-                        <ExternalLink className="w-3.5 h-3.5" /> Navigate
+                      <span className="text-xs font-medium capitalize text-slate-600">{visit.status.toLowerCase()}</span>
+                      <button onClick={() => navigate(`/rep/visits/${visit.id}`)} className="text-xs text-blue-600">
+                        View
                       </button>
-
-                      <button onClick={() => handleAddOrder(visit)} className="flex items-center gap-1 px-3 py-2 bg-emerald-600 text-white rounded-xl text-xs font-semibold hover:bg-emerald-700 transition">
-                        <FilePlus className="w-3.5 h-3.5" /> Add Order
-                      </button>
-
-                      {!visit.checkInTime && visit.status !== 'Completed' && (
+                      {visit.status === 'Planned' && (
                         <button
                           onClick={() => checkInMut.mutate({ customerId: visit.customerId })}
-                          disabled={checkInMut.isPending}
-                          className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-xl text-xs font-semibold shadow-lg shadow-emerald-500/20 active:scale-95 transition-all disabled:opacity-60"
+                          className="text-xs text-green-600"
                         >
-                          {checkInMut.isPending ? 'Checking in...' : <><PlayCircle className="w-3.5 h-3.5" /> Check In</>}
+                          Check
                         </button>
                       )}
-
-                      {visit.checkInTime && !visit.checkOutTime && (
+                      {visit.status === 'CheckedIn' && (
                         <button
-                          onClick={() => { setVisitToCheckout(visit); setCheckoutModalOpen(true); }}
-                          disabled={checkOutMut.isPending}
-                          className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-xl text-xs font-semibold shadow-lg shadow-emerald-500/20 active:scale-95 transition-all disabled:opacity-60"
+                          onClick={() => checkOutMut.mutate({ visitId: visit.id, data: { notes: visit.notes || '', outcomeReason: '' } })}
+                          className="text-xs text-green-600"
                         >
-                          {checkOutMut.isPending && visitToCheckout?.id === visit.id ? 'Completing...' : <><CheckCircle className="w-3.5 h-3.5" /> Check Out</>}
+                          Complete
                         </button>
-                      )}
-
-                      {visit.status === 'Completed' && (
-                        <span className="flex items-center gap-1 text-xs text-emerald-600 font-semibold bg-emerald-50 px-2.5 py-1.5 rounded-xl">
-                          <CheckCircle className="w-3.5 h-3.5" /> Done
-                        </span>
                       )}
                     </div>
                   </div>
@@ -182,7 +214,7 @@ export default function RepRoutes() {
         </div>
 
         {/* Assigned Routes */}
-        <div className="card overflow-hidden">
+        <div id="assigned-routes" className="card overflow-hidden">
           <div className="flex items-center gap-2 p-4 pb-2">
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center">
               <MapPin className="w-3.5 h-3.5 text-white" />
@@ -219,6 +251,9 @@ export default function RepRoutes() {
                       ))}
                     </div>
                   )}
+                  <div className="mt-3 text-right">
+                    <button onClick={() => navigate(`/rep/routes/${route.id}`)} className="text-xs text-blue-600">View</button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -230,15 +265,7 @@ export default function RepRoutes() {
           )}
         </div>
 
-        <ConfirmModal
-          open={checkoutModalOpen}
-          title="Complete visit?"
-          description={`Mark visit to ${visitToCheckout?.customerName || 'customer'} as completed?`}
-          confirmLabel="Complete"
-          cancelLabel="Cancel"
-          onConfirm={handleConfirmCheckout}
-          onCancel={() => { setCheckoutModalOpen(false); setVisitToCheckout(null); }}
-        />
+      {/* cancellation is now available only in visit detail screen */}
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 import api from './axiosConfig';
 import type { ApiResponse, PagedResult } from '../../types/api.types';
-import type { RepPerformance, SalesTarget, Visit, Route } from '../../types/common.types';
+import type { RepPerformance, SalesTarget, Visit, Route, AdHocVisitRequest, RouteProgress } from '../../types/common.types';
 
 export interface Rep {
   id: string;
@@ -52,6 +52,9 @@ export const repsApi = {
   adminDeleteRoute: (routeId: string) =>
     api.delete<ApiResponse<string>>(`/admin/routes/${routeId}`),
 
+  adminGetRouteProgress: () =>
+    api.get<ApiResponse<RouteProgress[]>>('/admin/routes/progress/today'),
+
   // Rep self
   repGetProfile: () =>
     api.get<ApiResponse<unknown>>('/rep/profile'),
@@ -59,14 +62,27 @@ export const repsApi = {
   repGetRoutes: () =>
     api.get<ApiResponse<Route[]>>('/rep/routes'),
 
+  repGetRoute: (id: string) =>
+    api.get<ApiResponse<Route>>(`/rep/routes/${id}`),
+
   repGetTodayVisits: () =>
     api.get<ApiResponse<Visit[]>>('/rep/visits/today'),
+
+  repGetVisit: (id: string) =>
+    api.get<ApiResponse<Visit>>(`/rep/visits/${id}`),
+
+
+  repAddAdHocVisit: (data: AdHocVisitRequest) =>
+    api.post<ApiResponse<Visit>>('/rep/visits/ad-hoc', data),
 
   repCheckIn: (data: Record<string, unknown>) =>
     api.post<ApiResponse<Visit>>('/rep/visits/check-in', data),
 
   repCheckOut: (visitId: string, data: Record<string, unknown>) =>
     api.post<ApiResponse<Visit>>(`/rep/visits/${visitId}/check-out`, data),
+
+  repCancelVisit: (visitId: string) =>
+    api.delete<ApiResponse<string>>(`/rep/visits/${visitId}`),
 
   repGetPerformance: () =>
     api.get<ApiResponse<RepPerformance>>('/rep/performance'),

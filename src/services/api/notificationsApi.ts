@@ -16,9 +16,9 @@ export const notificationsApi = {
     api.get<ApiResponse<number>>('/notifications/unread-count'),
 
   // Admin
-  send: (data: { userId: string; title: string; message: string; type?: string }) =>
+  send: (data: { userId: string; title: string; message: string; type?: string; metadata?: string }) =>
     api.post<ApiResponse<string>>('/admin/notifications/send', data),
 
-  broadcast: (data: { title: string; message: string; role?: string; type?: string }) =>
+  broadcast: (data: { title: string; message: string; role?: string; type?: string; metadata?: string }) =>
     api.post<ApiResponse<string>>('/admin/notifications/broadcast', data),
 };

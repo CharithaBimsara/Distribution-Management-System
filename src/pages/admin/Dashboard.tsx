@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { reportsApi } from '../../services/api/reportsApi';
+import { repsApi } from '../../services/api/repsApi';
 import {
   DollarSign, ShoppingCart, Package, Users, AlertTriangle,
   TrendingUp, UserCheck, CreditCard, ArrowUpRight, ArrowDownRight, CalendarDays
@@ -12,6 +13,12 @@ export default function AdminDashboard() {
     queryKey: ['admin-dashboard'],
     queryFn: () => reportsApi.getDashboard().then(r => r.data.data),
     refetchInterval: 30000,
+  });
+
+  const { data: routeProgress } = useQuery({
+    queryKey: ['admin-route-progress'],
+    queryFn: () => repsApi.adminGetRouteProgress().then(r => r.data.data),
+    refetchInterval: 60000,
   });
 
   if (isLoading) return <DashboardSkeleton />;
@@ -67,6 +74,24 @@ export default function AdminDashboard() {
           </div>
         ))}
       </div>
+
+      {/* Route progress widget */}
+      {routeProgress && routeProgress.length > 0 && (
+        <div className="card p-4">
+          <h3 className="font-semibold text-slate-900 mb-2">Rep Route Strike Rate (today)</h3>
+          <div className="space-y-3">
+            {routeProgress.map(p => (
+              <div key={p.repId} className="flex items-center gap-2">
+                <span className="text-xs w-24 truncate">{p.repName}</span>
+                <div className="flex-1 h-2 bg-slate-100 rounded overflow-hidden">
+                  <div className="h-full bg-emerald-500" style={{ width: `${Math.round(p.strikeRate * 100)}%` }} />
+                </div>
+                <span className="text-xs w-8 text-right">{Math.round(p.strikeRate * 100)}%</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">

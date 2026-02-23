@@ -42,10 +42,14 @@ export default function CustomerLayout() {
   const location = useLocation();
   const cartCount = useSelector((state: RootState) => state.cart.items.length);
 
+  const userId = user?.id;
+
   const { data: unreadCount } = useQuery({
-    queryKey: ['unread-count'],
+    queryKey: ['unread-count', userId],
     queryFn: () => notificationsApi.getUnreadCount().then(r => r.data.data),
-    refetchInterval: 30000,
+    enabled: !!userId,
+    // no polling; rely on SignalR invalidations only
+    // refetchInterval: 30000,
   });
 
   const handleLogout = () => setLogoutConfirmOpen(true);

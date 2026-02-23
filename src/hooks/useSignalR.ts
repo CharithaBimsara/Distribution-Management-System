@@ -80,14 +80,18 @@ export function useSignalR() {
 
     conn.on('ReceiveNotification', (notification: { title: string; message: string }) => {
       toast(notification.message, { icon: '🔔', duration: 5000 });
-      queryClient.invalidateQueries({ queryKey: ['notifications'] });
-      queryClient.invalidateQueries({ queryKey: ['unread-count'] });
+      // invalidation keys include userId so that cache updates for the current user
+      queryClient.invalidateQueries({ queryKey: ['notifications', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['unread-count', user?.id] });
     });
 
-    conn.on('NewOrder', (data: { id: string; orderNumber: string }) => {
-      toast.success(`New order #${data.orderNumber}`, { duration: 4000 });
-      queryClient.invalidateQueries({ queryKey: ['notifications'] });
-      queryClient.invalidateQueries({ queryKey: ['unread-count'] });
+    conn.on('NewOrder', (data: { id: string; orderNumber: string; actorName?: string; customerName?: string }) => {
+      let txt = `New order #${data.orderNumber}`;
+      if (data.customerName) txt += ` for ${data.customerName}`;
+      if (data.actorName) txt += ` by ${data.actorName}`;
+      toast.success(txt, { duration: 4000 });
+      queryClient.invalidateQueries({ queryKey: ['notifications', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['unread-count', user?.id] });
       queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
       queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] });
     });

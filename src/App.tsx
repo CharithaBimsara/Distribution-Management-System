@@ -1,6 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { useAuth } from './hooks/useAuth';
+import { useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
 
 // Layouts
 import AdminLayout from './components/layout/AdminLayout';
@@ -35,6 +37,8 @@ import AdminSettings from './pages/admin/Settings';
 // Rep pages
 import RepDashboard from './pages/rep/Dashboard';
 import RepRoutes from './pages/rep/Routes';
+import RepVisitDetail from './pages/rep/VisitDetail';
+import RepRouteDetail from './pages/rep/RouteDetail';
 import RepOrders from './pages/rep/Orders';
 import RepPayments from './pages/rep/Payments';
 import RepCustomers from './pages/rep/Customers';
@@ -75,6 +79,17 @@ function RootRedirect() {
 }
 
 export default function App() {
+  const queryClient = useQueryClient();
+  const { isAuthenticated } = useAuth();
+
+  // clear react‑query cache when user signs out (or a different user logs in).
+  // prevents showing leftover notification counts from a previous session.
+  useEffect(() => {
+    if (!isAuthenticated) {
+      queryClient.clear();
+    }
+  }, [isAuthenticated, queryClient]);
+
   return (
     <BrowserRouter>
       <Toaster position="top-right" toastOptions={{ duration: 3000, className: 'toast', style: { fontSize: '14px' } }} />
@@ -114,6 +129,8 @@ export default function App() {
           <Route path="payments" element={<RepPayments />} />
           <Route path="payments/new" element={<RepCreatePayment />} />
           <Route path="routes" element={<RepRoutes />} />
+          <Route path="routes/:id" element={<RepRouteDetail />} />
+          <Route path="visits/:id" element={<RepVisitDetail />} />
           <Route path="orders" element={<RepOrders />}>
             <Route path=":id" element={<RepOrderDetail />} />
           </Route>

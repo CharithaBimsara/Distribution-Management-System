@@ -33,10 +33,14 @@ export default function AdminLayout() {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const userId = user?.id;
+
   const { data: unreadCount } = useQuery({
-    queryKey: ['unread-count'],
+    queryKey: ['unread-count', userId],
     queryFn: () => notificationsApi.getUnreadCount().then(r => r.data.data),
-    refetchInterval: 30000,
+    enabled: !!userId,
+    // polling removed; real-time invalidation covers updates
+    // refetchInterval: 30000,
   });
 
   const handleLogout = () => setLogoutConfirmOpen(true);

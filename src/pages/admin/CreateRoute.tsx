@@ -1,13 +1,16 @@
 import { ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import AdminRouteForm from './AdminRouteForm';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { repsApi } from '../../services/api/repsApi';
+import toast from 'react-hot-toast';
 
 export default function CreateRoute() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { data: reps } = useQuery({ queryKey: ['admin-reps'], queryFn: () => repsApi.adminGetAll().then(r => r.data.data) });
   const repList = reps && 'items' in reps ? (reps as any).items : Array.isArray(reps) ? reps : [];
+  const createRouteMut = useMutation({ mutationFn: (d: Parameters<typeof repsApi.adminCreateRoute>[0]) => repsApi.adminCreateRoute(d), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admin-routes'] }); toast.success('Route created'); navigate('/admin/reps'); }, onError: () => toast.error('Failed to create route') });
 
   return (
     <div className="px-6 py-8 max-w-4xl mx-auto animate-fade-in">
@@ -22,7 +25,7 @@ export default function CreateRoute() {
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm">
-        <AdminRouteForm reps={repList} onSubmit={() => navigate('/admin/reps')} onCancel={() => navigate('/admin/reps')} />
+        <AdminRouteForm reps={repList} onSubmit={d => createRouteMut.mutate(d)} onCancel={() => navigate('/admin/reps')} isPending={createRouteMut.isPending} />
       </div>
     </div>
   );

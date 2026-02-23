@@ -56,6 +56,11 @@ export interface SalesTarget {
   status: string;
 }
 
+export interface AdHocVisitRequest {
+  customerId: string;
+  notes?: string;
+}
+
 export interface Visit {
   id: string;
   repId: string;
@@ -66,8 +71,23 @@ export interface Visit {
   checkOutTime?: string;
   status: string;
   notes?: string;
+  outcomeReason?: string;
   latitude?: number;
   longitude?: number;
+  phoneNumber?: string;
+  street?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
+  country?: string;
+}
+
+export interface RouteProgress {
+  repId: string;
+  repName: string;
+  totalPlanned: number;
+  completed: number;
+  strikeRate: number; // 0-1
 }
 
 export interface Route {
@@ -87,6 +107,8 @@ export interface RouteCustomer {
   customerName?: string;
   visitOrder: number;
   visitFrequency: string;
+  latitude?: number;
+  longitude?: number;
 }
 
 export interface Complaint {

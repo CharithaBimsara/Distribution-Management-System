@@ -5,40 +5,57 @@ import { formatDate } from '../../utils/formatters';
 import { Bell, CheckCheck, Circle, Loader2 } from 'lucide-react';
 import type { Notification } from '../../types/notification.types';
 import toast from 'react-hot-toast';
+import { useAuth } from '../../hooks/useAuth';
+import { useNavigate } from 'react-router-dom';
 
 export default function RepNotifications() {
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
+  const { user } = useAuth();
+  const userId = user?.id;
+  const navigate = useNavigate();
 
   const { data, isLoading } = useQuery({
-    queryKey: ['rep-notifications', page],
+    queryKey: ['notifications', userId, page],
     queryFn: () => notificationsApi.getAll({ page, pageSize: 30 }).then(r => r.data.data),
+    enabled: !!userId,
   });
 
   const { data: unread } = useQuery({
-    queryKey: ['rep-unread-count'],
+    queryKey: ['unread-count', userId],
     queryFn: () => notificationsApi.getUnreadCount().then(r => r.data.data),
+    enabled: !!userId,
   });
 
   const markReadMut = useMutation({
     mutationFn: (id: string) => notificationsApi.markAsRead(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['rep-notifications'] });
-      queryClient.invalidateQueries({ queryKey: ['rep-unread-count'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications', userId] });
+      queryClient.invalidateQueries({ queryKey: ['unread-count', userId] });
     },
   });
 
   const markAllMut = useMutation({
     mutationFn: () => notificationsApi.markAllAsRead(),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['rep-notifications'] });
-      queryClient.invalidateQueries({ queryKey: ['rep-unread-count'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications', userId] });
+      queryClient.invalidateQueries({ queryKey: ['unread-count', userId] });
     },
   });
 
   const notifications = data?.items || [];
+  const basePath = user?.role === 'Admin' ? '/admin' : user?.role === 'SalesRep' ? '/rep' : '/shop';
+
+  const handleClick = (n: Notification) => {
+    if (!n.isRead) markReadMut.mutate(n.id);
+    if (n.metadata?.orderId) {
+      navigate(`${basePath}/orders/${n.metadata.orderId}`);
+    }
+  };
 
   const formatTime = (dateStr: string) => {
+    // ensure timezone interpreted correctly (API returns UTC without Z sometimes)
+    if (!dateStr.endsWith('Z')) dateStr = dateStr + 'Z';
     const date = new Date(dateStr);
     const now = new Date();
     const diff = now.getTime() - date.getTime();
@@ -98,7 +115,7 @@ export default function RepNotifications() {
             {notifications.map((n: Notification) => (
               <div
                 key={n.id}
-                onClick={() => !n.isRead && markReadMut.mutate(n.id)}
+                onClick={() => handleClick(n)}
                 className={`flex items-start gap-3 px-5 py-4 transition cursor-pointer ${
                   n.isRead ? 'bg-white' : 'bg-emerald-50/30 hover:bg-emerald-50/50'
                 }`}
@@ -113,6 +130,12 @@ export default function RepNotifications() {
                   <div className="flex items-start justify-between gap-2">
                     <p className={`text-sm leading-snug ${n.isRead ? 'text-slate-600' : 'font-semibold text-slate-900'}`}>
                       {n.title}
+                      {n.metadata?.customerName && (
+                        <span className="text-xs text-slate-500 ml-1">({n.metadata.customerName})</span>
+                      )}
+                      {n.metadata?.actorName && (
+                        <span className="text-xs text-slate-500 ml-1">by {n.metadata.actorName}</span>
+                      )}
                     </p>
                     {!n.isRead && (
                       <Circle className="w-2 h-2 fill-emerald-500 text-emerald-500 flex-shrink-0 mt-1.5" />

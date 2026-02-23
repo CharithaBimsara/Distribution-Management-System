@@ -2,39 +2,53 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { notificationsApi } from '../../services/api/notificationsApi';
 import { Bell, CheckCheck, Circle, Loader2 } from 'lucide-react';
+import { useAuth } from '../../hooks/useAuth';
+import { useNavigate } from 'react-router-dom';
 import type { Notification } from '../../types/notification.types';
 
 export default function CustomerNotifications() {
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
+  const { user } = useAuth();
+  const userId = user?.id;
+  const navigate = useNavigate();
+  const basePath = '/shop';
 
   const { data, isLoading } = useQuery({
-    queryKey: ['customer-notifications', page],
+    queryKey: ['notifications', userId, page],
     queryFn: () => notificationsApi.getAll({ page, pageSize: 30 }).then(r => r.data.data),
+    enabled: !!userId,
   });
 
   const { data: unread } = useQuery({
-    queryKey: ['unread-count'],
+    queryKey: ['unread-count', userId],
     queryFn: () => notificationsApi.getUnreadCount().then(r => r.data.data),
+    enabled: !!userId,
   });
 
   const markReadMut = useMutation({
     mutationFn: (id: string) => notificationsApi.markAsRead(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['customer-notifications'] });
-      queryClient.invalidateQueries({ queryKey: ['unread-count'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications', userId] });
+      queryClient.invalidateQueries({ queryKey: ['unread-count', userId] });
     },
   });
 
   const markAllMut = useMutation({
     mutationFn: () => notificationsApi.markAllAsRead(),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['customer-notifications'] });
-      queryClient.invalidateQueries({ queryKey: ['unread-count'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications', userId] });
+      queryClient.invalidateQueries({ queryKey: ['unread-count', userId] });
     },
   });
 
   const notifications = data?.items || [];
+  const handleClick = (n: Notification) => {
+    if (!n.isRead) markReadMut.mutate(n.id);
+    if (n.metadata?.orderId) {
+      navigate(`${basePath}/orders/${n.metadata.orderId}`);
+    }
+  };
 
   const formatTime = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -98,7 +112,7 @@ export default function CustomerNotifications() {
             {notifications.map((n: Notification) => (
               <div
                 key={n.id}
-                onClick={() => !n.isRead && markReadMut.mutate(n.id)}
+                onClick={() => handleClick(n)}
                 className={`flex items-start gap-3 px-5 py-4 transition cursor-pointer ${
                   n.isRead ? 'bg-white' : 'bg-orange-50/30 hover:bg-orange-50/50'
                 }`}
@@ -114,6 +128,9 @@ export default function CustomerNotifications() {
                   <div className="flex items-start justify-between gap-2">
                     <p className={`text-sm leading-snug ${n.isRead ? 'text-slate-600' : 'font-semibold text-slate-900'}`}>
                       {n.title}
+                      {n.metadata?.actorName && (
+                        <span className="text-xs text-slate-500 ml-1">({n.metadata.actorName})</span>
+                      )}
                     </p>
                     {!n.isRead && (
                       <Circle className="w-2 h-2 fill-orange-500 text-orange-500 flex-shrink-0 mt-1.5" />

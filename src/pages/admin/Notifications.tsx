@@ -3,6 +3,8 @@ import { notificationsApi } from '../../services/api/notificationsApi';
 import { formatRelative } from '../../utils/formatters';
 import { Bell, CheckCircle, Send, Info, AlertTriangle, CheckCheck, Loader2 } from 'lucide-react';
 import { useState } from 'react';
+import { useAuth } from '../../hooks/useAuth';
+import { useNavigate } from 'react-router-dom';
 import type { Notification } from '../../types/notification.types';
 
 export default function AdminNotifications() {
@@ -12,9 +14,15 @@ export default function AdminNotifications() {
   const [broadcastMessage, setBroadcastMessage] = useState('');
   const [broadcastRole, setBroadcastRole] = useState('');
 
+  const { user } = useAuth();
+  const userId = user?.id;
+  const navigate = useNavigate();
+  const basePath = '/admin';
+
   const { data, isLoading } = useQuery({
-    queryKey: ['notifications'],
+    queryKey: ['notifications', userId],
     queryFn: () => notificationsApi.getAll().then(r => r.data.data),
+    enabled: !!userId,
   });
 
   const notifications = data?.items || [];
@@ -22,16 +30,23 @@ export default function AdminNotifications() {
   const markReadMut = useMutation({
     mutationFn: (id: string) => notificationsApi.markAsRead(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notifications'] });
-      queryClient.invalidateQueries({ queryKey: ['unread-count'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications', userId] });
+      queryClient.invalidateQueries({ queryKey: ['unread-count', userId] });
     },
   });
+
+  const handleClick = (n: Notification) => {
+    if (!n.isRead) markReadMut.mutate(n.id);
+    if (n.metadata?.orderId) {
+      navigate(`${basePath}/orders/${n.metadata.orderId}`);
+    }
+  };
 
   const markAllMut = useMutation({
     mutationFn: () => notificationsApi.markAllAsRead(),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notifications'] });
-      queryClient.invalidateQueries({ queryKey: ['unread-count'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications', userId] });
+      queryClient.invalidateQueries({ queryKey: ['unread-count', userId] });
     },
   });
 
@@ -41,6 +56,8 @@ export default function AdminNotifications() {
   });
 
   const typeIcon = (type: string) => {
+    // timezone handling not needed here since formatRelative handles the Z, but
+    // when we later display createdAt we may append Z if missing in cells
     if (type === 'success') return <CheckCircle className="w-4 h-4 text-green-500" />;
     if (type === 'warning') return <AlertTriangle className="w-4 h-4 text-yellow-500" />;
     return <Info className="w-4 h-4 text-indigo-500" />;
@@ -85,10 +102,18 @@ export default function AdminNotifications() {
           </div>
         ) : (
           notifications.map((n: Notification) => (
-            <div key={n.id} className={`flex items-start gap-3 p-4 hover:bg-slate-50 transition ${!n.isRead ? 'bg-indigo-50/40' : ''}`}>
+            <div key={n.id} onClick={() => handleClick(n)} className={`flex items-start gap-3 p-4 hover:bg-slate-50 transition ${!n.isRead ? 'bg-indigo-50/40' : ''}`}>
               <span className="mt-0.5">{typeIcon(n.notificationType)}</span>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-slate-900">{n.title}</p>
+                <p className="text-sm font-medium text-slate-900">
+                  {n.title}
+                  {n.metadata?.customerName && (
+                    <span className="text-xs text-slate-500 ml-1">({n.metadata.customerName})</span>
+                  )}
+                  {n.metadata?.actorName && (
+                    <span className="text-xs text-slate-500 ml-1">by {n.metadata.actorName}</span>
+                  )}
+                </p>
                 <p className="text-sm text-slate-600 mt-0.5">{n.message}</p>
                 <p className="text-xs text-slate-400 mt-1">{formatRelative(n.createdAt)}</p>
               </div>

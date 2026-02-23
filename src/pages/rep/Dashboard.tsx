@@ -1,4 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 import { repsApi } from '../../services/api/repsApi';
 import { customersApi } from '../../services/api/customersApi';
 import { ordersApi } from '../../services/api/ordersApi';
@@ -8,6 +9,7 @@ import { useNavigate } from 'react-router-dom';
 
 export default function RepDashboard() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const { data: performance } = useQuery({
     queryKey: ['rep-performance'],
@@ -18,6 +20,25 @@ export default function RepDashboard() {
     queryKey: ['rep-today-visits'],
     queryFn: () => repsApi.repGetTodayVisits().then(r => r.data.data),
   });
+
+  const addAdHocMut = useMutation({
+    mutationFn: (data: { customerId: string; notes?: string }) =>
+      repsApi.repAddAdHocVisit(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['rep-today-visits'] });
+    },
+  });
+
+
+  const { data: customerList } = useQuery({
+    queryKey: ['rep-customers-list'],
+    queryFn: () =>
+      customersApi.repGetCustomers({ page: 1, pageSize: 200 }).then(r => r.data.data.items),
+  });
+
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [selectedCustomerId, setSelectedCustomerId] = useState('');
+  const [addNotes, setAddNotes] = useState('');
 
   const { data: recentOrders } = useQuery({
     queryKey: ['rep-recent-orders'],
@@ -131,6 +152,12 @@ export default function RepDashboard() {
             <div className="flex items-center justify-between p-4 pb-3">
               <h2 className="text-sm font-bold text-slate-800">Today&apos;s Visits</h2>
               <span className="text-xs text-emerald-600 font-semibold bg-emerald-50 px-2 py-0.5 rounded-full">{todayVisits?.length || 0} visits</span>
+              <button
+                onClick={() => setAddModalOpen(true)}
+                className="ml-4 text-xs text-blue-600 hover:underline"
+              >
+                + add visit
+              </button>
             </div>
             {todayVisits && todayVisits.length > 0 ? (
               <>
@@ -142,18 +169,24 @@ export default function RepDashboard() {
                 </div>
                 <div className="divide-y divide-slate-50">
                   {todayVisits.slice(0, 5).map((visit: any) => (
-                    <div key={visit.id} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50/50 transition">
-                      <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ring-4 ${
-                        visit.status === 'Completed' ? 'bg-emerald-500 ring-emerald-500/10' :
-                        visit.checkInTime ? 'bg-blue-500 ring-blue-500/10' :
-                        'bg-slate-300 ring-slate-300/10'
-                      }`} />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-800 truncate">{visit.customerName || 'Customer'}</p>
-                        <p className="text-[11px] text-slate-400 lg:hidden">{visit.status}</p>
+                    <div key={visit.id} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-50/50 transition">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ring-4 ${
+                          visit.status === 'Completed' ? 'bg-emerald-500 ring-emerald-500/10' :
+                          visit.checkInTime ? 'bg-blue-500 ring-blue-500/10' :
+                          'bg-slate-300 ring-slate-300/10'
+                        }`} />
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-slate-800 truncate">{visit.customerName || 'Customer'}</p>
+                          <p className="text-[11px] text-slate-400">{visit.status}</p>
+                        </div>
                       </div>
-                      <span className="hidden lg:inline text-xs font-medium text-slate-500 w-24 text-right">{visit.status}</span>
-                      <ChevronRight className="w-4 h-4 text-slate-300 lg:hidden" />
+                      <button
+                        onClick={() => navigate(`/rep/visits/${visit.id}`)}
+                        className="text-xs text-blue-600 font-medium"
+                      >
+                        View
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -167,6 +200,63 @@ export default function RepDashboard() {
               </div>
             )}
           </div>
+
+        {/* add visit modal (temporarily disabled) */}
+        {/* {addModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/40" onClick={() => setAddModalOpen(false)} />
+            <div className="bg-white rounded-lg p-6 w-full max-w-sm z-10">
+              <h3 className="text-lg font-semibold mb-4">New visit</h3>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-slate-700 mb-1">Customer</label>
+                <select
+                  value={selectedCustomerId}
+                  onChange={e => setSelectedCustomerId(e.target.value)}
+                  className="w-full border border-slate-300 rounded-md p-2"
+                >
+                  <option value="">-- select --</option>
+                  {customerList?.map(c => (
+                    <option key={c.id} value={c.id}>
+                      {c.name || c.fullName || c.email}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-slate-700 mb-1">Notes (optional)</label>
+                <textarea
+                  value={addNotes}
+                  onChange={e => setAddNotes(e.target.value)}
+                  className="w-full border border-slate-300 rounded-md p-2"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => {
+                    setAddModalOpen(false);
+                    setSelectedCustomerId('');
+                    setAddNotes('');
+                  }}
+                  className="py-2 px-4 bg-slate-100 rounded-md hover:bg-slate-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  disabled={!selectedCustomerId}
+                  onClick={() => {
+                    addAdHocMut.mutate({ customerId: selectedCustomerId, notes: addNotes });
+                    setAddModalOpen(false);
+                    setSelectedCustomerId('');
+                    setAddNotes('');
+                  }}
+                  className="py-2 px-4 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  Create
+                </button>
+              </div>
+            </div>
+          </div>
+        )} */}
 
           {/* Recent Orders */}
           <div className="card overflow-hidden relative z-20">
