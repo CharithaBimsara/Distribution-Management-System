@@ -37,6 +37,7 @@ export const statusColor = (status: string): string => {
     InStock: 'bg-green-100 text-green-800',
     OutOfStock: 'bg-red-100 text-red-800',
     LowStock: 'bg-yellow-100 text-yellow-800',
+    Discontinued: 'bg-gray-100 text-gray-800',
     Active: 'bg-green-100 text-green-800',
     Inactive: 'bg-gray-100 text-gray-800',
   };

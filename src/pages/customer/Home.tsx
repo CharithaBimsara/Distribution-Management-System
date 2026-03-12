@@ -51,34 +51,13 @@ export default function CustomerHome() {
   }, [recentOrders]);
 
   const handleQuickAdd = (product: Product) => {
-    // allow quick-add when backorder is enabled for the product
-    if (product.availability !== 'InStock' && !product.allowBackorder) {
-      toast.error('Product is out of stock');
-      return;
-    }
-
-    // quick-add adds 1 — enforce product-level cap if provided
-    if (typeof product.backorderLimit === 'number' && 1 > product.backorderLimit) {
-      toast.error(`Maximum allowed quantity is ${product.backorderLimit}`);
-      return;
-    }
-
-    if (!product.allowBackorder && typeof product.stockQuantity === 'number' && product.stockQuantity <= 0) {
-      toast.error('Product is out of stock');
-      return;
-    }
-
     dispatch(addToCart({
       productId: product.id,
       productName: product.name,
       unitPrice: product.sellingPrice,
       quantity: 1,
-      unit: product.unit,
-      imageUrl: product.imageUrl,
-      stockQuantity: product.stockQuantity,
-      allowBackorder: product.allowBackorder,
-      backorderLeadTimeDays: product.backorderLeadTimeDays,
-      backorderLimit: product.backorderLimit,
+      sku: product.sku,
+      lineTotal: (product.sellingPrice || 0) * 1,
     }));
   }; 
 
@@ -272,11 +251,7 @@ export default function CustomerHome() {
                       onClick={() => navigate(`/shop/products?search=${encodeURIComponent(product.name)}`)}
                       className="h-32 bg-gradient-to-br from-slate-50 to-orange-50/50 flex items-center justify-center overflow-hidden cursor-pointer"
                     >
-                      {product.imageUrl ? (
-                        <img src={product.imageUrl} alt={product.name} className="h-full w-full object-cover group-hover:scale-110 transition-transform duration-300" />
-                      ) : (
-                        <Package className="w-10 h-10 text-slate-200" />
-                      )}
+                      <Package className="w-10 h-10 text-slate-200" />
                     </div>
                     <div className="p-3">
                       <p 
@@ -285,15 +260,14 @@ export default function CustomerHome() {
                       >
                         {product.name}
                       </p>
-                      <p className="text-xs text-slate-400">{product.unit}</p>
-                      <div className="flex items-center justify-between mt-2">
+                              <div className="flex items-center justify-between mt-2">
                         <p className="text-base font-bold text-orange-600">{formatCurrency(product.sellingPrice)}</p>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             handleQuickAdd(product);
                           }}
-                          disabled={!product.allowBackorder && (product.availability !== 'InStock' || (product.stockQuantity ?? 0) <= 0)}
+
                           className="w-7 h-7 rounded-lg bg-orange-500 hover:bg-orange-600 disabled:bg-slate-200 disabled:cursor-not-allowed text-white flex items-center justify-center active:scale-90 transition-all shadow-sm"
                         >
                           <ShoppingBag className="w-4 h-4" />

@@ -1,18 +1,20 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
 
-export interface CartItem {
-  productId: string;
+import { calculateLine } from '../../utils/calculations';
+
+export interface CartItem {  // unique identifier for this line; if omitted, merge happens by productId
+  lineId?: string;  productId: string;
   productName: string;
-  unitPrice: number;
+  unitPrice: number;          // base selling price per unit (without discount/tax)
   quantity: number;
-  unit: string;
+  sku?: string;
   imageUrl?: string;
-  // optional snapshot of stock when item was added — used to prevent over-adding in UI
-  stockQuantity?: number;
-  // backorder snapshot (copied from product at add-to-cart time)
-  allowBackorder?: boolean;
-  backorderLeadTimeDays?: number;
-  backorderLimit?: number;
+  // discount percentage from product or applied by user
+  discountPercent?: number;
+  // tax rate expressed as a decimal (0.18 for 18%) derived from product metadata
+  taxRate?: number;
+  // total for this line, recalculated whenever quantity/percent/rate change
+  lineTotal: number;
 }
 
 interface CartState {
@@ -21,7 +23,34 @@ interface CartState {
 }
 
 const saved = localStorage.getItem('cart');
-const initialState: CartState = saved ? JSON.parse(saved) : { items: [], customerId: null };
+let initialState: CartState = saved ? JSON.parse(saved) : { items: [], customerId: null };
+if (initialState.items && initialState.items.length) {
+  // migrate old items (which may have used discountAmount/taxAmount) to new
+  // schema; ensure discountPercent and taxRate exist and recompute lineTotal.
+  initialState.items = initialState.items.map(i => {
+    const item: any = { ...i };
+    if (item.discountPercent == null) item.discountPercent = 0;
+    if (item.taxRate == null) {
+      // try to infer taxRate from previous taxAmount value if present
+      if (item.taxAmount != null && item.unitPrice) {
+        const discPct = item.discountPercent || 0;
+        const base = item.unitPrice * (1 - discPct / 100);
+        if (base > 0) item.taxRate = item.taxAmount / base;
+      } else {
+        item.taxRate = 0;
+      }
+    }
+    // recalc lineTotal
+    const calc = calculateLine({
+      rate: item.unitPrice,
+      qty: item.quantity,
+      discountPercent: item.discountPercent,
+      taxAmount: item.taxRate != null ? item.taxRate * item.unitPrice * (1 - (item.discountPercent || 0) / 100) : undefined,
+    });
+    item.lineTotal = calc.total;
+    return item as CartItem;
+  });
+}
 
 const persist = (state: CartState) => localStorage.setItem('cart', JSON.stringify(state));
 
@@ -34,56 +63,82 @@ const cartSlice = createSlice({
       persist(state);
     },
     addToCart(state, action: PayloadAction<CartItem>) {
-      const existing = state.items.find(i => i.productId === action.payload.productId);
-      if (existing) {
-        existing.quantity += action.payload.quantity;
+      const payload = { ...action.payload } as CartItem;
+      // recalc line total in case caller didn't
+      const calc = calculateLine({
+        rate: payload.unitPrice,
+        qty: payload.quantity,
+        discountPercent: payload.discountPercent,
+        taxAmount: payload.taxRate != null
+          ? payload.taxRate * payload.unitPrice * (1 - (payload.discountPercent ?? 0) / 100)
+          : undefined,
+      });
+      payload.lineTotal = calc.total;
+
+      // find matching existing item: prefer matching lineId, otherwise match by
+      // productId only if no lineId specified (legacy behaviour)
+      let existing: CartItem | undefined;
+      if (payload.lineId) {
+        existing = state.items.find(i => i.lineId === payload.lineId);
+      }
+      if (!existing && !payload.lineId) {
+        existing = state.items.find(i => i.productId === payload.productId && !i.lineId);
+      }
+
+      if (existing && !payload.lineId) {
+        // merge into existing
+        existing.quantity += payload.quantity;
+        const merged = calculateLine({
+          rate: existing.unitPrice,
+          qty: existing.quantity,
+          discountPercent: existing.discountPercent,
+          taxAmount: existing.taxRate != null
+            ? existing.taxRate * existing.unitPrice * (1 - (existing.discountPercent ?? 0) / 100)
+            : undefined,
+        });
+        existing.lineTotal = merged.total;
       } else {
-        state.items.push(action.payload);
+        state.items.push(payload);
       }
       persist(state);
     },
-    updateQuantity(state, action: PayloadAction<{ productId: string; quantity: number }>) {
-      const item = state.items.find(i => i.productId === action.payload.productId);
+    updateQuantity(state, action: PayloadAction<{ productId?: string; lineId?: string; quantity: number }>) {
+      let item: CartItem | undefined;
+      if (action.payload.lineId) {
+        item = state.items.find(i => i.lineId === action.payload.lineId);
+      } else if (action.payload.productId) {
+        item = state.items.find(i => i.productId === action.payload.productId);
+      }
       if (item) {
-        const requested = action.payload.quantity;
-
-        // determine maximum allowed for this cart item (product-level backorderLimit if set,
-        // otherwise if backorder not allowed enforce stockQuantity)
-        let maxAllowed: number | undefined = undefined;
-        if (typeof item.backorderLimit === 'number') maxAllowed = item.backorderLimit;
-        else if (!item.allowBackorder && typeof item.stockQuantity === 'number') maxAllowed = item.stockQuantity;
-
-        if (typeof maxAllowed === 'number' && requested > maxAllowed) {
-          // clamp silently to maxAllowed to keep state consistent (UI also prevents exceed)
-          item.quantity = maxAllowed;
-        } else {
-          item.quantity = requested;
-        }
-
+        item.quantity = action.payload.quantity;
+        const calc = calculateLine({
+          rate: item.unitPrice,
+          qty: item.quantity,
+          discountPercent: item.discountPercent,
+          taxAmount: item.taxRate != null
+            ? item.taxRate * item.unitPrice * (1 - (item.discountPercent ?? 0) / 100)
+            : undefined,
+        });
+        item.lineTotal = calc.total;
         if (item.quantity <= 0) {
-          state.items = state.items.filter(i => i.productId !== action.payload.productId);
+          state.items = state.items.filter(i => i !== item);
         }
       }
       persist(state);
     },
 
-    // refresh a cart item's product snapshot (stock / backorder flags) from server
-    updateItemSnapshot(state, action: PayloadAction<{ productId: string; stockQuantity?: number; allowBackorder?: boolean; backorderLeadTimeDays?: number | null; backorderLimit?: number | null }>) {
-      const item = state.items.find(i => i.productId === action.payload.productId);
-      if (!item) return;
-      if (typeof action.payload.stockQuantity === 'number') item.stockQuantity = action.payload.stockQuantity;
-      if (typeof action.payload.allowBackorder === 'boolean') item.allowBackorder = action.payload.allowBackorder;
-      if (typeof action.payload.backorderLeadTimeDays !== 'undefined') item.backorderLeadTimeDays = action.payload.backorderLeadTimeDays ?? undefined;
-      if (typeof action.payload.backorderLimit !== 'undefined') item.backorderLimit = action.payload.backorderLimit ?? undefined;
-      // ensure quantity still respects latest limits
-      let maxAllowed: number | undefined = undefined;
-      if (typeof item.backorderLimit === 'number') maxAllowed = item.backorderLimit;
-      else if (!item.allowBackorder && typeof item.stockQuantity === 'number') maxAllowed = item.stockQuantity;
-      if (typeof maxAllowed === 'number' && item.quantity > maxAllowed) item.quantity = maxAllowed;
+
+    // this reducer is no longer needed but kept for compatibility (no-op)
+    updateItemSnapshot(state, action: PayloadAction<any>) {
+      // no operation
       persist(state);
     },
-    removeFromCart(state, action: PayloadAction<string>) {
-      state.items = state.items.filter(i => i.productId !== action.payload);
+    removeFromCart(state, action: PayloadAction<{ productId?: string; lineId?: string }>) {
+      if (action.payload.lineId) {
+        state.items = state.items.filter(i => i.lineId !== action.payload.lineId);
+      } else if (action.payload.productId) {
+        state.items = state.items.filter(i => i.productId !== action.payload.productId);
+      }
       persist(state);
     },
     clearCart(state) {

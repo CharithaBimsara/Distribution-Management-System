@@ -10,6 +10,13 @@ export const supportApi = {
   customerGetComplaints: () =>
     api.get<ApiResponse<Complaint[]>>('/customer/support/complaints'),
 
+  // Sales Rep
+  repCreateComplaint: (data: CreateComplaintRequest) =>
+    api.post<ApiResponse<string>>('/rep/support/complaints', data),
+
+  repGetComplaints: () =>
+    api.get<ApiResponse<Complaint[]>>('/rep/support/complaints'),
+
   // Admin
   adminGetComplaints: (params?: Record<string, unknown>) =>
     api.get<ApiResponse<PagedResult<Complaint>>>('/admin/support/complaints', { params }),

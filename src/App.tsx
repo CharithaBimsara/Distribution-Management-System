@@ -8,6 +8,7 @@ import { useEffect } from 'react';
 import AdminLayout from './components/layout/AdminLayout';
 import RepLayout from './components/layout/RepLayout';
 import CustomerLayout from './components/layout/CustomerLayout';
+import CoordinatorLayout from './components/layout/CoordinatorLayout';
 
 // Route guard
 import ProtectedRoute from './routes/ProtectedRoute';
@@ -15,6 +16,8 @@ import ProtectedRoute from './routes/ProtectedRoute';
 // Auth pages
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
+import CustomerRegistration from './pages/auth/CustomerRegistration';
+import ForceChangePassword from './pages/auth/ForceChangePassword';
 
 // Admin pages
 import AdminDashboard from './pages/admin/Dashboard';
@@ -25,14 +28,19 @@ import AdminCustomers from './pages/admin/Customers';
 import AdminCustomerDetail from './pages/admin/CustomerDetail';
 import AdminCreateCustomer from './pages/admin/CreateCustomer';
 import AdminReps from './pages/admin/Reps';
+import AdminRepDetail from './pages/admin/RepDetail';
 import CreateRep from './pages/admin/CreateRep';
-import CreateRoute from './pages/admin/CreateRoute';
 import AdminOrderDetail from './pages/admin/OrderDetail';
 import AdminPayments from './pages/admin/Payments';
 import AdminReports from './pages/admin/Reports';
 import AdminSupport from './pages/admin/Support';
 import AdminNotifications from './pages/admin/Notifications';
 import AdminSettings from './pages/admin/Settings';
+import AdminCoordinators from './pages/admin/Coordinators';
+import AdminCoordinatorDetail from './pages/admin/CoordinatorDetail';
+import AdminQuotations from './pages/admin/Quotations';
+import AdminRegions from './pages/admin/Regions';
+import RegistrationRequestDetail from './pages/admin/RegistrationRequestDetail';
 
 // Rep pages
 import RepDashboard from './pages/rep/Dashboard';
@@ -53,11 +61,19 @@ import RepOrderDetail from './pages/rep/OrderDetail';
 import RepNotifications from './pages/rep/Notifications';
 import RepSupport from './pages/rep/Support';
 import RepCreateSupport from './pages/rep/RepCreateSupport';
+import RepQuotations from './pages/rep/Quotations';
+
+// Coordinator pages
+import CoordinatorDashboard from './pages/coordinator/Dashboard';
+import CoordinatorTeam from './pages/coordinator/Team';
+import CoordinatorCustomers from './pages/coordinator/Customers';
+import CoordinatorApprovals from './pages/coordinator/Approvals';
+import CoordinatorQuotations from './pages/coordinator/Quotations';
+import CoordinatorNotifications from './pages/coordinator/Notifications';
 
 // Customer pages
 import CustomerHome from './pages/customer/Home';
 import CustomerProducts from './pages/customer/Products';
-import CustomerCart from './pages/customer/Cart';
 import CustomerCheckout from './pages/customer/Checkout';
 import CustomerOrders from './pages/customer/Orders';
 import CustomerLedger from './pages/customer/Ledger';
@@ -66,6 +82,7 @@ import CustomerProfile from './pages/customer/Profile';
 import CustomerNotifications from './pages/customer/Notifications';
 import CustomerSupport from './pages/customer/Support';
 import CustomerCreateSupport from './pages/customer/CustomerCreateSupport';
+import CustomerQuotations from './pages/customer/Quotations';
 
 // Error pages
 import NotFound from './pages/NotFound';
@@ -74,7 +91,7 @@ import Unauthorized from './pages/Unauthorized';
 function RootRedirect() {
   const { isAuthenticated, user } = useAuth();
   if (!isAuthenticated) return <Navigate to="/login" replace />;
-  const routes: Record<string, string> = { Admin: '/admin', SalesRep: '/rep', Customer: '/shop' };
+  const routes: Record<string, string> = { Admin: '/admin', SalesRep: '/rep', Customer: '/shop', SalesCoordinator: '/coordinator' };
   return <Navigate to={routes[user?.role || ''] || '/login'} replace />;
 }
 
@@ -100,6 +117,8 @@ export default function App() {
         {/* Auth */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/customer-register" element={<CustomerRegistration />} />
+        <Route path="/change-password" element={<ProtectedRoute><ForceChangePassword /></ProtectedRoute>} />
         <Route path="/unauthorized" element={<Unauthorized />} />
 
         {/* Admin routes */}
@@ -115,12 +134,17 @@ export default function App() {
           <Route path="customers/:id" element={<AdminCustomerDetail />} />
           <Route path="reps" element={<AdminReps />} />
           <Route path="reps/new" element={<CreateRep />} />
-          <Route path="routes/new" element={<CreateRoute />} />
+          <Route path="reps/:id" element={<AdminRepDetail />} />
           <Route path="payments" element={<AdminPayments />} />
           <Route path="reports" element={<AdminReports />} />
           <Route path="support" element={<AdminSupport />} />
           <Route path="notifications" element={<AdminNotifications />} />
           <Route path="settings" element={<AdminSettings />} />
+          <Route path="coordinators" element={<AdminCoordinators />} />
+          <Route path="coordinators/:id" element={<AdminCoordinatorDetail />} />
+          <Route path="regions" element={<AdminRegions />} />
+          <Route path="quotations" element={<AdminQuotations />} />
+          <Route path="customer-registrations/:id" element={<RegistrationRequestDetail />} />
         </Route>
 
         {/* Rep routes */}
@@ -131,9 +155,8 @@ export default function App() {
           <Route path="routes" element={<RepRoutes />} />
           <Route path="routes/:id" element={<RepRouteDetail />} />
           <Route path="visits/:id" element={<RepVisitDetail />} />
-          <Route path="orders" element={<RepOrders />}>
-            <Route path=":id" element={<RepOrderDetail />} />
-          </Route>
+          <Route path="orders" element={<RepOrders />} />
+          <Route path="orders/:id" element={<RepOrderDetail />} />
           <Route path="orders/new" element={<RepCreateOrder />} />
           <Route path="orders/new/customers" element={<RepSelectCustomer />} />
           <Route path="orders/new/products" element={<RepSelectProducts />} />
@@ -144,13 +167,13 @@ export default function App() {
           <Route path="notifications" element={<RepNotifications />} />
           <Route path="support" element={<RepSupport />} />
           <Route path="support/new" element={<RepCreateSupport />} />
+          <Route path="quotations" element={<RepQuotations />} />
         </Route>
 
         {/* Customer routes */}
         <Route path="/shop" element={<ProtectedRoute allowedRoles={['Customer']}><CustomerLayout /></ProtectedRoute>}>
           <Route index element={<CustomerHome />} />
           <Route path="products" element={<CustomerProducts />} />
-          <Route path="cart" element={<CustomerCart />} />
           <Route path="checkout" element={<CustomerCheckout />} />
           <Route path="orders" element={<CustomerOrders />}>
             <Route path=":id" element={<CustomerOrderDetail />} />
@@ -159,7 +182,18 @@ export default function App() {
           <Route path="notifications" element={<CustomerNotifications />} />
           <Route path="support" element={<CustomerSupport />} />
           <Route path="support/new" element={<CustomerCreateSupport />} />
+          <Route path="quotations" element={<CustomerQuotations />} />
           <Route path="profile" element={<CustomerProfile />} />
+        </Route>
+
+        {/* Coordinator routes */}
+        <Route path="/coordinator" element={<ProtectedRoute allowedRoles={['SalesCoordinator']}><CoordinatorLayout /></ProtectedRoute>}>
+          <Route index element={<CoordinatorDashboard />} />
+          <Route path="team" element={<CoordinatorTeam />} />
+          <Route path="customers" element={<CoordinatorCustomers />} />
+          <Route path="approvals" element={<CoordinatorApprovals />} />
+          <Route path="quotations" element={<CoordinatorQuotations />} />
+          <Route path="notifications" element={<CoordinatorNotifications />} />
         </Route>
 
         {/* 404 */}

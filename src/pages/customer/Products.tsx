@@ -2,31 +2,45 @@ import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useSelector, useDispatch } from 'react-redux';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { productsApi } from '../../services/api/productsApi';
-import { addToCart, updateQuantity, removeFromCart } from '../../store/slices/cartSlice';
+import { addToCart, updateQuantity, removeFromCart, clearCart } from '../../store/slices/cartSlice';
 import type { RootState } from '../../store/store';
 import { Search, SlidersHorizontal, X, ChevronLeft, ChevronRight, Minus, Plus, ShoppingCart, Package, Store } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import type { Product } from '../../types/product.types';
 import { formatCurrency } from '../../utils/formatters';
+import { calculateLine } from '../../utils/calculations';
 
-import CartDrawer from '../../components/cart/CartDrawer';
-import QuantityModal from '../../components/common/QuantityModal';
 
 export default function CustomerProducts() {
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  const [cartDrawerOpen, setCartDrawerOpen] = useState(false);
+
+  // quick order rows (desktop only)
+  interface QuickRow { id: string; product?: Product; qty: number; }
+
+  // initialize from localStorage so the table survives page reloads
+  const savedQuick = typeof window !== 'undefined' ? localStorage.getItem('quickRows') : null;
+  const initialQuick: QuickRow[] = savedQuick ? JSON.parse(savedQuick) : [{ id: crypto.randomUUID(), qty: 1 }];
+  const [quickRows, setQuickRows] = useState<QuickRow[]>(initialQuick);
+  const addQuickRow = () => setQuickRows(r => [...r, { id: crypto.randomUUID(), qty: 1 }]);
+  const updateQuickRow = (id: string, changes: Partial<QuickRow>) => setQuickRows(r => r.map(row => row.id === id ? { ...row, ...changes } : row));
+  const removeQuickRow = (id: string) => setQuickRows(r => r.filter(row => row.id !== id));
+
+  // persist quick rows whenever they change
+  useEffect(() => {
+    localStorage.setItem('quickRows', JSON.stringify(quickRows));
+  }, [quickRows]);
 
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+  const isDesktop = () => typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches;
   const [brandFilter, setBrandFilter] = useState('');
   const [minPriceFilter, setMinPriceFilter] = useState<number | ''>('');
   const [maxPriceFilter, setMaxPriceFilter] = useState<number | ''>('');
-  const [availabilityFilter, setAvailabilityFilter] = useState<string | null>(null);
-  const [isFeaturedFilter, setIsFeaturedFilter] = useState<boolean | null>(null);
   const [sortBy, setSortBy] = useState('name');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
@@ -37,42 +51,132 @@ export default function CustomerProducts() {
     const searchQuery = searchParams.get('search');
     
     if (category) setCategoryFilter(category);
-    if (featured === 'true') setIsFeaturedFilter(true);
     if (searchQuery) setSearch(searchQuery);
   }, [searchParams]);
 
   const dispatch = useDispatch();
   const cartItems = useSelector((state: RootState) => state.cart.items);
 
-  // quantity modal (opened via long-press)
-  const [qtyModalOpen, setQtyModalOpen] = useState(false);
-  const [qtyModalProduct, setQtyModalProduct] = useState<Product | null>(null);
-  const [qtyModalValue, setQtyModalValue] = useState('1');
 
   const getCartQty = useCallback((productId: string) => {
     return cartItems.find(i => i.productId === productId)?.quantity ?? 0;
   }, [cartItems]);
 
-  const cartTotal = cartItems.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
+  const cartTotal = cartItems.reduce((s, i) => s + i.lineTotal, 0);
   const cartCount = cartItems.reduce((s, i) => s + i.quantity, 0);
+
+  // quick order totals
+  // count number of filled rows (distinct products) for quick order
+  const quickCount = quickRows.filter(r => !!r.product).length;
+  // calculate quick order total using dynamic formula rather than stored totals
+  const quickTotal = quickRows.reduce((s, r) => {
+    if (!r.product) return s;
+    const calc = calculateLine({
+      rate: r.product.sellingPrice || 0,
+      qty: r.qty,
+      discountPercent: r.product.discountPercent,
+      taxAmount: r.product.taxAmount,
+    });
+    return s + calc.total;
+  }, 0);
+
+  // whenever quickRows go to zero we want the cart to stay in sync
+  useEffect(() => {
+    if (quickCount === 0) {
+      dispatch(clearCart());
+    }
+  }, [quickCount, dispatch]);
+
+  // if the page loads with some quickRows saved but an empty cart,
+  // populate the cart automatically so the drawer shows the same items
+  useEffect(() => {
+    if (quickCount > 0 && cartCount === 0) {
+      dispatch(clearCart());
+      quickRows.forEach(r => {
+        if (!r.product) return;
+        const prod = r.product;
+        const discPct = prod.discountPercent ?? 0;
+        // derive tax rate from stored tax amount
+        let taxRate = 0;
+        if (prod.taxAmount != null) {
+          const basePerUnit = prod.sellingPrice * (1 - discPct / 100);
+          if (basePerUnit > 0) taxRate = prod.taxAmount / basePerUnit;
+        }
+        const calc = calculateLine({
+          rate: prod.sellingPrice,
+          qty: r.qty,
+          discountPercent: discPct,
+          taxAmount: prod.taxAmount,
+        });
+        dispatch(addToCart({
+          lineId: r.id,
+          productId: prod.id,
+          productName: prod.name,
+          unitPrice: prod.sellingPrice,
+          quantity: r.qty,
+          sku: prod.sku,
+          discountPercent: discPct,
+          taxRate,
+          lineTotal: calc.total,
+        }));
+      });
+    }
+  }, [quickCount, cartCount, quickRows, dispatch]);
 
   const { data: categories } = useQuery({
     queryKey: ['customer-categories'],
     queryFn: () => productsApi.customerCategories().then(r => r.data.data),
   });
 
-  useEffect(() => {
-    if (typeof document === 'undefined') return;
-    if (filtersOpen) {
-      document.body.style.overflow = 'hidden';
+  const exportProducts = async (format: 'excel' | 'pdf') => {
+    const resp = await productsApi.customerCatalog({
+      page: 1,
+      pageSize: 10000,
+      search: search || undefined,
+      categoryId: categoryFilter || undefined,
+      brand: brandFilter || undefined,
+      minPrice: minPriceFilter || undefined,
+      maxPrice: maxPriceFilter || undefined,
+      sortBy,
+      sortDir,
+    });
+    const items: Product[] = resp.data.data.items;
+    if (format === 'excel') {
+      const wb = XLSX.utils.book_new();
+      const dataForSheet = items.map(p => ({
+        Description: p.name,
+        Item: p.sku,
+        Barcode: p.barcode || '',
+        Category: p.categoryName || '',
+        Brand: p.brand || '',
+        Rate: p.sellingPrice,
+        Qty: p.quantity,
+        'Disc%': p.discountPercent ?? '',
+        'Disc Amt': p.discountAmount ?? '',
+        Tax: p.taxCode || '',
+        'Tax Amt': p.taxAmount ?? '',
+        Amount: p.totalAmount ?? ''
+      }));
+      const ws = XLSX.utils.json_to_sheet(dataForSheet);
+      XLSX.utils.book_append_sheet(wb, ws, 'Products');
+      XLSX.writeFile(wb, 'products-export.xlsx');
     } else {
-      document.body.style.overflow = '';
+      const { jsPDF } = await import('jspdf');
+      await import('jspdf-autotable');
+      const doc = new jsPDF();
+      const cols = ['Description','Item','Barcode','Category','Brand','Rate','Qty','Disc%','Disc Amt','Tax','Tax Amt','Amount'];
+      const rows = items.map(p => [
+        p.name, p.sku, p.barcode||'', p.categoryName||'', p.brand||'', p.sellingPrice, p.quantity,
+        p.discountPercent ?? '', p.discountAmount ?? '', p.taxCode||'', p.taxAmount ?? '', p.totalAmount ?? ''
+      ]);
+      // @ts-ignore
+      doc.autoTable({ head: [cols], body: rows, startY: 20, styles: { fontSize: 8 } });
+      doc.save('products-export.pdf');
     }
-    return () => { document.body.style.overflow = ''; };
-  }, [filtersOpen]);
+  };
 
   const { data, isLoading } = useQuery({
-    queryKey: ['customer-products', page, search, categoryFilter, brandFilter, minPriceFilter, maxPriceFilter, availabilityFilter, isFeaturedFilter, sortBy, sortDir],
+    queryKey: ['customer-products', page, search, categoryFilter, brandFilter, minPriceFilter, maxPriceFilter, sortBy, sortDir],
     queryFn: () => productsApi.customerCatalog({
       page,
       pageSize: 30,
@@ -81,12 +185,17 @@ export default function CustomerProducts() {
       brand: brandFilter || undefined,
       minPrice: minPriceFilter || undefined,
       maxPrice: maxPriceFilter || undefined,
-      availability: availabilityFilter || undefined,
-      isFeatured: isFeaturedFilter ?? undefined,
       sortBy,
       sortDir,
     }).then(r => r.data.data),
   });
+
+  // whenever quickRows change, if last row has product selected create a new blank
+  useEffect(() => {
+    if (quickRows.length && quickRows[quickRows.length - 1].product) {
+      addQuickRow();
+    }
+  }, [quickRows]);
 
   const suggestedBrands = useMemo(() => {
     const items = data?.items || [];
@@ -95,36 +204,29 @@ export default function CustomerProducts() {
 
   const handleIncrement = (product: Product) => {
     const qty = getCartQty(product.id);
-    const stock = typeof product.stockQuantity === 'number' ? product.stockQuantity : undefined;
-    const allowBackorder = !!product.allowBackorder;
-    const productLimit = typeof product.backorderLimit === 'number' ? product.backorderLimit : undefined;
-
-    // determine maximum allowed total quantity for this product in cart
-    const maxAllowed = productLimit ?? (allowBackorder ? undefined : stock);
-
-    if (typeof maxAllowed === 'number' && qty >= maxAllowed) {
-      toast.error(`Maximum allowed quantity is ${maxAllowed}`);
-      return;
+    const discPct = product.discountPercent ?? 0;
+    let taxRate = 0;
+    if (product.taxAmount != null) {
+      const basePerUnit = product.sellingPrice * (1 - discPct / 100);
+      if (basePerUnit > 0) taxRate = product.taxAmount / basePerUnit;
     }
-
-    // if backorder NOT allowed, enforce stock limit
-    if (!allowBackorder && typeof stock === 'number' && qty >= stock) {
-      toast.error(`Only ${stock} left in stock`);
-      return;
-    }
-
     if (qty === 0) {
+      const calc = calculateLine({
+        rate: product.sellingPrice,
+        qty: 1,
+        discountPercent: discPct,
+        taxAmount: product.taxAmount,
+      });
       dispatch(addToCart({
+        lineId: crypto.randomUUID(),
         productId: product.id,
         productName: product.name,
         unitPrice: product.sellingPrice,
         quantity: 1,
-        unit: product.unit,
-        imageUrl: product.imageUrl,
-        stockQuantity: product.stockQuantity,
-        allowBackorder: product.allowBackorder,
-        backorderLeadTimeDays: product.backorderLeadTimeDays,
-        backorderLimit: product.backorderLimit,
+        sku: product.sku,
+        discountPercent: discPct,
+        taxRate,
+        lineTotal: calc.total,
       }));
     } else {
       dispatch(updateQuantity({ productId: product.id, quantity: qty + 1 }));
@@ -134,259 +236,38 @@ export default function CustomerProducts() {
   const handleDecrement = (product: Product) => {
     const qty = getCartQty(product.id);
     if (qty <= 1) {
-      dispatch(removeFromCart(product.id));
+      dispatch(removeFromCart({ productId: product.id }));
     } else {
       dispatch(updateQuantity({ productId: product.id, quantity: qty - 1 }));
     }
   };
 
-  const handleOpenQtyModal = (product: Product, initial?: number) => {
-    setQtyModalProduct(product);
-    setQtyModalValue(String(initial ?? (getCartQty(product.id) || 1)));
-    setQtyModalOpen(true);
-  };
-
-  const handleQtyModalConfirm = (value: number) => {
-    const product = qtyModalProduct;
-    if (!product) { setQtyModalOpen(false); return; }
-
-    // enforce client-side limits
-    const productLimit = typeof product.backorderLimit === 'number' ? product.backorderLimit : undefined;
-    const maxAllowed = productLimit ?? (product.allowBackorder ? undefined : (typeof product.stockQuantity === 'number' ? product.stockQuantity : undefined));
-    if (typeof maxAllowed === 'number' && value > maxAllowed) {
-      value = maxAllowed;
-      toast.error(`Maximum allowed quantity is ${maxAllowed}`);
-    }
-
-    const current = getCartQty(product.id);
-    if (current === 0) {
-      dispatch(addToCart({
-        productId: product.id,
-        productName: product.name,
-        unitPrice: product.sellingPrice,
-        quantity: value,
-        unit: product.unit,
-        imageUrl: product.imageUrl,
-        stockQuantity: product.stockQuantity,
-        allowBackorder: product.allowBackorder,
-        backorderLeadTimeDays: product.backorderLeadTimeDays,
-        backorderLimit: product.backorderLimit,
-      }));
-    } else {
-      dispatch(updateQuantity({ productId: product.id, quantity: value }));
-    }
-
-    setQtyModalOpen(false);
-  };
-
-  const clearFilters = () => {
-    setCategoryFilter(null);
-    setBrandFilter('');
-    setMinPriceFilter('');
-    setMaxPriceFilter('');
-    setAvailabilityFilter(null);
-    setIsFeaturedFilter(null);
-    setSortBy('name');
-    setSortDir('asc');
-    setPage(1);
-  };
-
-  const hasActiveFilters = !!(categoryFilter || brandFilter || minPriceFilter || maxPriceFilter || availabilityFilter || isFeaturedFilter);
-
-  const FilterPanel = ({ mobile = false }: { mobile?: boolean }) => (
-    <div className={mobile ? 'space-y-4 p-1' : 'space-y-5'}>
-      {/* Category */}
-      <div>
-        <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Category</label>
-        <select
-          value={categoryFilter || ''}
-          onChange={(e) => { setCategoryFilter(e.target.value || null); setPage(1); }}
-          className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:border-orange-400 focus:ring-1 focus:ring-orange-400/20 outline-none transition"
-        >
-          <option value="">All Categories</option>
-          {categories?.map((c: any) => (
-            <option value={c.id} key={c.id}>{c.name}</option>
-          ))}
-        </select>
-      </div>
-
-      {/* Brand */}
-      <div>
-        <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Brand</label>
-        <input
-          list={mobile ? 'brandsMobile' : 'brandsDesktop'}
-          value={brandFilter}
-          onChange={(e) => { setBrandFilter(e.target.value); setPage(1); }}
-          placeholder="Search brand..."
-          className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 placeholder-slate-400 focus:border-orange-400 focus:ring-1 focus:ring-orange-400/20 outline-none transition"
-        />
-        <datalist id={mobile ? 'brandsMobile' : 'brandsDesktop'}>
-          {suggestedBrands.map(b => <option key={b} value={b} />)}
-        </datalist>
-      </div>
-
-      {/* Price range */}
-      <div>
-        <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Price (LKR)</label>
-        <div className="grid grid-cols-2 gap-2">
-          <input
-            type="number"
-            placeholder="Min"
-            value={minPriceFilter as any}
-            onChange={(e) => { setMinPriceFilter(e.target.value === '' ? '' : Number(e.target.value)); setPage(1); }}
-            className="px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 placeholder-slate-400 focus:border-orange-400 outline-none transition"
-          />
-          <input
-            type="number"
-            placeholder="Max"
-            value={maxPriceFilter as any}
-            onChange={(e) => { setMaxPriceFilter(e.target.value === '' ? '' : Number(e.target.value)); setPage(1); }}
-            className="px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 placeholder-slate-400 focus:border-orange-400 outline-none transition"
-          />
-        </div>
-      </div>
-
-      {/* Availability */}
-      <div>
-        <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Availability</label>
-        <select
-          value={availabilityFilter || ''}
-          onChange={(e) => { setAvailabilityFilter(e.target.value || null); setPage(1); }}
-          className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:border-orange-400 outline-none transition"
-        >
-          <option value="">Any</option>
-          <option value="InStock">In Stock</option>
-          <option value="OutOfStock">Out of Stock</option>
-          <option value="Discontinued">Discontinued</option>
-        </select>
-      </div>
-
-      {/* Featured toggle */}
-      <label className="flex items-center gap-3 cursor-pointer">
-        <div className="relative">
-          <input
-            type="checkbox"
-            checked={!!isFeaturedFilter}
-            onChange={(e) => { setIsFeaturedFilter(e.target.checked ? true : null); setPage(1); }}
-            className="sr-only peer"
-          />
-          <div className="w-9 h-5 bg-slate-200 rounded-full peer-checked:bg-orange-500 transition-colors duration-200" />
-          <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 peer-checked:translate-x-4" />
-        </div>
-        <span className="text-sm font-medium text-slate-700">Featured only</span>
-      </label>
-
-      {/* Sort */}
-      <div className="pt-3 border-t border-slate-100">
-        <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Sort By</label>
-        <div className="grid grid-cols-2 gap-2">
-          <select
-            value={sortBy}
-            onChange={(e) => { setSortBy(e.target.value); setPage(1); }}
-            className="px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:border-orange-400 outline-none transition"
-          >
-            <option value="name">Name</option>
-            <option value="price">Price</option>
-            <option value="createdAt">Newest</option>
-          </select>
-          <select
-            value={sortDir}
-            onChange={(e) => { setSortDir(e.target.value as 'asc' | 'desc'); setPage(1); }}
-            className="px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:border-orange-400 outline-none transition"
-          >
-            <option value="asc">Low → High</option>
-            <option value="desc">High → Low</option>
-          </select>
-        </div>
-      </div>
-
-      {hasActiveFilters && (
-        <button
-          onClick={clearFilters}
-          className="w-full py-2.5 text-sm font-semibold text-orange-600 border border-orange-200 rounded-xl hover:bg-orange-50 transition"
-        >
-          Clear All Filters
-        </button>
-      )}
-    </div>
-  );
 
   /* ── Quantity Stepper ── */
   const QuantityStepper = ({ product }: { product: Product }) => {
     const qty = getCartQty(product.id);
-    const outOfStock = product.availability === 'OutOfStock' || product.availability === 'Discontinued';
-
-    // inline edit state + long-press helper (long-press opens numeric input)
     const [editing, setEditing] = useState(false);
     const [editValue, setEditValue] = useState(String(qty));
-    const longPressTimer = useRef<number | null>(null);
-    const longPressTriggered = useRef(false);
 
     useEffect(() => setEditValue(String(qty)), [qty]);
 
-    // open modal on long-press instead of inline input
-    const openQtyModalForProduct = (initial?: number) => {
-      setQtyModalProduct(product);
-      setQtyModalValue(String(initial ?? (qty || 1)));
-      setQtyModalOpen(true);
-    };
-
-    const startPress = () => {
-      longPressTimer.current = window.setTimeout(() => {
-        longPressTriggered.current = true;
-        openQtyModalForProduct();
-      }, 600);
-    };
-    const cancelPress = () => {
-      if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null; }
-      longPressTriggered.current = false;
-    };
-
-    const handlePlusMouseUp = () => {
-      cancelPress();
-      if (longPressTriggered.current) { longPressTriggered.current = false; return; }
-      handleIncrement(product);
-    };
-
     const saveEdit = () => {
       let n = Math.max(1, Math.floor(Number(editValue) || 1));
-      const productLimit = typeof product.backorderLimit === 'number' ? product.backorderLimit : undefined;
-      const maxAllowed = productLimit ?? (product.allowBackorder ? undefined : (typeof product.stockQuantity === 'number' ? product.stockQuantity : undefined));
-      if (typeof maxAllowed === 'number' && n > maxAllowed) {
-        n = maxAllowed;
-        toast.error(`Maximum allowed quantity is ${maxAllowed}`);
-      }
       dispatch(updateQuantity({ productId: product.id, quantity: n }));
       setEditing(false);
     };
 
-    if (outOfStock) {
-      return (
-        <span className="text-[11px] font-semibold text-red-500 bg-red-50 px-3 py-1.5 rounded-lg whitespace-nowrap">
-          Out of Stock
-        </span>
-      );
-    }
-
     if (qty === 0) {
-      const disabledAdd = !product.allowBackorder && (outOfStock || (typeof product.stockQuantity === 'number' && product.stockQuantity <= 0));
       return (
         <button
           onClick={() => handleIncrement(product)}
-          disabled={disabledAdd}
-          className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-lg shadow-sm active:scale-95 transition-all ${disabledAdd ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-orange-500 hover:bg-orange-600 text-white shadow-orange-500/20'}`}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-lg shadow-sm active:scale-95 transition-all bg-orange-500 hover:bg-orange-600 text-white shadow-orange-500/20"
         >
           <Plus className="w-3.5 h-3.5" />
           <span className="hidden sm:inline">Add</span>
         </button>
       );
     }
-
-    const reachedMax = (() => {
-      if (typeof product.backorderLimit === 'number') return qty >= product.backorderLimit;
-      if (!product.allowBackorder && typeof product.stockQuantity === 'number') return qty >= product.stockQuantity;
-      return false;
-    })();
 
     return (
       <div className="flex items-center gap-0.5 bg-slate-50 rounded-lg p-0.5 border border-slate-200">
@@ -414,13 +295,8 @@ export default function CustomerProducts() {
         )}
 
         <button
-          onMouseDown={startPress}
-          onMouseUp={handlePlusMouseUp}
-          onMouseLeave={cancelPress}
-          onTouchStart={startPress}
-          onTouchEnd={handlePlusMouseUp}
-          disabled={reachedMax}
-          className={`w-8 h-8 rounded-md flex items-center justify-center transition active:scale-90 ${reachedMax ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-orange-500 text-white hover:bg-orange-600 shadow-sm shadow-orange-500/20'}`}
+          onClick={() => handleIncrement(product)}
+          className="w-8 h-8 rounded-md flex items-center justify-center bg-orange-500 text-white hover:bg-orange-600 shadow-sm shadow-orange-500/20 transition active:scale-90"
         >
           <Plus className="w-3.5 h-3.5" />
         </button>
@@ -431,51 +307,27 @@ export default function CustomerProducts() {
   /* ── Product Row ── */
   const ProductRow = ({ product }: { product: Product }) => {
     const qty = getCartQty(product.id);
-    const outOfStock = product.availability === 'OutOfStock' || product.availability === 'Discontinued';
     const longName = (product.name || '').length > 12;
-    const longDesc = (product.description || '').length > 12;
 
     return (
       <div
         className={`group flex items-center gap-3 sm:gap-4 px-3 sm:px-4 py-3 bg-white border-b border-slate-100 last:border-b-0 hover:bg-orange-50/40 transition-colors ${qty > 0 ? 'bg-orange-50/30' : ''}`}
       >
-        {/* Left: Info (name + important details) */}
         <div className="flex-1 min-w-0">
           <h3 className={`text-sm sm:text-base font-semibold text-slate-900 leading-tight ${longName ? 'line-clamp-2 sm:truncate' : 'truncate'}`}>
             {product.name}
           </h3>
-
-          <p className={`text-[11px] text-slate-400 mt-1 ${longDesc ? 'line-clamp-2 sm:truncate' : 'truncate'}`}>
-            {product.description}
-          </p>
-
-          <p className="text-[11px] text-slate-500 mt-2">
-            {product.unit} : {product.availability === 'InStock' ? 'In stock' : product.availability === 'OutOfStock' ? 'Out of stock' : product.availability} : {product.stockQuantity}
-          </p>
-          {/* low-stock hint */}
-          {typeof product.stockQuantity === 'number' && product.stockQuantity > 0 && product.stockQuantity <= 5 && (
-            <div className="text-[11px] text-amber-600 mt-1">Only {product.stockQuantity} left</div>
+          {product.brand && (
+            <p className="text-[11px] text-slate-400 mt-1 truncate">{product.brand}</p>
           )}
-
-          {/* backorder availability hint */}
-          {product.allowBackorder && (product.stockQuantity ?? 0) <= 0 && (
-            <div className="text-[11px] text-emerald-600 mt-1">Available to order — expected in {product.backorderLeadTimeDays ?? 'TBD'} days</div>
-          )}
-        </div>
-
-        {/* Center: Price */}
-        <div className="flex-shrink-0 text-right mr-1 sm:mr-3">
-          <span className="text-sm sm:text-base font-bold text-orange-600 tabular-nums">
+          <p className="text-sm sm:text-base font-bold text-orange-600 tabular-nums">
             {formatCurrency(product.sellingPrice)}
-          </span>
-          {qty > 0 && (
-            <div className="text-[10px] text-slate-400 mt-0.5">
-              = {formatCurrency(product.sellingPrice * qty)}
-            </div>
+          </p>
+          {typeof product.quantity === 'number' && (
+            <p className="text-[11px] text-slate-500 mt-1">Qty: {product.quantity}</p>
           )}
         </div>
 
-        {/* Right: Quantity Stepper */}
         <div className="flex-shrink-0">
           <QuantityStepper product={product} />
         </div>
@@ -507,15 +359,47 @@ export default function CustomerProducts() {
         <div className="hidden lg:block px-4 pt-3 pb-2 border-b border-slate-100">
           <div className="flex items-center justify-between max-w-screen-xl mx-auto">
             <p className="text-xs text-slate-500">Browse and add items to cart</p>
-            {cartCount > 0 && (
+            {quickCount > 0 && (
               <button
-                onClick={() => setCartDrawerOpen(true)}
+                onClick={() => {
+                  // keep the quick table intact but navigate straight to checkout
+                  if (quickCount > 0) {
+                    dispatch(clearCart());
+                    quickRows.forEach(r => {
+                      if (!r.product) return;
+                      const prod = r.product;
+                      const discPct = prod.discountPercent ?? 0;
+                      let taxRate = 0;
+                      if (prod.taxAmount != null) {
+                        const basePerUnit = prod.sellingPrice * (1 - discPct / 100);
+                        if (basePerUnit > 0) taxRate = prod.taxAmount / basePerUnit;
+                      }
+                      const calc = calculateLine({
+                        rate: prod.sellingPrice,
+                        qty: r.qty,
+                        discountPercent: discPct,
+                        taxAmount: prod.taxAmount,
+                      });
+                      dispatch(addToCart({
+                        productId: prod.id,
+                        productName: prod.name,
+                        unitPrice: prod.sellingPrice,
+                        quantity: r.qty,
+                        sku: prod.sku,
+                        discountPercent: discPct,
+                        taxRate,
+                        lineTotal: calc.total,
+                      }));
+                    });
+                  }
+                  navigate('/shop/checkout');
+                }}
                 className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold shadow-sm shadow-orange-500/20 active:scale-95 transition-all"
               >
                 <ShoppingCart className="w-3.5 h-3.5" />
-                <span className="tabular-nums">{cartCount}</span>
+                <span className="tabular-nums">{quickCount}</span>
                 <span className="hidden sm:inline text-orange-100">|</span>
-                <span className="hidden sm:inline font-bold text-sm">{formatCurrency(cartTotal)}</span>
+                <span className="hidden sm:inline font-bold text-sm">{formatCurrency(quickTotal)}</span>
               </button>
             )}
           </div>
@@ -536,97 +420,6 @@ export default function CustomerProducts() {
             </div>
 
             {/* Mobile filter trigger */}
-            <button
-              onClick={() => setFiltersOpen(true)}
-              className="lg:hidden relative flex-shrink-0 p-2.5 bg-slate-50 border border-slate-200 rounded-xl hover:bg-slate-100 transition"
-              aria-label="Open filters"
-            >
-              <SlidersHorizontal className="w-4 h-4 text-slate-500" />
-              {hasActiveFilters && (
-                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-orange-500 rounded-full border-2 border-white" />
-              )}
-            </button>
-
-            {/* Desktop inline sort */}
-            <div className="hidden lg:flex items-center gap-2">
-              <select
-                value={sortBy}
-                onChange={(e) => { setSortBy(e.target.value); setPage(1); }}
-                className="px-3 py-2.5 rounded-xl bg-slate-50 text-slate-700 text-sm border border-slate-200 focus:outline-none focus:border-orange-400 transition"
-              >
-                <option value="name">Name</option>
-                <option value="price">Price</option>
-                <option value="createdAt">Newest</option>
-              </select>
-              <select
-                value={sortDir}
-                onChange={(e) => { setSortDir(e.target.value as 'asc' | 'desc'); setPage(1); }}
-                className="px-3 py-2.5 rounded-xl bg-slate-50 text-slate-700 text-sm border border-slate-200 focus:outline-none focus:border-orange-400 transition"
-              >
-                <option value="asc">Low → High</option>
-                <option value="desc">High → Low</option>
-              </select>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Body ── */}
-      <div className="max-w-screen-xl mx-auto lg:grid lg:grid-cols-[240px_1fr] lg:gap-0">
-
-        {/* Desktop sidebar filters */}
-        <aside className="hidden lg:block">
-          <div className="sticky top-[110px] p-4 border-r border-slate-200/80 bg-white min-h-[calc(100vh-110px)]">
-            <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-4">Filters</h4>
-            <FilterPanel />
-          </div>
-        </aside>
-
-        {/* Mobile filter bottom sheet */}
-        {filtersOpen && typeof document !== 'undefined' && createPortal(
-          <div className="fixed inset-0 z-[60]">
-            <div
-              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-              onClick={() => setFiltersOpen(false)}
-            />
-            <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl max-h-[90vh] overflow-y-auto shadow-2xl">
-              <div className="sticky top-0 flex items-center justify-between px-4 pt-4 pb-3 bg-white border-b border-slate-100 z-10">
-                <h4 className="font-bold text-slate-900 text-base">Filters</h4>
-                <button
-                  onClick={() => setFiltersOpen(false)}
-                  className="p-2 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 transition"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="p-4">
-                <FilterPanel mobile />
-                <div className="mt-4 grid grid-cols-2 gap-2">
-                  <button
-                    onClick={() => setFiltersOpen(false)}
-                    className="py-3 text-sm font-semibold bg-orange-500 text-white rounded-xl shadow-lg shadow-orange-500/20 hover:bg-orange-600 transition"
-                  >
-                    Apply
-                  </button>
-                  <button
-                    onClick={() => { clearFilters(); setFiltersOpen(false); }}
-                    className="py-3 text-sm font-semibold text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition"
-                  >
-                    Clear All
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
-
-        {/* Main list content */}
-        <div className="pb-24 lg:pb-6">
-
-          {/* Active filter chips */}
-          {hasActiveFilters && (
-            <div className="flex flex-wrap gap-2 px-3 sm:px-4 lg:px-4 pt-3">
               {categoryFilter && categories && (
                 <span className="flex items-center gap-1 text-[11px] bg-orange-50 border border-orange-200 text-orange-700 px-2.5 py-1 rounded-full font-medium">
                   {categories.find((c: any) => c.id === categoryFilter)?.name}
@@ -645,14 +438,86 @@ export default function CustomerProducts() {
                   <button onClick={() => { setMinPriceFilter(''); setMaxPriceFilter(''); }} className="ml-0.5 text-orange-500"><X className="w-3 h-3" /></button>
                 </span>
               )}
-              {isFeaturedFilter && (
-                <span className="flex items-center gap-1 text-[11px] bg-orange-50 border border-orange-200 text-orange-700 px-2.5 py-1 rounded-full font-medium">
-                  Featured
-                  <button onClick={() => setIsFeaturedFilter(null)} className="ml-0.5 text-orange-500"><X className="w-3 h-3" /></button>
-                </span>
-              )}
             </div>
-          )}
+
+          {/* Quick order table (all screen sizes) */}
+            <div className="bg-white p-4 mt-2 mb-4 rounded-xl shadow-lg overflow-x-auto mx-4 lg:mx-auto lg:max-w-screen-2xl">
+              <table className="w-full text-xs border border-slate-300">
+                <colgroup><col className="w-3/5"/><col className="w-1/12"/><col className="w-1/12"/><col className="w-1/8"/><col className="w-1/12"/><col className="w-1/12"/><col className="w-1/12"/><col className="w-1/12"/><col className="w-1/12"/><col className="w-12"/></colgroup>
+                <thead>
+                  <tr className="bg-slate-100 border-b border-slate-300">
+                    <th className="text-left px-6 py-3 font-medium text-slate-700 text-[10px] uppercase tracking-wide border-r border-slate-300">Description</th>
+                    <th className="text-left px-6 py-3 font-medium text-slate-700 text-[10px] uppercase tracking-wide border-r border-slate-300">Item</th>
+                    <th className="text-center px-6 py-3 font-medium text-slate-700 text-[10px] uppercase tracking-wide border-r border-slate-300">Qty</th>
+                    <th className="text-right px-6 py-3 font-medium text-slate-700 text-[10px] uppercase tracking-wide border-r border-slate-300">Rate</th>
+                    <th className="text-right px-6 py-3 font-medium text-slate-700 text-[10px] uppercase tracking-wide border-r border-slate-300">Disc %</th>
+                    <th className="text-right px-6 py-3 font-medium text-slate-700 text-[10px] uppercase tracking-wide border-r border-slate-300">Disc Amt</th>
+                    <th className="text-right px-6 py-3 font-medium text-slate-700 text-[10px] uppercase tracking-wide border-r border-slate-300">Tax</th>
+                    <th className="text-right px-6 py-3 font-medium text-slate-700 text-[10px] uppercase tracking-wide border-r border-slate-300">Tax Amt</th>
+                    <th className="text-right px-6 py-3 font-medium text-slate-700 text-[10px] uppercase tracking-wide border-r border-slate-300">Amount</th>
+                    <th className="text-center px-6 py-3 font-medium text-slate-700 text-[10px] uppercase tracking-wide">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {quickRows.map(row => {
+                    const prod = row.product;
+                    // always use sellingPrice per unit
+                    const unitAmt = prod ? (prod.sellingPrice || 0) : 0;
+                    let amt = 0;
+                    if (prod) {
+                      const calc = calculateLine({
+                        rate: unitAmt,
+                        qty: row.qty,
+                        discountPercent: prod.discountPercent,
+                        taxAmount: prod.taxAmount,
+                      });
+                      amt = calc.total;
+                    }
+                    return (
+                      <tr key={row.id} className="border-b border-slate-100">
+                        <td className="px-3 py-2 border border-slate-200">
+                          <select
+                            value={prod?.id || ''}
+                            onChange={e => {
+                              const p = data?.items.find((i: Product) => i.id === e.target.value);
+                              updateQuickRow(row.id, { product: p, qty: 1 });
+                              // if last row was selected, add another
+                              if (quickRows[quickRows.length - 1].id === row.id) addQuickRow();
+                            }}
+                            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-xs bg-white hover:bg-slate-50 transition"
+                          >
+                            <option value="">Select product</option>
+                            {data?.items.map((p: Product) => (
+                              <option key={p.id} value={p.id} className="text-xs">{p.name}</option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="px-6 py-3 text-slate-600 font-mono text-xs border border-slate-200">{prod?.sku || ''}</td>
+                        <td className="px-3 py-2 text-center">
+                          <input
+                            type="number"
+                            min={1}
+                            value={row.qty}
+                            disabled={!prod}
+                            onChange={e => updateQuickRow(row.id, { qty: Math.max(1, parseInt(e.target.value) || 1) })}
+                            className="w-16 text-center border border-slate-300 rounded-lg px-1 py-0.5 focus:ring-1 focus:ring-orange-300"
+                          />
+                        </td>
+                        <td className="px-3 py-2 text-right border border-slate-200">{prod ? formatCurrency(prod.sellingPrice) : ''}</td>
+                        <td className="px-3 py-2 text-right border-r border-slate-200">{prod?.discountPercent ?? ''}</td>
+                        <td className="px-3 py-2 text-right border-r border-slate-200">{prod?.discountAmount ? formatCurrency(prod.discountAmount) : ''}</td>
+                        <td className="px-3 py-2 text-right border-r border-slate-200">{prod?.taxCode || ''}</td>
+                        <td className="px-3 py-2 text-right border-r border-slate-200">{prod?.taxAmount ? formatCurrency(prod.taxAmount) : ''}</td>
+                        <td className="px-6 py-3 text-right font-bold border-r border-slate-200">{prod ? formatCurrency(amt) : ''}</td>
+                        <td className="px-3 py-2 text-center">
+                          <button onClick={() => removeQuickRow(row.id)} className="text-red-500 hover:text-red-700 text-sm">✕</button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
 
           {/* Skeleton loading */}
           {isLoading ? (
@@ -676,21 +541,12 @@ export default function CustomerProducts() {
               </div>
               <p className="font-bold text-slate-700 text-base">No products found</p>
               <p className="text-xs text-slate-400 mt-1">Try adjusting your search or filters</p>
-              {hasActiveFilters && (
-                <button onClick={clearFilters} className="mt-4 text-sm font-semibold text-orange-600 hover:underline">
-                  Clear all filters
-                </button>
-              )}
             </div>
 
           ) : (
             <>
               {/* ── Product List (Rows) ── */}
-              <div className="bg-white mt-2 lg:mt-0 divide-y divide-slate-100 border-y border-slate-200/60 lg:border-t-0">
-                {data.items.map((product: Product) => (
-                  <ProductRow key={product.id} product={product} />
-                ))}
-              </div>
+              {/* table already handles product rendering, so mobile row list removed */}
 
               {/* Pagination */}
               {data.totalPages > 1 && (
@@ -727,7 +583,7 @@ export default function CustomerProducts() {
       {cartCount > 0 && (
         <div className="fixed bottom-14 left-0 right-0 z-30 lg:hidden px-3 pb-2">
           <button
-            onClick={() => setCartDrawerOpen(true)}
+            onClick={() => navigate('/shop/checkout')}
             className="w-full flex items-center justify-between bg-slate-900 text-white px-4 py-3.5 rounded-2xl shadow-2xl shadow-slate-900/40 active:scale-[0.98] transition-all"
           >
             <div className="flex items-center gap-3">
@@ -745,17 +601,7 @@ export default function CustomerProducts() {
       )}
 
       {/* ── Cart Drawer ── */}
-      <CartDrawer open={cartDrawerOpen} onClose={() => setCartDrawerOpen(false)} />
 
-      <QuantityModal
-        open={qtyModalOpen}
-        initial={Number(qtyModalValue)}
-        min={1}
-        max={qtyModalProduct ? (typeof qtyModalProduct.backorderLimit === 'number' ? qtyModalProduct.backorderLimit : (qtyModalProduct.allowBackorder ? undefined : qtyModalProduct.stockQuantity)) : undefined}
-        description={qtyModalProduct ? `Edit quantity for ${qtyModalProduct.name}` : undefined}
-        onConfirm={handleQtyModalConfirm}
-        onCancel={() => setQtyModalOpen(false)}
-      />
     </div>
   );
 }

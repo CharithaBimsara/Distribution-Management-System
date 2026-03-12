@@ -7,14 +7,14 @@ type Props = { onSuccess?: () => void; onCancel?: () => void };
 
 export default function RepCustomerForm({ onSuccess, onCancel }: Props) {
   const queryClient = useQueryClient();
-  const [form, setForm] = useState({ username: '', password: '', shopName: '', phoneNumber: '', email: '', city: '', street: '', creditLimit: '' });
+  const [form, setForm] = useState({ username: '', password: '', shopName: '', phoneNumber: '', email: '', city: '', street: '' });
 
   const createMut = useMutation({
     mutationFn: (d: Record<string, unknown>) => customersApi.repCreate(d),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rep-customers'] });
       toast.success('Customer registered and assigned to you');
-      setForm({ username: '', password: '', shopName: '', phoneNumber: '', email: '', city: '', street: '', creditLimit: '' });
+      setForm({ username: '', password: '', shopName: '', phoneNumber: '', email: '', city: '', street: '' });
       onSuccess?.();
     },
     onError: () => toast.error('Failed to register customer')
@@ -30,7 +30,6 @@ export default function RepCustomerForm({ onSuccess, onCancel }: Props) {
       email: form.email || undefined,
       street: form.street || undefined,
       city: form.city || undefined,
-      creditLimit: form.creditLimit ? parseFloat(form.creditLimit) : 0
     };
     createMut.mutate(payload);
   };
@@ -52,8 +51,6 @@ export default function RepCustomerForm({ onSuccess, onCancel }: Props) {
         <input value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} placeholder="City" className={cls} />
         <input value={form.street} onChange={e => setForm(f => ({ ...f, street: e.target.value }))} placeholder="Street" className={cls} />
       </div>
-      <input value={form.creditLimit} onChange={e => setForm(f => ({ ...f, creditLimit: e.target.value }))} placeholder="Credit limit (optional)" className={cls} />
-
       <div className="mt-4 grid grid-cols-2 gap-2">
         <button onClick={onCancel} className="w-full py-2.5 bg-slate-100 rounded-lg text-sm font-medium">Cancel</button>
         <button disabled={createMut.isPending} onClick={handleCreate} className="w-full py-2.5 bg-emerald-600 text-white rounded-lg text-sm font-medium disabled:opacity-50">{createMut.isPending ? 'Registering...' : 'Register'}</button>

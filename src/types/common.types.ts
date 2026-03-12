@@ -8,8 +8,20 @@ export interface DashboardData {
   totalCustomers: number;
   activeReps: number;
   totalOutstanding: number;
+  totalQuotations?: number;
+  pendingQuotations?: number;
   salesTrend: SalesTrend[];
   topProducts: TopProduct[];
+}
+
+// minimal summary used on simplified admin dashboard
+export interface AdminDashboardSummary {
+  totalOrders: number;
+  pendingOrders: number;
+  totalProducts: number;
+  lowStockProducts: number;
+  totalCustomers: number;
+  activeReps: number;
 }
 
 export interface SalesTrend {
@@ -95,7 +107,7 @@ export interface Route {
   name: string;
   description?: string;
   repId: string;
-  daysOfWeek: string;
+  daysOfWeek: string[];
   estimatedDurationMinutes: number;
   isActive: boolean;
   customers?: RouteCustomer[];
@@ -120,6 +132,7 @@ export interface Complaint {
   description: string;
   priority: string;
   status: string;
+  resolution?: string;
   createdAt: string;
   resolvedAt?: string;
 }

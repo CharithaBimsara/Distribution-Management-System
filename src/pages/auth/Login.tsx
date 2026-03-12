@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
-import { Eye, EyeOff, Loader2, LogIn, Sparkles, Shield, Truck } from 'lucide-react';
+import { Eye, EyeOff, Loader2, LogIn, Sparkles, Shield, Truck, UserCheck } from 'lucide-react';
 
 export default function Login() {
   const [username, setUsername] = useState('');
@@ -12,7 +12,7 @@ export default function Login() {
 
   useEffect(() => {
     if (isAuthenticated && user) {
-      const routes: Record<string, string> = { Admin: '/admin', SalesRep: '/rep', Customer: '/shop' };
+      const routes: Record<string, string> = { Admin: '/admin', SalesRep: '/rep', Customer: '/shop', SalesCoordinator: '/coordinator' };
       navigate(routes[user.role] || '/login');
     }
   }, [isAuthenticated, user, navigate]);
@@ -25,6 +25,7 @@ export default function Login() {
 
   const demoAccounts = [
     { label: 'Admin', desc: 'Full access', user: 'admin', pass: 'Admin@123', icon: Shield, color: '#818cf8', bg: 'rgba(99, 102, 241, 0.15)', border: 'rgba(99, 102, 241, 0.25)' },
+    { label: 'Coordinator', desc: 'Region manager', user: 'coord.nimal', pass: 'Coord@123', icon: UserCheck, color: '#22d3ee', bg: 'rgba(6, 182, 212, 0.15)', border: 'rgba(6, 182, 212, 0.25)' },
     { label: 'Sales Rep', desc: 'Field sales', user: 'rep.kamal', pass: 'Rep@123', icon: Truck, color: '#34d399', bg: 'rgba(16, 185, 129, 0.15)', border: 'rgba(16, 185, 129, 0.25)' },
     { label: 'Customer', desc: 'Shop owner', user: 'shop.laksiri', pass: 'Cust@123', icon: Sparkles, color: '#fb923c', bg: 'rgba(249, 115, 22, 0.15)', border: 'rgba(249, 115, 22, 0.25)' },
   ];
@@ -71,10 +72,11 @@ export default function Login() {
           >
             <span className="text-white font-black text-[28px]">D</span>
           </div>
-          <h1 className="text-[28px] font-extrabold text-white tracking-tight leading-tight">
-            Distribution<span style={{ color: '#818cf8' }}>MS</span>
+          <h1 className="text-[22px] font-extrabold text-white tracking-tight leading-tight">
+            Janasiri <span style={{ color: '#818cf8' }}>Distribution</span>
           </h1>
-          <p className="text-[14px] mt-2" style={{ color: '#64748b' }}>
+          <p className="text-[13px] font-semibold text-white/70 -mt-0.5">Pvt Ltd</p>
+          <p className="text-[13px] mt-1.5" style={{ color: '#64748b' }}>
             Wholesale Distribution Management
           </p>
         </div>
@@ -270,9 +272,9 @@ export default function Login() {
         </div>
 
         {/* Register Link */}
-        <div className="text-center mt-6">
+        <div className="text-center mt-6 space-y-3">
           <p className="text-[14px]" style={{ color: '#64748b' }}>
-            New to DistributionMS?{' '}
+            New to Janasiri Distribution?{' '}
             <Link
               to="/register"
               className="font-semibold transition-all duration-200 hover:underline"
@@ -281,6 +283,23 @@ export default function Login() {
               onMouseLeave={(e) => { e.currentTarget.style.color = '#818cf8'; }}
             >
               Create your account
+            </Link>
+          </p>
+          <div className="flex items-center gap-3">
+            <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
+            <span className="text-[11px]" style={{ color: '#374151' }}>or</span>
+            <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
+          </div>
+          <p className="text-[14px]" style={{ color: '#64748b' }}>
+            Want to become a customer?{' '}
+            <Link
+              to="/customer-register"
+              className="font-semibold transition-all duration-200 hover:underline"
+              style={{ color: '#34d399' }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = '#6ee7b7'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = '#34d399'; }}
+            >
+              Apply for an account
             </Link>
           </p>
         </div>

@@ -1,6 +1,7 @@
 import api from './axiosConfig';
 import type { ApiResponse, PagedResult } from '../../types/api.types';
 import type { Customer, CustomerFilterOptions, CustomerSummary } from '../../types/customer.types';
+import type { CustomerLedger } from '../../types/payment.types';
 
 export const customersApi = {
   // Admin
@@ -21,9 +22,6 @@ export const customersApi = {
 
   adminUpdate: (id: string, data: Record<string, unknown>) =>
     api.put<ApiResponse<Customer>>(`/admin/customers/${id}`, data),
-
-  adminSetCreditLimit: (id: string, creditLimit: number) =>
-    api.put<ApiResponse<string>>(`/admin/customers/${id}/credit-limit`, { creditLimit }),
 
   adminToggleStatus: (id: string, isActive: boolean) =>
     api.put<ApiResponse<string>>(`/admin/customers/${id}/status`, isActive, {
@@ -52,5 +50,5 @@ export const customersApi = {
     api.put<ApiResponse<Customer>>('/customer/profile', data),
 
   customerGetLedger: () =>
-    api.get<ApiResponse<CustomerSummary>>('/customer/ledger'),
+    api.get<ApiResponse<CustomerLedger>>('/customer/ledger'),
 };

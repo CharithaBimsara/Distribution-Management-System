@@ -1,29 +1,20 @@
 export interface Product {
   id: string;
   name: string;
-  description?: string;
   sku: string;
   barcode?: string;
-  categoryId: string;
+  categoryId?: string;
   categoryName?: string;
   brand?: string;
-  costPrice: number;
   sellingPrice: number;
-  taxRate: number;
-  unit: string;
-  unitsPerCase: number;
-  imageUrl?: string;
-  thumbnailUrl?: string;
-  isActive: boolean;
-  isFeatured: boolean;
-  availability: string;
-  stockQuantity: number;
-
-  // Backorder / pre-order support
-  allowBackorder?: boolean;           // whether customer can order beyond current stock
-  backorderLeadTimeDays?: number;     // estimated lead time for backordered units
-  backorderLimit?: number;            // optional product-level cap for total quantity allowed
-
+  mrp?: number;
+  quantity: number;
+  // import metadata
+  discountPercent?: number;
+  discountAmount?: number;
+  taxCode?: string;
+  taxAmount?: number;
+  totalAmount?: number;
   createdAt: string;
 }
 
@@ -40,26 +31,31 @@ export interface Category {
 
 export interface CreateProductRequest {
   name: string;
-  description?: string;
   sku: string;
   barcode?: string;
-  categoryId: string;
+  categoryId?: string;
   brand?: string;
-  costPrice: number;
   sellingPrice: number;
-  taxRate?: number;
-  unit: string;
-  unitsPerCase: number;
-  imageUrl?: string;
+  mrp?: number;
+  quantity: number;
+  /**
+   * When importing, the caller may supply a main category name.  The backend
+   * will create the main (and optionally the sub) category automatically.
+   */
+  mainCategory?: string;
+  /**
+   * When importing, supply the specific subcategory name to attach the product
+   * to.  This must be used together with (or instead of) mainCategory.
+   */
+  subCategory?: string;
+  // discount/tax metadata from import files
+  discountPercent?: number;
+  discountAmount?: number;
+  taxCode?: string;
+  taxAmount?: number;
+  totalAmount?: number;
 }
 
 export interface UpdateProductRequest extends Partial<CreateProductRequest> {}
 
-export interface StockAlert {
-  productId: string;
-  productName: string;
-  sku: string;
-  currentStock: number;
-  reorderLevel: number;
-  availability: string;
-}
+

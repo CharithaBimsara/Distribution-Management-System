@@ -3,7 +3,8 @@ import { reportsApi } from '../../services/api/reportsApi';
 import { repsApi } from '../../services/api/repsApi';
 import {
   DollarSign, ShoppingCart, Package, Users, AlertTriangle,
-  TrendingUp, UserCheck, CreditCard, ArrowUpRight, ArrowDownRight, CalendarDays
+  TrendingUp, UserCheck, CreditCard, ArrowUpRight, ArrowDownRight, CalendarDays,
+  FileText
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Area, AreaChart } from 'recharts';
 import { formatCurrency } from '../../utils/formatters';
@@ -39,10 +40,10 @@ export default function AdminDashboard() {
     { label: 'Total Orders', value: data.totalOrders, icon: ShoppingCart, gradient: 'from-emerald-500 to-teal-600', shadow: 'shadow-emerald-500/20' },
     { label: 'Pending Orders', value: data.pendingOrders, icon: AlertTriangle, gradient: 'from-amber-500 to-orange-500', shadow: 'shadow-amber-500/20' },
     { label: 'Total Products', value: data.totalProducts, icon: Package, gradient: 'from-blue-500 to-cyan-500', shadow: 'shadow-blue-500/20' },
-    { label: 'Low Stock Items', value: data.lowStockProducts, icon: AlertTriangle, gradient: 'from-rose-500 to-pink-600', shadow: 'shadow-rose-500/20' },
+    { label: 'Total Quotations', value: data.totalQuotations, icon: FileText, gradient: 'from-indigo-500 to-blue-500', shadow: 'shadow-indigo-500/20' },
+    { label: 'Pending Quotations', value: data.pendingQuotations, icon: AlertTriangle, gradient: 'from-yellow-500 to-orange-500', shadow: 'shadow-yellow-500/20' },
     { label: 'Customers', value: data.totalCustomers, icon: Users, gradient: 'from-violet-500 to-purple-600', shadow: 'shadow-violet-500/20' },
     { label: 'Active Reps', value: data.activeReps, icon: UserCheck, gradient: 'from-teal-500 to-green-500', shadow: 'shadow-teal-500/20' },
-    { label: 'Outstanding', value: formatCurrency(data.totalOutstanding), icon: CreditCard, gradient: 'from-orange-500 to-red-500', shadow: 'shadow-orange-500/20' },
   ];
 
   return (

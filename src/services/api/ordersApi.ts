@@ -21,6 +21,9 @@ export const ordersApi = {
   adminUpdateStatus: (id: string, data: UpdateOrderStatusRequest) =>
     api.put<ApiResponse<Order>>(`/admin/orders/${id}/status`, data),
 
+  adminDelete: (id: string) =>
+    api.delete<ApiResponse<void>>(`/admin/orders/${id}`),
+
   // Rep
   repCreate: (data: CreateOrderRequest) =>
     api.post<ApiResponse<Order>>('/rep/orders', data),

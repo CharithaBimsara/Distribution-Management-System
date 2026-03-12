@@ -7,7 +7,7 @@ import { notificationsApi } from '../../services/api/notificationsApi';
 import {
   LayoutDashboard, MapPin, Users, ShoppingCart,
   TrendingUp, LogOut, Bell, DollarSign,
-  Menu, X, ChevronLeft, Zap, MessageSquare
+  Menu, X, ChevronLeft, Zap, MessageSquare, FileText
 } from 'lucide-react';
 import ConfirmModal from '../common/ConfirmModal';
 
@@ -17,6 +17,7 @@ const navItems = [
   { to: '/rep/orders', icon: ShoppingCart, label: 'Orders' },
   { to: '/rep/payments', icon: DollarSign, label: 'Payments' },
   { to: '/rep/customers', icon: Users, label: 'Clients' },
+  { to: '/rep/quotations', icon: FileText, label: 'Quotations' },
   { to: '/rep/performance', icon: TrendingUp, label: 'Performance' },
   { to: '/rep/notifications', icon: Bell, label: 'Notifications' },
   { to: '/rep/support', icon: MessageSquare, label: 'Support' },

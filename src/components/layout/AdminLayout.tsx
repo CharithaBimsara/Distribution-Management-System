@@ -7,7 +7,7 @@ import { notificationsApi } from '../../services/api/notificationsApi';
 import {
   LayoutDashboard, Package, ShoppingCart, Users, UserCheck,
   BarChart3, Bell, Settings, LogOut, Menu, X, ChevronLeft, Search,
-  DollarSign, MessageSquare
+  DollarSign, MessageSquare, Shield, FileText, MapPin
 } from 'lucide-react';
 import ConfirmModal from '../common/ConfirmModal';
 
@@ -17,6 +17,9 @@ const navItems = [
   { to: '/admin/orders', icon: ShoppingCart, label: 'Orders' },
   { to: '/admin/customers', icon: Users, label: 'Customers' },
   { to: '/admin/reps', icon: UserCheck, label: 'Sales Reps' },
+  { to: '/admin/coordinators', icon: Shield, label: 'Coordinators' },
+  { to: '/admin/regions', icon: MapPin, label: 'Regions' },
+  { to: '/admin/quotations', icon: FileText, label: 'Quotations' },
   { to: '/admin/payments', icon: DollarSign, label: 'Payments' },
   { to: '/admin/reports', icon: BarChart3, label: 'Reports' },
   { to: '/admin/support', icon: MessageSquare, label: 'Support' },
@@ -132,7 +135,7 @@ export default function AdminLayout() {
                 <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
                   <span className="text-white font-black text-sm">D</span>
                 </div>
-                <span className="font-bold text-slate-900 text-sm">Distribution<span className="text-indigo-500">MS</span></span>
+                <span className="font-bold text-slate-900 text-sm">Janasiri <span className="text-indigo-500">Dist.</span></span>
               </div>
               <button onClick={() => setMobileOpen(false)} className="p-2 hover:bg-slate-100 rounded-xl transition">
                 <X className="w-5 h-5 text-slate-500" />

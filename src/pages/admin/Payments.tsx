@@ -1,24 +1,32 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { paymentsApi } from '../../services/api/paymentsApi';
-import { formatCurrency, formatDate, statusColor } from '../../utils/formatters';
-import { DollarSign, CheckCircle, Eye, X, BookOpen } from 'lucide-react';
-import type { Payment, CustomerLedger, LedgerEntry } from '../../types/payment.types';
+import { formatCurrency, formatDate } from '../../utils/formatters';
+import { CreditCard, CheckCircle, XCircle, Search, FileText } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useIsDesktop } from '../../hooks/useMediaQuery';
+import DataTable, { type Column } from '../../components/common/DataTable';
+import MobileTileList from '../../components/common/MobileTileList';
+import BottomSheet from '../../components/common/BottomSheet';
+import StatusBadge from '../../components/common/StatusBadge';
+import PageHeader from '../../components/common/PageHeader';
+
+const statuses = ['', 'Pending', 'Verified', 'Rejected', 'Bounced'] as const;
 
 export default function AdminPayments() {
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState('');
-  const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
+  const [selectedPayment, setSelectedPayment] = useState<any>(null);
   const [ledgerCustomerId, setLedgerCustomerId] = useState<string | null>(null);
-  const queryClient = useQueryClient();
+  const isDesktop = useIsDesktop();
+  const qc = useQueryClient();
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin-payments', page, statusFilter],
-    queryFn: () => paymentsApi.adminGetAll({ page, pageSize: 20, status: statusFilter || undefined }).then(r => r.data.data),
+    queryFn: () => paymentsApi.adminGetAll({ page, pageSize: 20, status: statusFilter || undefined } as any).then(r => r.data.data),
   });
 
-  const { data: ledger, isLoading: ledgerLoading } = useQuery({
+  const { data: ledger } = useQuery({
     queryKey: ['admin-ledger', ledgerCustomerId],
     queryFn: () => paymentsApi.adminGetCustomerLedger(ledgerCustomerId!).then(r => r.data.data),
     enabled: !!ledgerCustomerId,
@@ -26,101 +34,131 @@ export default function AdminPayments() {
 
   const verifyMut = useMutation({
     mutationFn: (id: string) => paymentsApi.adminVerify(id),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admin-payments'] }); toast.success('Payment verified'); },
-    onError: () => toast.error('Failed to verify payment'),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-payments'] }); setSelectedPayment(null); toast.success('Payment verified'); },
   });
 
+  const payments = data?.items || [];
+
+  const handleRowClick = (p: any) => {
+    setSelectedPayment(p);
+  };
+
+  const columns: Column<any>[] = [
+    { key: 'id', header: 'Reference', render: (p) => <span className="font-semibold text-slate-900">{p.referenceNumber || p.id?.substring(0, 8)}</span> },
+    { key: 'customer', header: 'Customer', render: (p) => <span className="text-slate-700">{p.customerName || '—'}</span> },
+    { key: 'order', header: 'Order #', render: (p) => <span className="text-slate-500">{p.orderNumber || '—'}</span> },
+    { key: 'method', header: 'Method', render: (p) => <span className="text-slate-600">{p.paymentMethod}</span> },
+    { key: 'amount', header: 'Amount', align: 'right', render: (p) => <span className="font-bold text-slate-900">{formatCurrency(p.amount)}</span> },
+    { key: 'date', header: 'Date', render: (p) => <span className="text-slate-500 text-xs">{formatDate(p.paymentDate)}</span> },
+    { key: 'status', header: 'Status', align: 'center', render: (p) => <StatusBadge status={p.status} /> },
+    { key: 'actions', header: 'Actions', align: 'center', render: (p) => (
+      <div className="flex items-center justify-center gap-1.5">
+        {p.status === 'Pending' && (
+          <button onClick={(e) => { e.stopPropagation(); verifyMut.mutate(p.id); }} className="p-1.5 rounded-lg hover:bg-emerald-50 text-emerald-600 transition" title="Verify"><CheckCircle className="w-4 h-4" /></button>
+        )}
+        {p.customerId && (
+          <button onClick={(e) => { e.stopPropagation(); setLedgerCustomerId(p.customerId); }} className="p-1.5 rounded-lg hover:bg-indigo-50 text-indigo-500 transition" title="Ledger"><FileText className="w-4 h-4" /></button>
+        )}
+      </div>
+    )},
+  ];
+
   return (
-    <div className="animate-fade-in space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Payments</h1>
-        <p className="text-slate-500 text-sm mt-1">Manage and verify customer payments</p>
+    <div className="animate-fade-in space-y-4 lg:space-y-6">
+      <PageHeader title="Payments" subtitle="Verify and manage payments" />
+
+      {/* Status Filter Pills */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+        {statuses.map(s => (
+          <button key={s || 'all'} onClick={() => { setStatusFilter(s); setPage(1); }} className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition ${statusFilter === s ? 'bg-indigo-600 text-white shadow-sm' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+            {s || 'All'}
+          </button>
+        ))}
       </div>
 
-      {/* Filters */}
-      <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-sm">
-        <div className="flex flex-wrap gap-2">
-          {['', 'Pending', 'Verified', 'Rejected'].map(s => (
-            <button key={s} onClick={() => { setStatusFilter(s); setPage(1); }} className={`px-4 py-2 rounded-xl text-xs font-semibold transition ${statusFilter === s ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/25' : 'bg-white text-slate-500 border border-slate-200 hover:border-slate-300'}`}>
-              {s || 'All'}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Payments Table */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-sm">
-        {isLoading ? <div className="p-8 text-center text-slate-500">Loading payments...</div> : !data?.items?.length ? (
-          <div className="p-8 text-center"><DollarSign className="w-12 h-12 text-slate-300 mx-auto mb-3" /><p className="text-slate-500">No payments found</p></div>
-        ) : (<>
-          <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="bg-slate-50/80 border-b border-slate-200/80">
-            <th className="text-left px-5 py-3.5 font-semibold text-slate-600 text-xs uppercase tracking-wider">Customer</th>
-            <th className="text-left px-5 py-3.5 font-semibold text-slate-600 text-xs uppercase tracking-wider">Date</th>
-            <th className="text-right px-5 py-3.5 font-semibold text-slate-600 text-xs uppercase tracking-wider">Amount</th>
-            <th className="text-center px-5 py-3.5 font-semibold text-slate-600 text-xs uppercase tracking-wider">Method</th>
-            <th className="text-left px-5 py-3.5 font-semibold text-slate-600 text-xs uppercase tracking-wider">Reference</th>
-            <th className="text-center px-5 py-3.5 font-semibold text-slate-600 text-xs uppercase tracking-wider">Status</th>
-            <th className="text-center px-5 py-3.5 font-semibold text-slate-600 text-xs uppercase tracking-wider">Actions</th>
-          </tr></thead><tbody className="divide-y divide-slate-100">
-            {data.items.map((p: Payment) => (
-              <tr key={p.id} className="hover:bg-slate-50/60 transition-all">
-                <td className="px-5 py-3.5"><p className="font-medium text-slate-900">{p.customerName || p.customerId}</p></td>
-                <td className="px-5 py-3.5 text-slate-600">{formatDate(p.paymentDate)}</td>
-                <td className="px-5 py-3.5 text-right font-semibold text-slate-900">{formatCurrency(p.amount)}</td>
-                <td className="px-5 py-3.5 text-center"><span className="text-xs font-medium px-2 py-0.5 bg-slate-100 rounded-full">{p.paymentMethod}</span></td>
-                <td className="px-5 py-3.5 text-slate-600 text-xs font-mono">{p.referenceNumber || p.chequeNumber || '—'}</td>
-                <td className="px-5 py-3.5 text-center"><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusColor(p.status)}`}>{p.status}</span></td>
-                <td className="px-5 py-3.5 text-center"><div className="flex items-center justify-center gap-1">
-                  <button onClick={() => setSelectedPayment(p)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition" title="Details"><Eye className="w-4 h-4" /></button>
-                  <button onClick={() => setLedgerCustomerId(p.customerId)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition" title="Customer Ledger"><BookOpen className="w-4 h-4" /></button>
-                  {p.status === 'Pending' && <button onClick={() => verifyMut.mutate(p.id)} disabled={verifyMut.isPending} className="p-1.5 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded-xl transition" title="Verify"><CheckCircle className="w-4 h-4" /></button>}
-                </div></td>
-              </tr>
-            ))}
-          </tbody></table></div>
-          {data.totalPages > 1 && <div className="flex items-center justify-between px-5 py-3.5 border-t border-slate-200/80"><p className="text-sm text-slate-500">Page {data.page} of {data.totalPages} ({data.totalCount} payments)</p><div className="flex gap-2"><button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="px-3.5 py-1.5 text-sm border border-slate-200 rounded-xl disabled:opacity-50 hover:bg-slate-50 transition">Previous</button><button onClick={() => setPage(p => Math.min(data.totalPages, p + 1))} disabled={page === data.totalPages} className="px-3.5 py-1.5 text-sm border border-slate-200 rounded-xl disabled:opacity-50 hover:bg-slate-50 transition">Next</button></div></div>}
-        </>)}
-      </div>
-
-      {/* Payment Detail Modal */}
-      {selectedPayment && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"><div className="fixed inset-0 bg-black/50" onClick={() => setSelectedPayment(null)} /><div className="relative bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6">
-          <div className="flex items-center justify-between mb-4"><h2 className="text-lg font-bold text-slate-900">Payment Details</h2><button onClick={() => setSelectedPayment(null)} className="p-2 hover:bg-slate-100 rounded-lg"><X className="w-5 h-5" /></button></div>
-          <div className="space-y-3 text-sm">
-            <div className="flex justify-between"><span className="text-slate-500">Customer</span><span className="font-medium">{selectedPayment.customerName}</span></div>
-            <div className="flex justify-between"><span className="text-slate-500">Amount</span><span className="font-bold text-lg">{formatCurrency(selectedPayment.amount)}</span></div>
-            <div className="flex justify-between"><span className="text-slate-500">Method</span><span>{selectedPayment.paymentMethod}</span></div>
-            <div className="flex justify-between"><span className="text-slate-500">Status</span><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColor(selectedPayment.status)}`}>{selectedPayment.status}</span></div>
-            <div className="flex justify-between"><span className="text-slate-500">Date</span><span>{formatDate(selectedPayment.paymentDate)}</span></div>
-            {selectedPayment.referenceNumber && <div className="flex justify-between"><span className="text-slate-500">Reference</span><span className="font-mono text-xs">{selectedPayment.referenceNumber}</span></div>}
-            {selectedPayment.chequeNumber && <div className="flex justify-between"><span className="text-slate-500">Cheque</span><span className="font-mono text-xs">{selectedPayment.chequeNumber}</span></div>}
-            {selectedPayment.bankName && <div className="flex justify-between"><span className="text-slate-500">Bank</span><span>{selectedPayment.bankName}</span></div>}
-            {selectedPayment.notes && <div className="pt-2 border-t"><p className="text-slate-500 text-xs mb-1">Notes</p><p className="text-slate-700">{selectedPayment.notes}</p></div>}
-          </div>
-          {selectedPayment.status === 'Pending' && <button onClick={() => { verifyMut.mutate(selectedPayment.id); setSelectedPayment(null); }} className="mt-6 w-full py-2.5 bg-emerald-600 text-white hover:bg-emerald-700 rounded-lg text-sm font-medium transition">Verify Payment</button>}
-          <button onClick={() => setSelectedPayment(null)} className="mt-2 w-full py-2.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-medium transition">Close</button>
-        </div></div>
+      {/* Desktop: Table | Mobile: Tiles */}
+      {isDesktop ? (
+        <DataTable columns={columns} data={payments} keyExtractor={p => p.id} onRowClick={handleRowClick} isLoading={isLoading} emptyMessage="No payments found" emptyIcon={<CreditCard className="w-10 h-10" />} page={data?.page} totalPages={data?.totalPages} totalCount={data?.totalCount} onPageChange={setPage} />
+      ) : (
+        <MobileTileList data={payments} keyExtractor={p => p.id} onTileClick={handleRowClick} isLoading={isLoading} emptyMessage="No payments found" emptyIcon={<CreditCard className="w-10 h-10" />} page={data?.page} totalPages={data?.totalPages} onPageChange={setPage}
+          renderTile={(p: any) => (
+            <div className="p-4">
+              <div className="flex items-start justify-between gap-3 mb-2">
+                <div className="min-w-0">
+                  <p className="font-semibold text-slate-900 truncate">{p.referenceNumber || p.id?.substring(0, 8)}</p>
+                  <p className="text-sm text-slate-500 truncate">{p.customerName || '—'}</p>
+                </div>
+                <StatusBadge status={p.status} />
+              </div>
+              <div className="flex items-center gap-4 text-xs text-slate-400 mb-3">
+                <span>{p.paymentMethod}</span>
+                <span>{formatDate(p.paymentDate)}</span>
+                {p.orderNumber && <span>Order: {p.orderNumber}</span>}
+              </div>
+              <div className="flex items-center justify-between pt-3 border-t border-slate-50">
+                <p className="font-bold text-slate-900 text-lg">{formatCurrency(p.amount)}</p>
+                {p.status === 'Pending' && (
+                  <button onClick={(e) => { e.stopPropagation(); verifyMut.mutate(p.id); }} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-50 text-emerald-700 active:scale-95">Verify</button>
+                )}
+              </div>
+            </div>
+          )}
+        />
       )}
 
-      {/* Customer Ledger Modal */}
-      {ledgerCustomerId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"><div className="fixed inset-0 bg-black/50" onClick={() => setLedgerCustomerId(null)} /><div className="relative bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[85vh] overflow-y-auto p-6">
-          <div className="flex items-center justify-between mb-6"><h2 className="text-lg font-bold text-slate-900">Customer Ledger</h2><button onClick={() => setLedgerCustomerId(null)} className="p-2 hover:bg-slate-100 rounded-lg"><X className="w-5 h-5" /></button></div>
-          {ledgerLoading ? <div className="py-8 text-center text-slate-500">Loading ledger...</div> : ledger ? (<>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-              <div className="bg-slate-50 rounded-xl p-3"><p className="text-xs text-slate-500">Outstanding</p><p className="font-bold text-red-600">{formatCurrency((ledger as CustomerLedger).totalOutstanding)}</p></div>
-              <div className="bg-slate-50 rounded-xl p-3"><p className="text-xs text-slate-500">Total Paid</p><p className="font-bold text-emerald-600">{formatCurrency((ledger as CustomerLedger).totalPaid)}</p></div>
-              <div className="bg-slate-50 rounded-xl p-3"><p className="text-xs text-slate-500">Credit Limit</p><p className="font-bold text-slate-900">{formatCurrency((ledger as CustomerLedger).creditLimit)}</p></div>
-              <div className="bg-slate-50 rounded-xl p-3"><p className="text-xs text-slate-500">Available</p><p className="font-bold text-blue-600">{formatCurrency((ledger as CustomerLedger).availableCredit)}</p></div>
+      {/* Payment Detail */}
+      {selectedPayment && (
+        <BottomSheet open={true} onClose={() => setSelectedPayment(null)} title="Payment Details">
+          <div className="p-5 space-y-4">
+            <div className="space-y-3 text-sm">
+              <div className="flex justify-between"><span className="text-slate-500">Reference</span><span className="font-medium">{selectedPayment.referenceNumber || '—'}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Customer</span><span className="font-medium">{selectedPayment.customerName || '—'}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Order</span><span>{selectedPayment.orderNumber || '—'}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Method</span><span>{selectedPayment.paymentMethod}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Date</span><span>{formatDate(selectedPayment.paymentDate)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Amount</span><span className="font-bold text-lg">{formatCurrency(selectedPayment.amount)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Status</span><StatusBadge status={selectedPayment.status} /></div>
+              {selectedPayment.chequeNumber && <div className="flex justify-between"><span className="text-slate-500">Cheque #</span><span>{selectedPayment.chequeNumber}</span></div>}
+              {selectedPayment.bankName && <div className="flex justify-between"><span className="text-slate-500">Bank</span><span>{selectedPayment.bankName}</span></div>}
+              {selectedPayment.notes && <div className="flex justify-between"><span className="text-slate-500">Notes</span><span>{selectedPayment.notes}</span></div>}
             </div>
-            {(ledger as CustomerLedger).entries?.length > 0 && (
-              <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="bg-slate-50 border-b border-slate-200"><th className="text-left px-3 py-2 text-xs font-semibold text-slate-600">Date</th><th className="text-left px-3 py-2 text-xs font-semibold text-slate-600">Type</th><th className="text-left px-3 py-2 text-xs font-semibold text-slate-600">Reference</th><th className="text-right px-3 py-2 text-xs font-semibold text-slate-600">Debit</th><th className="text-right px-3 py-2 text-xs font-semibold text-slate-600">Credit</th><th className="text-right px-3 py-2 text-xs font-semibold text-slate-600">Balance</th></tr></thead>
-                <tbody className="divide-y divide-slate-100">{(ledger as CustomerLedger).entries.map((e: LedgerEntry, i: number) => (
-                  <tr key={i} className="hover:bg-slate-50"><td className="px-3 py-2 text-slate-600">{formatDate(e.date)}</td><td className="px-3 py-2">{e.type}</td><td className="px-3 py-2 font-mono text-xs">{e.reference}</td><td className="px-3 py-2 text-right text-red-600">{e.debit ? formatCurrency(e.debit) : '—'}</td><td className="px-3 py-2 text-right text-emerald-600">{e.credit ? formatCurrency(e.credit) : '—'}</td><td className="px-3 py-2 text-right font-medium">{formatCurrency(e.balance)}</td></tr>
-                ))}</tbody></table></div>
+            {selectedPayment.status === 'Pending' && (
+              <button onClick={() => verifyMut.mutate(selectedPayment.id)} className="w-full py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-medium">Verify Payment</button>
             )}
-          </>) : <div className="py-8 text-center text-slate-400">No ledger data available</div>}
-        </div></div>
+          </div>
+        </BottomSheet>
+      )}
+
+      {/* Customer Ledger */}
+      {ledgerCustomerId && (
+        <BottomSheet open={true} onClose={() => setLedgerCustomerId(null)} title="Customer Ledger" maxHeight="85vh">
+          <div className="p-5">
+            {ledger ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-3 text-center">
+                  <div className="bg-red-50 rounded-xl p-3"><p className="text-xs text-red-500">Outstanding</p><p className="font-bold text-red-700">{formatCurrency(ledger.totalOutstanding || 0)}</p></div>
+                  <div className="bg-emerald-50 rounded-xl p-3"><p className="text-xs text-emerald-500">Paid</p><p className="font-bold text-emerald-700">{formatCurrency(ledger.totalPaid || 0)}</p></div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead><tr className="bg-slate-50"><th className="px-3 py-2 text-left">Date</th><th className="px-3 py-2 text-left">Type</th><th className="px-3 py-2 text-right">Debit</th><th className="px-3 py-2 text-right">Credit</th><th className="px-3 py-2 text-right">Balance</th></tr></thead>
+                    <tbody>{(ledger.entries || []).map((e: any, i: number) => (
+                      <tr key={i} className="border-t border-slate-50">
+                        <td className="px-3 py-2">{formatDate(e.date)}</td>
+                        <td className="px-3 py-2">{e.type}</td>
+                        <td className="px-3 py-2 text-right text-red-600">{e.debit ? formatCurrency(e.debit) : ''}</td>
+                        <td className="px-3 py-2 text-right text-emerald-600">{e.credit ? formatCurrency(e.credit) : ''}</td>
+                        <td className="px-3 py-2 text-right font-medium">{formatCurrency(e.balance)}</td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-slate-400 text-sm">Loading ledger...</div>
+            )}
+          </div>
+        </BottomSheet>
       )}
     </div>
   );

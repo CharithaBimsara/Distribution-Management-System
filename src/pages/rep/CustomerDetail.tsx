@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { customersApi } from '../../services/api/customersApi';
 import { useParams, useNavigate } from 'react-router-dom';
 import { formatCurrency, formatDate } from '../../utils/formatters';
-import { ArrowLeft, Store, MapPin, CreditCard, Calendar, TrendingUp, ShoppingBag, DollarSign } from 'lucide-react';
+import { ArrowLeft, Store, MapPin, Calendar, TrendingUp, ShoppingBag, DollarSign } from 'lucide-react';
 
 export default function RepCustomerDetail() {
   const { id } = useParams<{ id: string }>();
@@ -74,11 +74,11 @@ export default function RepCustomerDetail() {
                 </p>
               </div>
             )}
-            {customer.customerSegment && (
+            {customer.regionName && (
               <div>
-                <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Segment</p>
+                <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Region</p>
                 <span className="inline-block px-2 py-1 bg-emerald-50 text-emerald-700 text-xs font-semibold rounded">
-                  {customer.customerSegment}
+                  {customer.regionName}
                 </span>
               </div>
             )}
@@ -92,48 +92,20 @@ export default function RepCustomerDetail() {
           </div>
         </div>
 
-        {/* Financial Info */}
+        {/* Region & Rep Info */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 space-y-4">
           <h2 className="font-bold text-slate-900 flex items-center gap-2 text-sm">
-            <CreditCard className="w-4 h-4 text-emerald-500" />
-            Financial Details
+            <MapPin className="w-4 h-4 text-emerald-500" />
+            Assignment Details
           </h2>
           <div className="grid grid-cols-2 gap-3">
             <div className="p-3 bg-slate-50 rounded-xl">
-              <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Credit Limit</p>
-              <p className="text-lg font-bold text-slate-900">{formatCurrency(customer.creditLimit)}</p>
+              <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Region</p>
+              <p className="text-sm font-bold text-slate-900">{customer.regionName || '—'}</p>
             </div>
             <div className="p-3 bg-slate-50 rounded-xl">
-              <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Balance</p>
-              <p className={`text-lg font-bold ${customer.currentBalance > customer.creditLimit * 0.8 ? 'text-red-600' : 'text-slate-900'}`}>
-                {formatCurrency(customer.currentBalance)}
-              </p>
-            </div>
-          </div>
-          <div>
-            <div className="flex justify-between text-xs mb-2">
-              <span className="text-slate-400">Credit Usage</span>
-              <span className="font-semibold text-slate-600">
-                {((customer.currentBalance / customer.creditLimit) * 100).toFixed(1)}%
-              </span>
-            </div>
-            <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all ${
-                  (customer.currentBalance / customer.creditLimit) > 0.8
-                    ? 'bg-gradient-to-r from-red-500 to-rose-500'
-                    : (customer.currentBalance / customer.creditLimit) > 0.5
-                    ? 'bg-gradient-to-r from-amber-500 to-orange-500'
-                    : 'bg-gradient-to-r from-emerald-500 to-teal-500'
-                }`}
-                style={{ width: `${Math.min(100, (customer.currentBalance / customer.creditLimit) * 100)}%` }}
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3 pt-2">
-            <div>
-              <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Payment Terms</p>
-              <p className="text-sm font-semibold text-slate-700">{customer.paymentTermsDays} days</p>
+              <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Sub-Region</p>
+              <p className="text-sm font-bold text-slate-900">{customer.subRegionName || '—'}</p>
             </div>
           </div>
         </div>
@@ -162,10 +134,10 @@ export default function RepCustomerDetail() {
           </div>
           <div className="p-3.5 bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-xl">
             <div className="flex items-center gap-1.5 mb-1.5">
-              <CreditCard className="w-3.5 h-3.5 text-emerald-600" />
-              <span className="text-[10px] text-emerald-600 font-medium uppercase">Outstanding Balance</span>
+              <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
+              <span className="text-[10px] text-emerald-600 font-medium uppercase">Total Purchases</span>
             </div>
-            <p className="text-2xl font-bold text-emerald-900">{formatCurrency(summary.outstandingBalance)}</p>
+            <p className="text-2xl font-bold text-emerald-900">{formatCurrency(summary.totalPurchases)}</p>
           </div>
           {summary.lastOrderDate && (
             <div className="pt-2">

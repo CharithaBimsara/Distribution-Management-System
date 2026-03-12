@@ -59,7 +59,6 @@ export function useSignalR() {
   const queryClient = useQueryClient();
   const notificationConn = useRef<HubConnection | null>(null);
   const orderConn = useRef<HubConnection | null>(null);
-  const stockConn = useRef<HubConnection | null>(null);
 
   const createConnection = useCallback((hubPath: string): HubConnection => {
     const token = localStorage.getItem('accessToken') || '';
@@ -133,24 +132,6 @@ export function useSignalR() {
     return () => safeStop(conn, cancelled);
   }, [isAuthenticated, createConnection, queryClient]);
 
-  // Connect to StockAlertHub (admin only)
-  useEffect(() => {
-    if (!isAuthenticated || user?.role !== 'Admin') return;
-
-    const cancelled = { value: false };
-    const conn = createConnection('stock-alerts');
-    stockConn.current = conn;
-
-    conn.on('StockAlert', (data: { productName: string; stockQuantity: number }) => {
-      toast.error(`Low stock: ${data.productName} (${data.stockQuantity} left)`, { duration: 6000 });
-      queryClient.invalidateQueries({ queryKey: ['admin-products'] });
-      queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] });
-    });
-
-    startConnection(conn, cancelled, 'StockAlertHub');
-
-    return () => safeStop(conn, cancelled);
-  }, [isAuthenticated, user?.role, createConnection, queryClient]);
 
   // Join/leave order tracking group
   const joinOrderGroup = useCallback(async (orderId: string) => {

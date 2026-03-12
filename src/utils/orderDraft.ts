@@ -1,13 +1,19 @@
 // Order draft state management for Rep order creation flow
 // Uses sessionStorage to persist across page navigations
 
+import { calculateLine } from './calculations';
+
 export interface OrderDraftItem {
   productId: string;
   quantity: number;
   name: string;
   price: number;
-  unit: string;
   sku: string;
+  /* optional pricing modifiers carried over from catalog */
+  discountPercent?: number;
+  taxAmount?: number;
+  /** total for this line as shown when added (price×qty ± discounts/taxes) */
+  lineTotal?: number;
 }
 
 export interface OrderDraft {
@@ -50,6 +56,11 @@ export const orderDraftUtils = {
     const existing = draft.items.find(i => i.productId === item.productId);
     if (existing) {
       existing.quantity += item.quantity;
+      // recalc line total if quantity changed
+      if (item.lineTotal != null) {
+        const unit = existing.lineTotal! / (existing.quantity - item.quantity);
+        existing.lineTotal = unit * existing.quantity;
+      }
     } else {
       draft.items.push(item);
     }
@@ -60,7 +71,13 @@ export const orderDraftUtils = {
     const draft = this.get();
     const item = draft.items.find(i => i.productId === productId);
     if (item) {
+      const prevQty = item.quantity;
       item.quantity = Math.max(1, quantity);
+      // adjust stored line total proportionally if present
+      if (item.lineTotal != null && prevQty && prevQty !== item.quantity) {
+        const unit = item.lineTotal! / prevQty;
+        item.lineTotal = unit * item.quantity;
+      }
       this.save(draft);
     }
   },
@@ -84,7 +101,12 @@ export const orderDraftUtils = {
 
   getTotal(): number {
     const draft = this.get();
-    return draft.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    return draft.items.reduce((sum, item) => {
+      // if we have a lineTotal stored, trust it; otherwise compute
+      if (item.lineTotal != null) return sum + item.lineTotal;
+      const calc = calculateLine({ rate: item.price, qty: item.quantity, discountPercent: item.discountPercent, taxAmount: item.taxAmount });
+      return sum + calc.total;
+    }, 0);
   },
 
   getItemCount(): number {

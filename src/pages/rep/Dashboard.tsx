@@ -168,27 +168,32 @@ export default function RepDashboard() {
                   <div className="w-24 text-right">Status</div>
                 </div>
                 <div className="divide-y divide-slate-50">
-                  {todayVisits.slice(0, 5).map((visit: any) => (
-                    <div key={visit.id} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-50/50 transition">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ring-4 ${
-                          visit.status === 'Completed' ? 'bg-emerald-500 ring-emerald-500/10' :
-                          visit.checkInTime ? 'bg-blue-500 ring-blue-500/10' :
-                          'bg-slate-300 ring-slate-300/10'
-                        }`} />
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-slate-800 truncate">{visit.customerName || 'Customer'}</p>
-                          <p className="text-[11px] text-slate-400">{visit.status}</p>
+                  {todayVisits.slice(0, 5).map((visit: any) => {
+                    const showView = visit.id && visit.id !== '00000000-0000-0000-0000-000000000000';
+                    return (
+                      <div key={visit.id} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-50/50 transition">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ring-4 ${
+                            visit.status === 'Completed' ? 'bg-emerald-500 ring-emerald-500/10' :
+                            visit.checkInTime ? 'bg-blue-500 ring-blue-500/10' :
+                            'bg-slate-300 ring-slate-300/10'
+                          }`} />
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-slate-800 truncate">{visit.customerName || 'Customer'}</p>
+                            <p className="text-[11px] text-slate-400">{visit.status}</p>
+                          </div>
                         </div>
+                        {showView && (
+                          <button
+                            onClick={() => navigate(`/rep/visits/${visit.id}`)}
+                            className="text-xs text-blue-600 font-medium"
+                          >
+                            View
+                          </button>
+                        )}
                       </div>
-                      <button
-                        onClick={() => navigate(`/rep/visits/${visit.id}`)}
-                        className="text-xs text-blue-600 font-medium"
-                      >
-                        View
-                      </button>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </>
             ) : (

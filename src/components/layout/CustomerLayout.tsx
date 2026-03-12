@@ -9,7 +9,7 @@ import { notificationsApi } from '../../services/api/notificationsApi';
 import {
   Home, ShoppingBag, ClipboardList,
   Wallet, User, ShoppingCart, Bell, LogOut, Menu, X, ChevronLeft,
-  MessageSquare, Sparkles
+  MessageSquare, Sparkles, FileText
 } from 'lucide-react';
 import ConfirmModal from '../common/ConfirmModal';
 
@@ -17,6 +17,7 @@ const navItems = [
   { to: '/shop', icon: Home, label: 'Home', end: true },
   { to: '/shop/products', icon: ShoppingBag, label: 'Shop' },
   { to: '/shop/orders', icon: ClipboardList, label: 'Orders' },
+  { to: '/shop/quotations', icon: FileText, label: 'Quotations' },
   { to: '/shop/ledger', icon: Wallet, label: 'Ledger' },
   { to: '/shop/notifications', icon: Bell, label: 'Notifications' },
   { to: '/shop/support', icon: MessageSquare, label: 'Support' },
@@ -221,7 +222,7 @@ export default function CustomerLayout() {
 
           <div className="flex items-center gap-1 lg:gap-2">
             <button
-              onClick={() => navigate('/shop/cart')}
+              onClick={() => navigate('/shop/checkout')}
               className="relative p-2.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition"
             >
               <ShoppingCart className="w-[18px] h-[18px]" />

@@ -213,6 +213,9 @@ body {
 
 /* product-entrance: staggered entrance for product cards */
 .product-entrance > * { opacity: 0; transform: translateY(8px); animation: slide-fade-up 420ms cubic-bezier(0.2,1,0.3,1) forwards; }
+
+/* slideDown: confirmation dialog drops from top */
+@keyframes slideDown { from { opacity: 0; transform: translateY(-40px) scale(0.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
 .product-entrance > *:nth-child(1)  { animation-delay: 20ms; }
 .product-entrance > *:nth-child(2)  { animation-delay: 60ms; }
 .product-entrance > *:nth-child(3)  { animation-delay: 100ms; }

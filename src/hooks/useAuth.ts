@@ -1,6 +1,7 @@
 import { useSelector, useDispatch } from 'react-redux';
 import type { RootState, AppDispatch } from '../store/store';
-import { login, logout, clearError, register } from '../store/slices/authSlice';
+import { login, logout, clearError, register, updateUser } from '../store/slices/authSlice';
+import type { UserInfo } from '../types/auth.types';
 import { useCallback } from 'react';
 
 export function useAuth() {
@@ -22,11 +23,17 @@ export function useAuth() {
 
   const handleClearError = useCallback(() => dispatch(clearError()), [dispatch]);
 
+  const handleUpdateUser = useCallback(
+    (user: UserInfo) => dispatch(updateUser(user)),
+    [dispatch]
+  );
+
   return {
     ...auth,
     login: handleLogin,
     register: handleRegister,
     logout: handleLogout,
     clearError: handleClearError,
+    updateUser: handleUpdateUser,
   };
 }

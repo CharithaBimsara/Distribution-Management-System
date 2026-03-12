@@ -1,3 +1,18 @@
+// valid status values are kept in sync with the backend enum names
+export const ORDER_STATUSES = [
+  'Pending',
+  'Approved',
+  'Processing',
+  'Dispatched',
+  'Delivered',
+  'Completed',
+  'Cancelled',
+  'OnHold',
+  'Rejected',
+  'PartiallyDelivered'
+] as const;
+export type OrderStatus = typeof ORDER_STATUSES[number];
+
 export interface Order {
   id: string;
   orderNumber: string;
@@ -8,7 +23,7 @@ export interface Order {
   orderDate: string;
   requiredDeliveryDate?: string;
   actualDeliveryDate?: string;
-  status: string;
+  status: OrderStatus;
   subTotal: number;
   taxAmount: number;
   discountAmount: number;
@@ -27,6 +42,7 @@ export interface OrderItem {
   productSKU?: string;
   quantity: number;
   unitPrice: number;
+  mrp?: number;
   discountPercent: number;
   taxAmount: number;
   lineTotal: number;
@@ -47,7 +63,7 @@ export interface CreateOrderItemRequest {
 }
 
 export interface OrderFilterRequest {
-  status?: string;
+  status?: OrderStatus;
   customerId?: string;
   repId?: string;
   fromDate?: string;
@@ -57,7 +73,7 @@ export interface OrderFilterRequest {
 }
 
 export interface UpdateOrderStatusRequest {
-  status: string;
+  status: OrderStatus;
   reason?: string;
 }
 

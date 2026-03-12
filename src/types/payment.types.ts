@@ -30,8 +30,6 @@ export interface PaymentRecord {
 export interface CustomerLedger {
   totalOutstanding: number;
   totalPaid: number;
-  creditLimit: number;
-  availableCredit: number;
   entries: LedgerEntry[];
 }
 

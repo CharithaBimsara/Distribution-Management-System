@@ -11,7 +11,7 @@ export default function RepSupportForm({ onSuccess, onCancel }: Props) {
   const [form, setForm] = useState({ subject: '', description: '', priority: 'Medium', orderId: '' });
 
   const createMut = useMutation({
-    mutationFn: () => supportApi.customerCreateComplaint({
+    mutationFn: () => supportApi.repCreateComplaint({
       subject: form.subject,
       description: form.description,
       priority: form.priority,

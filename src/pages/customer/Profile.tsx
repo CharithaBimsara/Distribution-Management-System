@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { customersApi } from '../../services/api/customersApi';
 import { authApi } from '../../services/api/authApi';
 import { useAuth } from '../../hooks/useAuth';
-import { User, MapPin, CreditCard, Store, LogOut, Shield, Phone, Mail, Edit3, Lock, X, Loader2, ChevronRight } from 'lucide-react';
+import { User, MapPin, Store, LogOut, Shield, Phone, Mail, Edit3, Lock, X, Loader2, ChevronRight } from 'lucide-react';
 import ConfirmModal from '../../components/common/ConfirmModal';
 import { formatCurrency } from '../../utils/formatters';
 import { useNavigate } from 'react-router-dom';
@@ -153,14 +153,14 @@ export default function CustomerProfile() {
                     </div>
                   </div>
                 )}
-                {profile.customerSegment && (
+                {profile.regionName && (
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-violet-50 rounded-xl flex items-center justify-center flex-shrink-0">
                       <Shield className="w-5 h-5 text-violet-500" />
                     </div>
                     <div>
-                      <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">Segment</p>
-                      <p className="text-sm text-slate-700">{profile.customerSegment}</p>
+                      <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">Region</p>
+                      <p className="text-sm text-slate-700">{profile.regionName}</p>
                     </div>
                   </div>
                 )}
@@ -178,20 +178,18 @@ export default function CustomerProfile() {
               </div>
             </div>
 
-            {/* Financial Info */}
+            {/* Order Info */}
             <div className="bg-white rounded-2xl shadow-sm shadow-slate-200/60 border border-slate-100 p-5 space-y-4">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-lg flex items-center justify-center">
-                  <CreditCard className="w-4 h-4 text-white" />
+                  <Store className="w-4 h-4 text-white" />
                 </div>
-                <h3 className="font-bold text-slate-900">Financial</h3>
+                <h3 className="font-bold text-slate-900">Orders</h3>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 {[
-                  { label: 'Credit Limit', value: formatCurrency(profile.creditLimit), color: 'from-orange-50 to-rose-50', textColor: 'text-slate-900' },
-                  { label: 'Balance', value: formatCurrency(profile.currentBalance), color: profile.currentBalance > profile.creditLimit * 0.8 ? 'from-red-50 to-rose-50' : 'from-emerald-50 to-teal-50', textColor: profile.currentBalance > profile.creditLimit * 0.8 ? 'text-red-600' : 'text-slate-900' },
-                  { label: 'Payment Terms', value: `${profile.paymentTermsDays} days`, color: 'from-blue-50 to-indigo-50', textColor: 'text-slate-900' },
                   { label: 'Total Orders', value: `${profile.totalOrders || 0}`, color: 'from-violet-50 to-purple-50', textColor: 'text-slate-900' },
+                  { label: 'Order Value', value: formatCurrency(profile.totalOrderValue || 0), color: 'from-emerald-50 to-teal-50', textColor: 'text-slate-900' },
                 ].map(stat => (
                   <div key={stat.label} className={`bg-gradient-to-br ${stat.color} rounded-xl p-3.5`}>
                     <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">{stat.label}</p>
@@ -199,28 +197,6 @@ export default function CustomerProfile() {
                   </div>
                 ))}
               </div>
-
-              {/* Credit Usage Bar */}
-              {profile.creditLimit > 0 && (
-                <div>
-                  <div className="flex justify-between text-xs mb-1.5">
-                    <span className="text-slate-400">Credit Usage</span>
-                    <span className="font-semibold text-slate-600">{Math.round((profile.currentBalance / profile.creditLimit) * 100)}%</span>
-                  </div>
-                  <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all ${
-                        profile.currentBalance / profile.creditLimit > 0.8
-                          ? 'bg-gradient-to-r from-red-500 to-rose-500'
-                          : profile.currentBalance / profile.creditLimit > 0.5
-                            ? 'bg-gradient-to-r from-amber-500 to-orange-500'
-                            : 'bg-gradient-to-r from-emerald-500 to-teal-500'
-                      }`}
-                      style={{ width: `${Math.min((profile.currentBalance / profile.creditLimit) * 100, 100)}%` }}
-                    />
-                  </div>
-                </div>
-              )}
             </div>
           </>
         )}

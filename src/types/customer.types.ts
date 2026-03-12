@@ -3,16 +3,18 @@ export interface Customer {
   userId: string;
   shopName: string;
   businessRegistrationNumber?: string;
-  creditLimit: number;
-  currentBalance: number;
-  paymentTermsDays: number;
-  customerSegment?: string;
+  regionId?: string;
+  regionName?: string;
+  subRegionId?: string;
+  subRegionName?: string;
   assignedRepId?: string;
   assignedRepName?: string;
-  isBlacklisted: boolean;
+  assignedCoordinatorId?: string;
+  assignedCoordinatorName?: string;
+  approvalStatus?: string;
+  approvalRejectionReason?: string;
   email?: string;
   phoneNumber?: string;
-  // Address fields (flat from backend)
   street?: string;
   city?: string;
   state?: string;
@@ -22,23 +24,61 @@ export interface Customer {
   createdAt: string;
   lastOrderDate?: string;
   totalOrders?: number;
+  totalOrderValue?: number;
 }
 
 export interface CustomerSummary {
   customer: Customer;
   totalPurchases: number;
   totalOrders: number;
-  outstandingBalance: number;
   lastOrderDate?: string;
   frequentProducts: string[];
+  registrationRequest?: RegistrationSummary;
+}
+
+export interface RegistrationSummary {
+  customerType: string;
+  customerName: string;
+  registeredAddress?: string;
+  incorporateDate?: string;
+  businessName?: string;
+  businessLocation?: string;
+  bankBranch?: string;
+  province?: string;
+  town?: string;
+  proprietorName?: string;
+  proprietorTp?: string;
+  managerName?: string;
+  managerTp?: string;
+  businessRegDocPath?: string;
+  businessAddressDocPath?: string;
+  vatDocPath?: string;
 }
 
 export interface CustomerFilterOptions {
   assignedReps: RepOption[];
-  customerSegments: string[];
+  coordinators: CoordinatorOption[];
+  regions: RegionOption[];
+  subRegions: SubRegionOption[];
 }
 
 export interface RepOption {
   id: string;
   name: string;
+}
+
+export interface CoordinatorOption {
+  id: string;
+  name: string;
+}
+
+export interface RegionOption {
+  id: string;
+  name: string;
+}
+
+export interface SubRegionOption {
+  id: string;
+  name: string;
+  regionId: string;
 }

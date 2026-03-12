@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { repsApi } from '../../services/api/repsApi';
 import { formatCurrency } from '../../utils/formatters';
-import { TrendingUp, Target, Users, ShoppingCart, Trophy, Crown, Medal, Award } from 'lucide-react';
+import { TrendingUp, Target, Users, ShoppingCart } from 'lucide-react';
 import type { RepPerformance, SalesTarget } from '../../types/common.types';
 
 export default function RepPerformancePage() {
@@ -13,11 +13,6 @@ export default function RepPerformancePage() {
   const { data: targets } = useQuery({
     queryKey: ['rep-targets'],
     queryFn: () => repsApi.repGetTargets().then(r => r.data.data),
-  });
-
-  const { data: leaderboard } = useQuery({
-    queryKey: ['rep-leaderboard'],
-    queryFn: () => repsApi.repGetLeaderboard().then(r => r.data.data),
   });
 
   return (
@@ -91,38 +86,7 @@ export default function RepPerformancePage() {
           </div>
         )}
 
-        {/* Leaderboard */}
-        {leaderboard && leaderboard.length > 0 && (
-          <div className="card overflow-hidden">
-            <div className="flex items-center gap-2 p-4 pb-2">
-              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center">
-                <Trophy className="w-3.5 h-3.5 text-white" />
-              </div>
-              <h2 className="font-bold text-sm text-slate-800">Leaderboard</h2>
-            </div>
-            <div className="p-3 space-y-1">
-              {leaderboard.map((rep: RepPerformance, i: number) => {
-                const isMe = rep.repName === performance?.repName;
-                return (
-                  <div key={rep.repId} className={`flex items-center gap-3 p-2.5 rounded-xl transition ${isMe ? 'bg-emerald-50 ring-1 ring-emerald-200' : 'hover:bg-slate-50'}`}>
-                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-                      i === 0 ? 'bg-gradient-to-br from-emerald-400 to-emerald-600 text-white shadow-lg shadow-emerald-500/20' :
-                      i === 1 ? 'bg-gradient-to-br from-emerald-200 to-emerald-300 text-emerald-700' :
-                      i === 2 ? 'bg-gradient-to-br from-emerald-300 to-emerald-500 text-white' :
-                      'bg-slate-100 text-slate-500'
-                    }`}>{i + 1}</div>
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-sm font-semibold ${isMe ? 'text-emerald-700' : 'text-slate-800'}`}>
-                        {rep.repName} {isMe && <span className="text-[10px] font-bold bg-emerald-100 text-emerald-600 px-1.5 py-0.5 rounded-full ml-1">You</span>}
-                      </p>
-                    </div>
-                    <span className="text-sm font-bold text-slate-800">{formatCurrency(rep.totalSales)}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
+
       </div>
     </div>
   );

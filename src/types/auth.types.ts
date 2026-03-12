@@ -26,8 +26,9 @@ export interface UserInfo {
   username: string;
   email: string;
   phoneNumber: string;
-  role: 'Admin' | 'SalesRep' | 'Customer';
+  role: 'Admin' | 'SalesRep' | 'Customer' | 'SalesCoordinator';
   isActive: boolean;
+  mustChangePassword: boolean;
   lastLoginAt?: string;
 }
 

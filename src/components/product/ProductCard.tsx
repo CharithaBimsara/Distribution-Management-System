@@ -13,20 +13,8 @@ type Props = {
 
 export default function ProductCard({ product, added, onAdd, onQuickView }: Props) {
   const [isPopping, setIsPopping] = useState(false);
-  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const handleAdd = () => {
-    const outOfStock = product.availability !== 'InStock' || (typeof product.stockQuantity === 'number' && product.stockQuantity <= 0);
-    if (outOfStock && product.allowBackorder) {
-      setConfirmOpen(true);
-      return;
-    }
-
-    if (outOfStock) {
-      toast.error('Product is out of stock');
-      return;
-    }
-
     setIsPopping(true);
     onAdd(product);
     setTimeout(() => setIsPopping(false), 420);
@@ -52,16 +40,9 @@ export default function ProductCard({ product, added, onAdd, onQuickView }: Prop
               {product.name}
             </h3>
 
-            <p className={`${(product.description || '').length > 12 ? 'line-clamp-2' : 'truncate'} text-[11px] md:text-xs text-slate-400 mt-1`}>
-              {product.description}
-            </p>
-
-            <p className="text-[11px] text-slate-500 mt-2">
-              {product.unit} : {product.availability === 'InStock' ? 'In stock' : product.availability === 'OutOfStock' ? 'Out of stock' : product.availability} : {product.stockQuantity}
-            </p>
-
-            {product.allowBackorder && (product.stockQuantity ?? 0) <= 0 && (
-              <div className="text-[11px] text-emerald-600 mt-1">Available to order — lead time {product.backorderLeadTimeDays ?? 'TBD'} days</div>
+            {product.sku && <p className="text-[11px] text-slate-400 mt-1">SKU: {product.sku}</p>}
+            {typeof product.quantity === 'number' && (
+              <p className="text-[11px] text-slate-500 mt-1">Qty: {product.quantity}</p>
             )}
           </div>
 
@@ -84,20 +65,6 @@ export default function ProductCard({ product, added, onAdd, onQuickView }: Prop
             <span className="hidden md:inline-block">{added ? 'Added' : 'Add'}</span>
           </button>
 
-          {/* Backorder confirmation modal */}
-          {confirmOpen && (
-            <div className="fixed inset-0 z-40 flex items-center justify-center">
-              <div className="absolute inset-0 bg-black/30" onClick={() => setConfirmOpen(false)} />
-              <div className="bg-white rounded-2xl p-4 z-50 w-[92vw] max-w-sm">
-                <h3 className="text-sm font-bold text-slate-900">Confirm backorder</h3>
-                <p className="text-xs text-slate-600 mt-2">Only {product.stockQuantity ?? 0} in stock — the rest will be backordered. ETA {product.backorderLeadTimeDays ?? 'TBD'} days. Continue?</p>
-                <div className="mt-4 flex justify-end gap-2">
-                  <button onClick={() => setConfirmOpen(false)} className="px-3 py-2 rounded-xl border text-sm">Cancel</button>
-                  <button onClick={() => { setConfirmOpen(false); setIsPopping(true); onAdd(product); setTimeout(() => setIsPopping(false), 420); }} className="px-3 py-2 rounded-xl bg-orange-500 text-white text-sm">Confirm</button>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </article>

@@ -76,9 +76,11 @@ export default function RepOrderDetail() {
           </div>
         </section>
 
-        <div className="flex items-center justify-between bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl p-4">
-          <span className="font-bold text-slate-900">Total</span>
-          <span className="text-xl font-bold text-emerald-600">{formatCurrency(order.totalAmount)}</span>
+        <div className="space-y-1">
+          <div className="flex justify-between text-sm"><span className="text-slate-500">Subtotal</span><span className="font-medium">{formatCurrency(order.subTotal)}</span></div>
+          <div className="flex justify-between text-sm"><span className="text-slate-500">Tax</span><span className="font-medium">{formatCurrency(order.taxAmount)}</span></div>
+          <div className="flex justify-between text-sm"><span className="text-slate-500">Discount</span><span className="font-medium">-{formatCurrency(order.discountAmount)}</span></div>
+          <div className="flex justify-between font-bold text-base pt-2 border-t"><span>Total</span><span>{formatCurrency(order.totalAmount)}</span></div>
         </div>
 
         {order.status === 'Pending' && (
