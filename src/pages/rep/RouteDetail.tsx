@@ -54,7 +54,7 @@ export default function RepRouteDetail() {
                     const dest = c.latitude && c.longitude ? `${c.latitude},${c.longitude}` : encodeURIComponent(c.customerName || '');
                     window.open(`https://www.google.com/maps/dir/?api=1&destination=${dest}`, '_blank');
                   }}
-                  className="text-blue-600 text-xs flex items-center"
+                  className="text-emerald-600 text-xs flex items-center"
                 >
                   <ExternalLink className="w-3 h-3" />
                 </button>

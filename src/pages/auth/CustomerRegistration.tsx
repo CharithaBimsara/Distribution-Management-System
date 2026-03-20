@@ -1,5 +1,6 @@
 ﻿import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { customerRegistrationApi } from '../../services/api/customerRegistrationApi';
 
 // ── Shared input/label styles (matching system Login theme) ───────────────────
@@ -34,11 +35,11 @@ const STEPS = ['General', 'Professional', 'Documents', 'Review'];
 
 // ── Input component ────────────────────────────────────────────────────────────
 function Field({
-  label, name, value, onChange, type = 'text', required = false, placeholder,
+  label, name, value, onChange, type = 'text', required = false, placeholder, error,
 }: {
   label: string; name: string; value: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  type?: string; required?: boolean; placeholder?: string;
+  type?: string; required?: boolean; placeholder?: string; error?: string;
 }) {
   return (
     <div>
@@ -50,7 +51,11 @@ function Field({
         type={type} name={name} value={value} onChange={onChange}
         placeholder={placeholder || `Enter ${label.toLowerCase()}`}
         required={required}
-        style={INPUT_STYLE}
+        style={{
+          ...INPUT_STYLE,
+          border: error ? '1.5px solid rgba(248, 113, 113, 0.7)' : INPUT_STYLE.border,
+          boxShadow: error ? '0 0 0 3px rgba(248, 113, 113, 0.18)' : 'none',
+        }}
         onFocus={(e) => {
           e.target.style.borderColor = 'rgba(99, 102, 241, 0.5)';
           e.target.style.boxShadow = '0 0 0 3px rgba(99, 102, 241, 0.15)';
@@ -62,23 +67,36 @@ function Field({
           e.target.style.background = 'rgba(255, 255, 255, 0.06)';
         }}
       />
+      {error && <p style={{ fontSize: 12, color: '#fca5a5', marginTop: 6 }}>{error}</p>}
     </div>
   );
 }
 
 function SelectField({
-  label, name, value, onChange, children,
+  label, name, value, onChange, children, required = false, disabled = false, error,
 }: {
   label: string; name: string; value: string;
   onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
+  required?: boolean;
+  disabled?: boolean;
+  error?: string;
   children: React.ReactNode;
 }) {
   return (
     <div>
-      <label style={LABEL_STYLE}>{label}</label>
+      <label style={LABEL_STYLE}>
+        {label}
+        {required && <span style={{ color: '#f87171', marginLeft: 4 }}>*</span>}
+      </label>
       <select
         name={name} value={value} onChange={onChange}
-        style={{ ...INPUT_STYLE, colorScheme: 'dark' } as React.CSSProperties}
+        disabled={disabled}
+        style={{
+          ...INPUT_STYLE,
+          colorScheme: 'dark',
+          border: error ? '1.5px solid rgba(248, 113, 113, 0.7)' : INPUT_STYLE.border,
+          boxShadow: error ? '0 0 0 3px rgba(248, 113, 113, 0.18)' : 'none',
+        } as React.CSSProperties}
         onFocus={(e) => {
           e.target.style.borderColor = 'rgba(99, 102, 241, 0.5)';
           e.target.style.boxShadow = '0 0 0 3px rgba(99, 102, 241, 0.15)';
@@ -92,16 +110,18 @@ function SelectField({
       >
         {children}
       </select>
+      {error && <p style={{ fontSize: 12, color: '#fca5a5', marginTop: 6 }}>{error}</p>}
     </div>
   );
 }
 
 function FileUpload({
-  label, name, onChange, required = false,
+  label, name, onChange, required = false, error,
 }: {
   label: string; name: string;
   onChange: (name: string, file: File | null) => void;
   required?: boolean;
+  error?: string;
 }) {
   const ref = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -121,7 +141,7 @@ function FileUpload({
         onDragLeave={() => setDrag(false)}
         onDrop={(e) => { e.preventDefault(); setDrag(false); const f = e.dataTransfer.files[0]; if (f) handle(f); }}
         style={{
-          border: `2px dashed ${drag ? 'rgba(99,102,241,0.7)' : file ? 'rgba(99,102,241,0.45)' : 'rgba(255,255,255,0.12)'}`,
+          border: `2px dashed ${error ? 'rgba(248,113,113,0.8)' : drag ? 'rgba(99,102,241,0.7)' : file ? 'rgba(99,102,241,0.45)' : 'rgba(255,255,255,0.12)'}`,
           borderRadius: '14px',
           padding: '28px 20px',
           display: 'flex',
@@ -157,6 +177,7 @@ function FileUpload({
           onChange={(e) => { const f = e.target.files?.[0]; if (f) handle(f); }}
         />
       </div>
+      {error && <p style={{ fontSize: 12, color: '#fca5a5', marginTop: 6 }}>{error}</p>}
     </div>
   );
 }
@@ -207,6 +228,7 @@ function StepIndicator({ current }: { current: number }) {
 interface FormState {
   customerName: string; registeredAddress: string; incorporateDate: string;
   businessName: string; businessLocation: string; telephone: string; email: string; bankBranch: string;
+  regionId: string; subRegionId: string;
   province: string; town: string;
   proprietorName: string; proprietorTp: string; proprietorEmail: string;
   managerName: string; managerTp: string; managerEmail: string;
@@ -224,6 +246,9 @@ const CONTACTS = [
   { role: 'Accountant', prefix: 'accountant' as const },
 ];
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PHONE_REGEX = /^\+?[0-9\s()-]{7,20}$/;
+
 // ── Main component ─────────────────────────────────────────────────────────────
 export default function CustomerRegistration() {
   const navigate = useNavigate();
@@ -234,10 +259,12 @@ export default function CustomerRegistration() {
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const [form, setForm] = useState<FormState>({
     customerName: '', registeredAddress: '', incorporateDate: '',
     businessName: '', businessLocation: '', telephone: '', email: '', bankBranch: '',
+    regionId: '', subRegionId: '',
     province: '', town: '',
     proprietorName: '', proprietorTp: '', proprietorEmail: '',
     managerName: '', managerTp: '', managerEmail: '',
@@ -247,13 +274,69 @@ export default function CustomerRegistration() {
   });
   const [files, setFiles] = useState<FilesState>({});
 
-  const upd = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-    setForm(f => ({ ...f, [e.target.name]: e.target.value }));
+  const {
+    data: regions,
+    isLoading: regionsLoading,
+    isError: regionsError,
+    refetch: refetchRegions,
+  } = useQuery({
+    queryKey: ['public-registration-regions'],
+    queryFn: () => customerRegistrationApi.getPublicRegions().then(r => r.data.data || []),
+    retry: 1,
+  });
+
+  const {
+    data: subRegions,
+    isLoading: subRegionsLoading,
+    isError: subRegionsError,
+    refetch: refetchSubRegions,
+  } = useQuery({
+    queryKey: ['public-registration-sub-regions', form.regionId],
+    queryFn: () => customerRegistrationApi.getPublicSubRegions(form.regionId).then(r => r.data.data || []),
+    enabled: !!form.regionId,
+    retry: 1,
+  });
+
+  const upd = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setError('');
+    setFieldErrors((prev) => {
+      if (!prev[name]) return prev;
+      const next = { ...prev };
+      delete next[name];
+      return next;
+    });
+    setForm((f) => {
+      if (name === 'regionId') {
+        return { ...f, regionId: value, subRegionId: '' };
+      }
+      return { ...f, [name]: value };
+    });
+  };
 
   const setFile = (name: string, file: File | null) =>
     setFiles(f => ({ ...f, [name]: file ?? undefined }));
 
+  const onFileSet = (name: string, file: File | null) => {
+    setFile(name, file);
+    setFieldErrors((prev) => {
+      if (!prev[name]) return prev;
+      const next = { ...prev };
+      delete next[name];
+      return next;
+    });
+  };
+
   const goNext = () => {
+    const validation = getStepValidation(step);
+    if (Object.keys(validation.fieldErrors).length > 0 || validation.formError) {
+      setFieldErrors(validation.fieldErrors);
+      setError(validation.formError || 'Please correct the highlighted fields.');
+      topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+    setFieldErrors({});
+    setError('');
     topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     setStep(s => s + 1);
   };
@@ -262,14 +345,79 @@ export default function CustomerRegistration() {
     setStep(s => s - 1);
   };
 
-  const canNext = () => {
-    if (step === 0) return !!(customerType && form.customerName && form.email && form.telephone);
-    if (step === 2) return customerType === 'tax' ? !!files.vatDocument : true;
-    if (step === 3) return confirmed;
-    return true;
+  const getStepValidation = (targetStep: number) => {
+    const errors: Record<string, string> = {};
+
+    if (targetStep === 0) {
+      if (!customerType) errors.customerType = 'Please select customer type.';
+      if (!form.customerName.trim()) errors.customerName = 'Customer name is required.';
+      if (!form.telephone.trim()) {
+        errors.telephone = 'Telephone is required.';
+      } else if (!PHONE_REGEX.test(form.telephone.trim())) {
+        errors.telephone = 'Please enter a valid telephone number.';
+      }
+      if (!form.email.trim()) {
+        errors.email = 'Email is required.';
+      } else if (!EMAIL_REGEX.test(form.email.trim())) {
+        errors.email = 'Please enter a valid email address.';
+      }
+      if (!form.regionId) errors.regionId = 'Please select a region.';
+      return {
+        fieldErrors: errors,
+        formError: Object.keys(errors).length > 0 ? 'Please correct the highlighted fields.' : '',
+      };
+    }
+
+    if (targetStep === 1) {
+      for (const { role, prefix } of CONTACTS) {
+        const email = (form as any)[`${prefix}Email`]?.trim();
+        const phone = (form as any)[`${prefix}Tp`]?.trim();
+        if (email && !EMAIL_REGEX.test(email)) {
+          errors[`${prefix}Email`] = `Please enter a valid ${role} email.`;
+        }
+        if (phone && !PHONE_REGEX.test(phone)) {
+          errors[`${prefix}Tp`] = `Please enter a valid ${role} telephone.`;
+        }
+      }
+      return {
+        fieldErrors: errors,
+        formError: Object.keys(errors).length > 0 ? 'Please correct the highlighted fields.' : '',
+      };
+    }
+
+    if (targetStep === 2) {
+      if (!files.businessReg) errors.businessReg = 'Business Registration Document is required.';
+      if (customerType === 'tax' && !files.vatDocument) errors.vatDocument = 'VAT Registration Document is required for Tax customers.';
+      return {
+        fieldErrors: errors,
+        formError: Object.keys(errors).length > 0 ? 'Please upload all required documents.' : '',
+      };
+    }
+
+    if (targetStep === 3 && !confirmed) {
+      errors.confirmed = 'Please confirm the declaration before submitting.';
+      return {
+        fieldErrors: errors,
+        formError: 'Please confirm the declaration before submitting.',
+      };
+    }
+
+    return { fieldErrors: {}, formError: '' };
   };
 
   const handleSubmit = async () => {
+    for (const stepIndex of [0, 1, 2, 3]) {
+      const validation = getStepValidation(stepIndex);
+      if (Object.keys(validation.fieldErrors).length > 0 || validation.formError) {
+        setError(validation.formError || 'Please correct the highlighted fields.');
+        setFieldErrors(validation.fieldErrors);
+        if (step !== stepIndex) setStep(stepIndex);
+        topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+      }
+    }
+
+    setFieldErrors({});
     setSubmitting(true);
     setError('');
     try {
@@ -290,6 +438,7 @@ export default function CustomerRegistration() {
 
   const reset = () => {
     setSubmitted(false); setStep(0); setConfirmed(false); setCustomerType(''); setError('');
+    setFieldErrors({});
     setForm(Object.fromEntries(Object.keys(form).map(k => [k, ''])) as unknown as FormState);
     setFiles({});
   };
@@ -444,7 +593,15 @@ export default function CustomerRegistration() {
                     { val: 'tax', label: 'Tax Customer', icon: '🧾' },
                   ].map(({ val, label, icon }) => (
                     <button
-                      key={val} type="button" onClick={() => setCustomerType(val)}
+                      key={val} type="button" onClick={() => {
+                        setCustomerType(val);
+                        setFieldErrors((prev) => {
+                          if (!prev.customerType) return prev;
+                          const next = { ...prev };
+                          delete next.customerType;
+                          return next;
+                        });
+                      }}
                       style={{
                         padding: '14px 16px', borderRadius: 14, border: '1.5px solid',
                         borderColor: customerType === val ? 'rgba(99,102,241,0.6)' : 'rgba(255,255,255,0.1)',
@@ -460,6 +617,7 @@ export default function CustomerRegistration() {
                     </button>
                   ))}
                 </div>
+                {fieldErrors.customerType && <p style={{ fontSize: 12, color: '#fca5a5', marginTop: 6 }}>{fieldErrors.customerType}</p>}
                 {customerType === 'tax' && (
                   <div style={{
                     marginTop: 10, display: 'flex', alignItems: 'flex-start', gap: 8,
@@ -477,30 +635,53 @@ export default function CustomerRegistration() {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2" style={{ gap: 14 }}>
-                <Field label="Customer Name in BR" name="customerName" value={form.customerName} onChange={upd} required />
+                <Field label="Customer Name in BR" name="customerName" value={form.customerName} onChange={upd} required error={fieldErrors.customerName} />
                 <Field label="Incorporate Date" name="incorporateDate" value={form.incorporateDate} onChange={upd} type="date" />
                 <div className="sm:col-span-2">
                   <Field label="Registered Address in BR" name="registeredAddress" value={form.registeredAddress} onChange={upd} />
                 </div>
                 <Field label="General Business Name" name="businessName" value={form.businessName} onChange={upd} />
-                <Field label="Telephone" name="telephone" value={form.telephone} onChange={upd} type="tel" required />
+                <Field label="Telephone" name="telephone" value={form.telephone} onChange={upd} type="tel" required error={fieldErrors.telephone} />
                 <div className="sm:col-span-2">
                   <Field label="Business Location Address" name="businessLocation" value={form.businessLocation} onChange={upd} />
                 </div>
-                <Field label="Email" name="email" value={form.email} onChange={upd} type="email" required />
+                <Field label="Email" name="email" value={form.email} onChange={upd} type="email" required error={fieldErrors.email} />
                 <Field label="Operating Bank &amp; Branch" name="bankBranch" value={form.bankBranch} onChange={upd} />
-                <SelectField label="Province" name="province" value={form.province} onChange={upd}>
-                  <option value="">Select Province</option>
-                  <option value="Western">Western</option>
-                  <option value="Central">Central</option>
-                  <option value="Southern">Southern</option>
-                  <option value="Northern">Northern</option>
-                  <option value="Eastern">Eastern</option>
-                  <option value="North Western">North Western</option>
-                  <option value="North Central">North Central</option>
-                  <option value="Uva">Uva</option>
-                  <option value="Sabaragamuwa">Sabaragamuwa</option>
+                <SelectField label="Region" name="regionId" value={form.regionId} onChange={upd} required error={fieldErrors.regionId}>
+                  <option value="">{regionsLoading ? 'Loading regions...' : 'Select Region'}</option>
+                  {(regions || []).map((r: any) => (
+                    <option key={r.id} value={r.id}>{r.name}</option>
+                  ))}
                 </SelectField>
+                <SelectField label="Sub Region" name="subRegionId" value={form.subRegionId} onChange={upd} disabled={!form.regionId}>
+                  <option value="">{subRegionsLoading ? 'Loading sub regions...' : 'Select Sub Region (optional)'}</option>
+                  {(subRegions || []).map((s: any) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </SelectField>
+                <div className="sm:col-span-2" style={{ marginTop: -4 }}>
+                  {regionsLoading && <p style={{ fontSize: 12, color: '#94a3b8' }}>Loading regions...</p>}
+                  {regionsError && (
+                    <p style={{ fontSize: 12, color: '#fca5a5' }}>
+                      Unable to load regions right now.
+                      <button type="button" onClick={() => refetchRegions()} style={{ marginLeft: 8, color: '#c7d2fe', textDecoration: 'underline', background: 'transparent', border: 'none', cursor: 'pointer' }}>
+                        Retry
+                      </button>
+                    </p>
+                  )}
+                  {!regionsLoading && !regionsError && (regions?.length || 0) === 0 && (
+                    <p style={{ fontSize: 12, color: '#fca5a5' }}>No regions available. Please contact support.</p>
+                  )}
+                  {!!form.regionId && subRegionsLoading && <p style={{ fontSize: 12, color: '#94a3b8' }}>Loading sub regions...</p>}
+                  {!!form.regionId && subRegionsError && (
+                    <p style={{ fontSize: 12, color: '#fca5a5' }}>
+                      Unable to load sub regions for selected region.
+                      <button type="button" onClick={() => refetchSubRegions()} style={{ marginLeft: 8, color: '#c7d2fe', textDecoration: 'underline', background: 'transparent', border: 'none', cursor: 'pointer' }}>
+                        Retry
+                      </button>
+                    </p>
+                  )}
+                </div>
                 <Field label="Town" name="town" value={form.town} onChange={upd} placeholder="Enter town name" />
               </div>
             </div>
@@ -528,15 +709,25 @@ export default function CustomerRegistration() {
                       </div>
                       <div>
                         <label style={LABEL_STYLE}>Telephone</label>
-                        <input type="tel" name={`${prefix}Tp`} value={(form as any)[`${prefix}Tp`]} onChange={upd} placeholder="+94..." style={INPUT_STYLE}
+                        <input type="tel" name={`${prefix}Tp`} value={(form as any)[`${prefix}Tp`]} onChange={upd} placeholder="+94..." style={{
+                          ...INPUT_STYLE,
+                          border: fieldErrors[`${prefix}Tp`] ? '1.5px solid rgba(248, 113, 113, 0.7)' : INPUT_STYLE.border,
+                          boxShadow: fieldErrors[`${prefix}Tp`] ? '0 0 0 3px rgba(248, 113, 113, 0.18)' : 'none',
+                        }}
                           onFocus={(e) => { e.target.style.borderColor = 'rgba(99,102,241,0.5)'; e.target.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.15)'; e.target.style.background = 'rgba(255,255,255,0.08)'; }}
                           onBlur={(e) => { e.target.style.borderColor = 'rgba(255,255,255,0.1)'; e.target.style.boxShadow = 'none'; e.target.style.background = 'rgba(255,255,255,0.06)'; }} />
+                        {fieldErrors[`${prefix}Tp`] && <p style={{ fontSize: 12, color: '#fca5a5', marginTop: 6 }}>{fieldErrors[`${prefix}Tp`]}</p>}
                       </div>
                       <div>
                         <label style={LABEL_STYLE}>Email</label>
-                        <input type="email" name={`${prefix}Email`} value={(form as any)[`${prefix}Email`]} onChange={upd} placeholder="email@..." style={INPUT_STYLE}
+                        <input type="email" name={`${prefix}Email`} value={(form as any)[`${prefix}Email`]} onChange={upd} placeholder="email@..." style={{
+                          ...INPUT_STYLE,
+                          border: fieldErrors[`${prefix}Email`] ? '1.5px solid rgba(248, 113, 113, 0.7)' : INPUT_STYLE.border,
+                          boxShadow: fieldErrors[`${prefix}Email`] ? '0 0 0 3px rgba(248, 113, 113, 0.18)' : 'none',
+                        }}
                           onFocus={(e) => { e.target.style.borderColor = 'rgba(99,102,241,0.5)'; e.target.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.15)'; e.target.style.background = 'rgba(255,255,255,0.08)'; }}
                           onBlur={(e) => { e.target.style.borderColor = 'rgba(255,255,255,0.1)'; e.target.style.boxShadow = 'none'; e.target.style.background = 'rgba(255,255,255,0.06)'; }} />
+                        {fieldErrors[`${prefix}Email`] && <p style={{ fontSize: 12, color: '#fca5a5', marginTop: 6 }}>{fieldErrors[`${prefix}Email`]}</p>}
                       </div>
                     </div>
                   </div>
@@ -553,13 +744,13 @@ export default function CustomerRegistration() {
                 <h2 style={{ fontSize: 17, fontWeight: 700, color: '#f1f5f9' }}>Required Documents</h2>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-                <FileUpload label="Business Registration Document" name="businessReg" onChange={setFile} required />
-                <FileUpload label="Document to Prove Business Address" name="businessAddress" onChange={setFile} />
+                <FileUpload label="Business Registration Document" name="businessReg" onChange={onFileSet} required error={fieldErrors.businessReg} />
+                <FileUpload label="Document to Prove Business Address" name="businessAddress" onChange={onFileSet} />
                 {customerType === 'tax' && (
                   <div style={{ position: 'relative' }}>
                     <div style={{ position: 'absolute', inset: -1, borderRadius: 16, background: 'linear-gradient(135deg, rgba(251,191,36,0.3), rgba(99,102,241,0.3))', filter: 'blur(4px)' }} />
                     <div style={{ position: 'relative' }}>
-                      <FileUpload label="VAT Registration Document" name="vatDocument" onChange={setFile} required />
+                      <FileUpload label="VAT Registration Document" name="vatDocument" onChange={onFileSet} required error={fieldErrors.vatDocument} />
                     </div>
                   </div>
                 )}
@@ -625,11 +816,19 @@ export default function CustomerRegistration() {
                 </div>
 
                 <div
-                  onClick={() => setConfirmed(c => !c)}
+                  onClick={() => {
+                    setConfirmed(c => !c);
+                    setFieldErrors((prev) => {
+                      if (!prev.confirmed) return prev;
+                      const next = { ...prev };
+                      delete next.confirmed;
+                      return next;
+                    });
+                  }}
                   style={{
                     display: 'flex', alignItems: 'flex-start', gap: 12, cursor: 'pointer',
                     padding: '14px 16px', borderRadius: 14, border: '1.5px solid',
-                    borderColor: confirmed ? 'rgba(99,102,241,0.4)' : 'rgba(255,255,255,0.08)',
+                    borderColor: fieldErrors.confirmed ? 'rgba(248,113,113,0.8)' : confirmed ? 'rgba(99,102,241,0.4)' : 'rgba(255,255,255,0.08)',
                     background: confirmed ? 'rgba(99,102,241,0.08)' : 'rgba(255,255,255,0.03)',
                     transition: 'all 0.2s',
                   }}
@@ -652,6 +851,7 @@ export default function CustomerRegistration() {
                     I/We confirm the details given above are <strong style={{ color: '#cbd5e1' }}>true and correct</strong>. I authorize Janasiri Distributors (PVT) Ltd to process this registration.
                   </p>
                 </div>
+                {fieldErrors.confirmed && <p style={{ fontSize: 12, color: '#fca5a5', marginTop: -4 }}>{fieldErrors.confirmed}</p>}
 
                 {error && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 12, padding: '12px 16px', color: '#fca5a5', fontSize: 13 }}>
@@ -662,6 +862,15 @@ export default function CustomerRegistration() {
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {step !== 3 && error && (
+            <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 12, padding: '12px 16px', color: '#fca5a5', fontSize: 13 }}>
+              <svg style={{ width: 16, height: 16, flexShrink: 0 }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              {error}
             </div>
           )}
 
@@ -694,13 +903,13 @@ export default function CustomerRegistration() {
 
             {step < STEPS.length - 1 ? (
               <button
-                type="button" onClick={goNext} disabled={!canNext()}
+                type="button" onClick={goNext}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 6, padding: '11px 22px', borderRadius: 12, fontSize: 14, fontWeight: 600,
-                  background: canNext() ? 'linear-gradient(135deg, #6366f1, #8b5cf6)' : 'rgba(255,255,255,0.08)',
-                  color: canNext() ? 'white' : 'rgba(255,255,255,0.2)',
-                  border: 'none', cursor: canNext() ? 'pointer' : 'not-allowed', transition: 'all 0.2s',
-                  boxShadow: canNext() ? '0 4px 20px rgba(99,102,241,0.35)' : 'none',
+                  background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                  color: 'white',
+                  border: 'none', cursor: 'pointer', transition: 'all 0.2s',
+                  boxShadow: '0 4px 20px rgba(99,102,241,0.35)',
                 }}
               >
                 Next
@@ -710,13 +919,13 @@ export default function CustomerRegistration() {
               </button>
             ) : (
               <button
-                type="button" onClick={handleSubmit} disabled={!canNext() || submitting}
+                type="button" onClick={handleSubmit} disabled={submitting}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 6, padding: '11px 22px', borderRadius: 12, fontSize: 14, fontWeight: 600,
-                  background: canNext() && !submitting ? 'linear-gradient(135deg, #6366f1, #8b5cf6)' : 'rgba(255,255,255,0.08)',
-                  color: canNext() && !submitting ? 'white' : 'rgba(255,255,255,0.2)',
-                  border: 'none', cursor: canNext() && !submitting ? 'pointer' : 'not-allowed', transition: 'all 0.2s',
-                  boxShadow: canNext() && !submitting ? '0 4px 20px rgba(99,102,241,0.35)' : 'none',
+                  background: submitting ? 'rgba(255,255,255,0.08)' : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                  color: submitting ? 'rgba(255,255,255,0.2)' : 'white',
+                  border: 'none', cursor: submitting ? 'not-allowed' : 'pointer', transition: 'all 0.2s',
+                  boxShadow: submitting ? 'none' : '0 4px 20px rgba(99,102,241,0.35)',
                   whiteSpace: 'nowrap',
                 }}
               >

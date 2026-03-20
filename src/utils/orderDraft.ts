@@ -9,8 +9,10 @@ export interface OrderDraftItem {
   name: string;
   price: number;
   sku: string;
+  mrp?: number;
   /* optional pricing modifiers carried over from catalog */
   discountPercent?: number;
+  taxCode?: string;
   taxAmount?: number;
   /** total for this line as shown when added (price×qty ± discounts/taxes) */
   lineTotal?: number;

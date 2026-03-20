@@ -6,11 +6,9 @@ import { useIsDesktop } from '../../hooks/useMediaQuery';
 import PageHeader from '../../components/common/PageHeader';
 import DataTable, { type Column } from '../../components/common/DataTable';
 import MobileTileList from '../../components/common/MobileTileList';
-import BottomSheet from '../../components/common/BottomSheet';
 
 export default function CoordinatorTeam() {
   const [search, setSearch] = useState('');
-  const [selectedRep, setSelectedRep] = useState<any>(null);
   const isDesktop = useIsDesktop();
 
   const { data: reps, isLoading } = useQuery({
@@ -37,7 +35,8 @@ export default function CoordinatorTeam() {
         </div>
       ),
     },
-    { key: 'territory', header: 'Territory', render: (r) => r.territory || '—' },
+    { key: 'regionName', header: 'Region', render: (r) => r.regionName || '—' },
+    { key: 'subRegionName', header: 'Sub Region', render: (r) => r.subRegionName || '—' },
     { key: 'phoneNumber', header: 'Phone', render: (r) => r.phoneNumber || '—' },
     { key: 'email', header: 'Email', render: (r) => r.email || '—' },
     {
@@ -63,11 +62,11 @@ export default function CoordinatorTeam() {
 
       {isDesktop ? (
         <DataTable columns={columns} data={filtered} isLoading={isLoading} keyExtractor={(r) => r.id}
-          onRowClick={(r) => setSelectedRep(r)} emptyIcon={<Users className="w-12 h-12 text-slate-300" />}
+          emptyIcon={<Users className="w-12 h-12 text-slate-300" />}
           emptyTitle="No reps found" page={1} totalPages={1} />
       ) : (
         <MobileTileList data={filtered} isLoading={isLoading} keyExtractor={(r) => r.id}
-          onTileClick={(r) => setSelectedRep(r)} page={1} totalPages={1}
+          page={1} totalPages={1}
           renderTile={(r) => (
             <div className="flex items-center gap-3">
               <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-500 flex items-center justify-center flex-shrink-0">
@@ -83,6 +82,7 @@ export default function CoordinatorTeam() {
                 <p className="text-[11px] text-slate-400 mt-0.5">{r.employeeCode}</p>
                 <div className="flex flex-wrap gap-3 mt-1.5 text-[11px] text-slate-500">
                   {r.regionName && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{r.regionName}</span>}
+                  {r.subRegionName && <span>{r.subRegionName}</span>}
                   {r.phoneNumber && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{r.phoneNumber}</span>}
                 </div>
               </div>
@@ -90,37 +90,6 @@ export default function CoordinatorTeam() {
           )}
         />
       )}
-
-      {/* Rep Detail BottomSheet */}
-      <BottomSheet isOpen={!!selectedRep} onClose={() => setSelectedRep(null)} title="Rep Details">
-        {selectedRep && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-500 flex items-center justify-center">
-                <span className="text-white font-bold text-lg">{selectedRep.fullName?.[0]}</span>
-              </div>
-              <div>
-                <p className="font-bold text-slate-900">{selectedRep.fullName}</p>
-                <p className="text-sm text-slate-500">{selectedRep.employeeCode}</p>
-                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${selectedRep.isActive ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-500'}`}>
-                  {selectedRep.isActive ? 'Active' : 'Inactive'}
-                </span>
-              </div>
-            </div>
-            <div className="space-y-3 text-sm">
-              {selectedRep.territory && (
-                <div className="flex items-center gap-2 text-slate-600"><MapPin className="w-4 h-4 text-slate-400" />{selectedRep.territory}</div>
-              )}
-              {selectedRep.phoneNumber && (
-                <div className="flex items-center gap-2 text-slate-600"><Phone className="w-4 h-4 text-slate-400" />{selectedRep.phoneNumber}</div>
-              )}
-              {selectedRep.email && (
-                <div className="flex items-center gap-2 text-slate-600"><Mail className="w-4 h-4 text-slate-400" />{selectedRep.email}</div>
-              )}
-            </div>
-          </div>
-        )}
-      </BottomSheet>
     </div>
   );
 }

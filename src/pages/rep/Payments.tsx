@@ -125,7 +125,7 @@ function RecordPaymentForm({ onSubmit, isPending, onCancel }: { onSubmit: (d: Pa
     queryFn: () => customersApi.repGetCustomers({ page: 1, pageSize: 200 }).then(r => r.data.data),
   });
 
-  const cls = 'w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-300';
+  const cls = 'w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-300';
 
   return (
     <div className="space-y-4">
@@ -164,7 +164,7 @@ function RecordPaymentForm({ onSubmit, isPending, onCancel }: { onSubmit: (d: Pa
         <button onClick={onCancel} className="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50">Cancel</button>
         <button onClick={() => onSubmit({ customerId, amount: parseFloat(amount), paymentMethod: toApiPaymentMethod(method), referenceNumber: referenceNumber || undefined, chequeNumber: chequeNumber || undefined, bankName: bankName || undefined, notes: notes || undefined })}
           disabled={isPending || !customerId || !amount}
-          className="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 transition disabled:opacity-50 flex items-center justify-center gap-2">
+          className="flex-1 px-4 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 transition disabled:opacity-50 flex items-center justify-center gap-2">
           {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
           {isPending ? 'Recording...' : `Record ${amount ? formatCurrency(parseFloat(amount)) : 'Payment'}`}
         </button>

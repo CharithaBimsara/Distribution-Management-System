@@ -3,20 +3,19 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as XLSX from 'xlsx';
-import { adminGetAllCoordinators, adminCreateCoordinator } from '../../services/api/coordinatorApi';
-import { Users, Plus, Search, Eye, FileSpreadsheet, FileText, Check, X, MapPin, TrendingUp } from 'lucide-react';
+import { adminGetAllCoordinators, adminDeleteCoordinator } from '../../services/api/coordinatorApi';
+import { Users, Plus, Search, FileSpreadsheet, FileText, Check, X, MapPin, TrendingUp, Pencil, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
 import MobileTileList from '../../components/common/MobileTileList';
-import BottomSheet from '../../components/common/BottomSheet';
 import StatusBadge from '../../components/common/StatusBadge';
 
 export default function AdminCoordinators() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
-  const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState({ fullName: '', employeeCode: '', email: '', phoneNumber: '', username: '', password: '' });
+  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const isDesktop = useIsDesktop();
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -26,20 +25,34 @@ export default function AdminCoordinators() {
     queryFn: () => adminGetAllCoordinators(page, 20, search || undefined),
   });
 
-  const createMut = useMutation({
-    mutationFn: (d: any) => adminCreateCoordinator(d),
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => adminDeleteCoordinator(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-coordinators'] });
-      setShowCreate(false);
-      setForm({ fullName: '', employeeCode: '', email: '', phoneNumber: '', username: '', password: '' });
-      toast.success('Coordinator created');
+      toast.success('Coordinator deleted');
     },
-    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to create'),
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to delete coordinator'),
+    onSettled: () => setDeletingId(null),
   });
 
-  const coordinators = ((data as any)?.items || []).filter((c: any) =>
-    search ? (c.fullName + ' ' + (c.regionName || '') + ' ' + c.employeeCode).toLowerCase().includes(search.toLowerCase()) : true
-  );
+  const handleDelete = (id: string, fullName: string) => {
+    const ok = window.confirm(`Delete coordinator ${fullName}?`);
+    if (!ok) return;
+    setDeletingId(id);
+    deleteMut.mutate(id);
+  };
+
+  const coordinators = ((data as any)?.items || [])
+    .filter((c: any) =>
+      search ? (c.fullName + ' ' + (c.regionName || '') + ' ' + c.employeeCode).toLowerCase().includes(search.toLowerCase()) : true
+    )
+    .filter((c: any) =>
+      filterStatus === 'all'
+        ? true
+        : filterStatus === 'active'
+        ? c.isActive
+        : !c.isActive
+    );
 
   const toggleSelect = (id: string) => {
     setSelectedIds(prev => {
@@ -100,15 +113,33 @@ export default function AdminCoordinators() {
           </div>
           <div className="relative hidden lg:block">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="Search coordinators..." className="pl-10 pr-4 py-2 border border-slate-200 rounded-xl text-sm w-52 outline-none focus:ring-2 focus:ring-indigo-500/20" />
+            <input
+              value={search}
+              onChange={e => { setSearch(e.target.value); setPage(1); }}
+              placeholder="Search coordinators..."
+              className="pl-10 pr-4 py-2 border border-slate-200 rounded-xl text-sm w-52 outline-none focus:ring-2 focus:ring-indigo-500/20"
+            />
           </div>
+
+          <div className="hidden lg:flex items-center gap-2">
+            <select
+              value={filterStatus}
+              onChange={e => { setFilterStatus(e.target.value as any); setPage(1); }}
+              className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/15 focus:border-indigo-300 transition cursor-pointer"
+            >
+              <option value="all">All status</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </div>
+
           <button onClick={() => exportCoordinators('excel')} title="Export Excel" className="p-2 rounded-xl border border-slate-200 hover:bg-emerald-50 text-slate-500 hover:text-emerald-600 transition hidden lg:flex items-center justify-center">
             <FileSpreadsheet className="w-4 h-4" />
           </button>
           <button onClick={() => exportCoordinators('pdf')} title="Export PDF" className="p-2 rounded-xl border border-slate-200 hover:bg-rose-50 text-slate-500 hover:text-rose-600 transition hidden lg:flex items-center justify-center">
             <FileText className="w-4 h-4" />
           </button>
-          <button onClick={() => setShowCreate(true)} className="flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700">
+          <button onClick={() => navigate('/admin/coordinators/new')} className="flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700">
             <Plus className="w-4 h-4" /><span className="hidden sm:inline">Add Coordinator</span>
           </button>
         </div>
@@ -132,9 +163,12 @@ export default function AdminCoordinators() {
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50/70">
                   <th className="w-10 px-4 py-3">
-                    <button onClick={toggleAll} className={`w-5 h-5 rounded border-2 flex items-center justify-center transition ${allSelected ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300 hover:border-indigo-400'}`}>
-                      {allSelected && <Check className="w-3 h-3 text-white" />}
-                    </button>
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={toggleAll}
+                      className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
+                    />
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Name</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Region</th>
@@ -148,20 +182,19 @@ export default function AdminCoordinators() {
                 {coordinators.map((c: any) => (
                   <tr key={c.id} className={`hover:bg-slate-50/60 transition-colors cursor-pointer ${selectedIds.has(c.id) ? 'bg-indigo-50/40' : ''}`} onClick={() => navigate(`/admin/coordinators/${c.id}`)}>
                     <td className="px-4 py-3">
-                      <button onClick={e => { e.stopPropagation(); toggleSelect(c.id); }} className={`w-5 h-5 rounded border-2 flex items-center justify-center transition ${selectedIds.has(c.id) ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300 hover:border-indigo-400'}`}>
-                        {selectedIds.has(c.id) && <Check className="w-3 h-3 text-white" />}
-                      </button>
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(c.id)}
+                        onChange={e => { e.stopPropagation(); toggleSelect(c.id); }}
+                        className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
+                      />
                     </td>
                     <td className="px-4 py-3">
                       <p className="font-semibold text-slate-900 text-sm">{c.fullName}</p>
                       <p className="text-xs text-slate-400">{c.employeeCode}</p>
                     </td>
                     <td className="px-4 py-3">
-                      {c.regionName ? (
-                        <span className="inline-flex items-center gap-1.5 text-sm text-slate-700">
-                          <MapPin className="w-3.5 h-3.5 text-indigo-400" /> {c.regionName}
-                        </span>
-                      ) : <span className="text-slate-400 text-sm">—</span>}
+                      <p className="text-sm font-medium text-slate-800">{c.regionName || '—'}</p>
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 text-xs font-semibold">
@@ -177,12 +210,21 @@ export default function AdminCoordinators() {
                       <StatusBadge status={c.isActive ? 'Active' : 'Inactive'} />
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <button
-                        onClick={e => { e.stopPropagation(); navigate(`/admin/coordinators/${c.id}`); }}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-600 text-xs font-medium hover:bg-indigo-100 transition"
-                      >
-                        <Eye className="w-3.5 h-3.5" /> View
-                      </button>
+                      <div className="inline-flex items-center gap-1.5">
+                        <button
+                          onClick={e => { e.stopPropagation(); navigate(`/admin/coordinators/${c.id}`); }}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-600 text-xs font-medium hover:bg-indigo-100 transition"
+                        >
+                          <Pencil className="w-3.5 h-3.5" /> Edit
+                        </button>
+                        <button
+                          onClick={e => { e.stopPropagation(); handleDelete(c.id, c.fullName); }}
+                          disabled={deleteMut.isPending && deletingId === c.id}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-50 text-rose-600 text-xs font-medium hover:bg-rose-100 transition disabled:opacity-50"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" /> {deleteMut.isPending && deletingId === c.id ? 'Deleting...' : 'Delete'}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -221,40 +263,24 @@ export default function AdminCoordinators() {
                 <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-medium"><Users className="w-3 h-3" /> {c.assignedRepsCount || 0} reps</span>
                 <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-medium"><TrendingUp className="w-3 h-3" /> {c.assignedCustomersCount || 0}</span>
               </div>
-              <button
-                onClick={e => { e.stopPropagation(); navigate(`/admin/coordinators/${c.id}`); }}
-                className="w-full py-2 text-xs font-medium rounded-lg bg-indigo-50 text-indigo-700 active:scale-95 flex items-center justify-center gap-1.5"
-              >
-                <Eye className="w-3.5 h-3.5" /> View Details
-              </button>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={e => { e.stopPropagation(); navigate(`/admin/coordinators/${c.id}`); }}
+                  className="w-full py-2 text-xs font-medium rounded-lg bg-indigo-50 text-indigo-700 active:scale-95 flex items-center justify-center gap-1.5"
+                >
+                  <Pencil className="w-3.5 h-3.5" /> Edit
+                </button>
+                <button
+                  onClick={e => { e.stopPropagation(); handleDelete(c.id, c.fullName); }}
+                  disabled={deleteMut.isPending && deletingId === c.id}
+                  className="w-full py-2 text-xs font-medium rounded-lg bg-rose-50 text-rose-700 active:scale-95 disabled:opacity-50 flex items-center justify-center gap-1.5"
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> {deleteMut.isPending && deletingId === c.id ? 'Deleting...' : 'Delete'}
+                </button>
+              </div>
             </div>
           )}
         />
-      )}
-
-      {/* Create Coordinator */}
-      {showCreate && (
-        <BottomSheet open={true} onClose={() => setShowCreate(false)} title="Create Coordinator">
-          <div className="p-5 space-y-4">
-            {[
-              { label: 'Full Name', key: 'fullName', type: 'text' },
-              { label: 'Employee Code', key: 'employeeCode', type: 'text' },
-              { label: 'Email', key: 'email', type: 'email' },
-              { label: 'Phone', key: 'phoneNumber', type: 'tel' },
-              { label: 'Username', key: 'username', type: 'text' },
-              { label: 'Password', key: 'password', type: 'password' },
-            ].map(f => (
-              <div key={f.key}>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">{f.label}</label>
-                <input type={f.type} value={(form as any)[f.key]} onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))} className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500/20" />
-              </div>
-            ))}
-            <div className="flex gap-3 pt-2">
-              <button onClick={() => setShowCreate(false)} className="flex-1 py-2.5 bg-slate-100 rounded-xl text-sm font-medium text-slate-600">Cancel</button>
-              <button onClick={() => createMut.mutate(form)} disabled={createMut.isPending || !form.fullName || !form.username || !form.password} className="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium disabled:opacity-50">{createMut.isPending ? 'Creating...' : 'Create'}</button>
-            </div>
-          </div>
-        </BottomSheet>
       )}
 
       {/* Selection bar portal */}

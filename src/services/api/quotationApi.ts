@@ -32,6 +32,11 @@ export const customerConvertQuotation = async (id: string, req: ConvertQuotation
   return data.data;
 };
 
+export const customerCancelQuotation = async (id: string, reason?: string) => {
+  const { data } = await api.post<ApiResponse<Quotation>>(`/customer/quotations/${id}/cancel`, { reason });
+  return data.data;
+};
+
 // ===== Rep endpoints =====
 
 export const repCreateQuotation = async (req: CreateQuotationRequest) => {
@@ -87,5 +92,15 @@ export const adminGetQuotations = async (page = 1, pageSize = 20, status?: strin
 
 export const adminGetQuotation = async (id: string) => {
   const { data } = await api.get<ApiResponse<Quotation>>(`/admin/quotations/${id}`);
+  return data.data;
+};
+
+export const adminApproveQuotation = async (id: string, req: ApproveQuotationRequest) => {
+  const { data } = await api.post<ApiResponse<Quotation>>(`/admin/quotations/${id}/approve`, req);
+  return data.data;
+};
+
+export const adminRejectQuotation = async (id: string, req: RejectQuotationRequest) => {
+  const { data } = await api.post<ApiResponse<string>>(`/admin/quotations/${id}/reject`, req);
   return data.data;
 };

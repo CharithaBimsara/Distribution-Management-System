@@ -9,11 +9,88 @@ import { regionsApi } from '../../services/api/regionsApi';
 import { formatDate } from '../../utils/formatters';
 import {
   ArrowLeft, MapPin, Users, Phone, Mail, Calendar,
-  ChevronRight, BarChart2, TrendingUp, Power, UserPlus,
+  ChevronRight, BarChart2, TrendingUp, Power, UserPlus, User, UserMinus, Trash2,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import StatusBadge from '../../components/common/StatusBadge';
 import BottomSheet from '../../components/common/BottomSheet';
+
+// ── Shared small components ────────────────────────────────────────────────
+
+function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div className={`bg-white rounded-xl border border-slate-200 shadow-sm ${className}`}>
+      {children}
+    </div>
+  );
+}
+
+function CardHeader({
+  title, icon, action,
+}: { title: string; icon: React.ReactNode; action?: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+      <div className="flex items-center gap-2.5">
+        <span className="text-blue-500">{icon}</span>
+        <h3 className="text-sm font-semibold text-slate-800">{title}</h3>
+      </div>
+      {action}
+    </div>
+  );
+}
+
+function StatTile({
+  label, value, icon, accent = false,
+}: { label: string; value: string | number; icon: React.ReactNode; accent?: boolean }) {
+  return (
+    <div className={`flex flex-col gap-2 p-4 rounded-xl ${accent ? 'bg-blue-600 text-white' : 'bg-slate-50'}`}>
+      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${accent ? 'bg-white/20' : 'bg-blue-100'}`}>
+        <span className={accent ? 'text-white' : 'text-blue-600'}>{icon}</span>
+      </div>
+      <div>
+        <p className={`text-xl font-bold leading-none ${accent ? 'text-white' : 'text-slate-900'}`}>{value}</p>
+        <p className={`text-[11px] mt-1 ${accent ? 'text-blue-100' : 'text-slate-500'}`}>{label}</p>
+      </div>
+    </div>
+  );
+}
+
+function InputField({
+  label, value, onChange, placeholder,
+}: { label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="text-[11px] font-semibold text-blue-600 uppercase tracking-wider">{label}</label>
+      <input
+        value={value}
+        placeholder={placeholder}
+        onChange={e => onChange(e.target.value)}
+        className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm text-slate-800
+                   focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+      />
+    </div>
+  );
+}
+
+function SelectField({
+  label, value, onChange, children,
+}: { label: string; value: string; onChange: (v: string) => void; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="text-[11px] font-semibold text-blue-600 uppercase tracking-wider">{label}</label>
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm text-slate-800 bg-white
+                   focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+      >
+        {children}
+      </select>
+    </div>
+  );
+}
+
+// ── Main Page ──────────────────────────────────────────────────────────────
 
 type Tab = 'overview' | 'reps' | 'customers';
 
@@ -23,20 +100,30 @@ export default function AdminCoordinatorDetail() {
   const qc = useQueryClient();
 
   const [activeTab, setActiveTab] = useState<Tab>('overview');
-  const [showEdit, setShowEdit] = useState(false);
+  const [infoEditMode, setInfoEditMode] = useState(false);
+  const [infoForm, setInfoForm] = useState({ fullName: '', employeeCode: '', phoneNumber: '', regionId: '', hireDate: '' });
   const [showAssignRep, setShowAssignRep] = useState(false);
-  const [editForm, setEditForm] = useState({ fullName: '', phoneNumber: '', regionId: '' });
   const [selectedRepId, setSelectedRepId] = useState('');
+  const [showCreateCustomer, setShowCreateCustomer] = useState(false);
+  const [newCustomerForm, setNewCustomerForm] = useState({ shopName: '', email: '', phoneNumber: '' });
 
-  // Queries
+  // ── Queries ───────────────────────────────────────────────────────────────
+
   const { data: coordinator, isLoading } = useQuery({
     queryKey: ['admin-coordinator', id],
     queryFn: () => adminGetCoordinator(id!),
     enabled: !!id,
     onSuccess: (d: any) => {
-      setEditForm({ fullName: d.fullName, phoneNumber: d.phoneNumber || '', regionId: d.regionId || '' });
+      setInfoForm({
+        fullName: d.fullName,
+        employeeCode: d.employeeCode || '',
+        phoneNumber: d.phoneNumber || '',
+        regionId: d.regionId || '',
+        hireDate: d.hireDate ? d.hireDate.split('T')[0] : '',
+      });
     },
   });
+
 
   const { data: repsData } = useQuery({
     queryKey: ['admin-coordinator-reps', id],
@@ -50,6 +137,43 @@ export default function AdminCoordinatorDetail() {
     enabled: !!id,
   });
 
+  const { data: availableCustomersData } = useQuery({
+    queryKey: ['admin-coordinator-available-customers', id],
+    queryFn: () => customersApi.adminGetAll({ page: 1, pageSize: 200, regionId: coordinator?.regionId }).then(r => r.data.data),
+    enabled: !!id && !!coordinator?.regionId,
+  });
+
+  const createCustomerMut = useMutation({
+    mutationFn: (data: any) => customersApi.adminCreate(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-coordinator-customers', id] });
+      setShowCreateCustomer(false);
+      setNewCustomerForm({ shopName: '', email: '', phoneNumber: '' });
+      toast.success('Customer created');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to create customer'),
+  });
+
+  const assignCustomerMut = useMutation({
+    mutationFn: (customerId: string) => customersApi.adminUpdate(customerId, { assignedCoordinatorId: id }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-coordinator-customers', id] });
+      qc.invalidateQueries({ queryKey: ['admin-coordinator-available-customers', id] });
+      toast.success('Customer assigned');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to assign customer'),
+  });
+
+  const unassignCustomerMut = useMutation({
+    mutationFn: (customerId: string) => customersApi.adminUpdate(customerId, { clearAssignedCoordinator: true }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-coordinator-customers', id] });
+      qc.invalidateQueries({ queryKey: ['admin-coordinator-available-customers', id] });
+      toast.success('Customer unassigned');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to unassign customer'),
+  });
+
   const { data: regionsData } = useQuery({
     queryKey: ['regions'],
     queryFn: () => regionsApi.getAll().then(r => r.data || []),
@@ -61,16 +185,27 @@ export default function AdminCoordinatorDetail() {
     enabled: showAssignRep,
   });
 
-  // Mutations
+  // ── Mutations ─────────────────────────────────────────────────────────────
+
   const updateMut = useMutation({
     mutationFn: (data: any) => adminUpdateCoordinator(id!, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-coordinator', id] });
       qc.invalidateQueries({ queryKey: ['admin-coordinators'] });
-      setShowEdit(false);
       toast.success('Coordinator updated');
     },
     onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed'),
+  });
+
+  const updateInfoMut = useMutation({
+    mutationFn: (data: any) => adminUpdateCoordinator(id!, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-coordinator', id] });
+      qc.invalidateQueries({ queryKey: ['admin-coordinators'] });
+      setInfoEditMode(false);
+      toast.success('Coordinator information updated');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to update'),
   });
 
   const toggleActiveMut = useMutation({
@@ -95,24 +230,45 @@ export default function AdminCoordinatorDetail() {
     onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed'),
   });
 
+  const [unassigningRepId, setUnassigningRepId] = useState<string | null>(null);
+  const unassignRepMut = useMutation({
+    mutationFn: (repId: string) => repsApi.adminUnassignCoordinator(repId),
+    onMutate: (repId: string) => setUnassigningRepId(repId),
+    onSettled: () => setUnassigningRepId(null),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-coordinator-reps', id] });
+      qc.invalidateQueries({ queryKey: ['admin-coordinator', id] });
+      toast.success('Rep unassigned');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to unassign'),
+  });
+
+  // ── Derived ───────────────────────────────────────────────────────────────
+
   const reps = (repsData as any)?.items || [];
   const customers = (customersData as any)?.items || [];
   const regionList = Array.isArray(regionsData) ? regionsData : [];
 
+  // ── Loading / Not found ───────────────────────────────────────────────────
+
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-24">
-        <div className="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
+      <div className="flex items-center justify-center py-32">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-9 h-9 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin" />
+          <p className="text-sm text-slate-400">Loading coordinator details…</p>
+        </div>
       </div>
     );
   }
 
   if (!coordinator) {
     return (
-      <div className="text-center py-24 text-slate-400">
-        <p>Coordinator not found.</p>
-        <button onClick={() => navigate('/admin/coordinators')} className="mt-4 text-indigo-600 text-sm underline">
-          Back to Coordinators
+      <div className="text-center py-32 text-slate-400">
+        <User className="w-12 h-12 mx-auto mb-3 opacity-20" />
+        <p className="font-medium">Coordinator not found.</p>
+        <button onClick={() => navigate('/admin/coordinators')} className="mt-4 text-blue-600 text-sm font-medium hover:underline">
+          ← Back to Coordinators
         </button>
       </div>
     );
@@ -124,279 +280,567 @@ export default function AdminCoordinatorDetail() {
     { id: 'customers', label: 'Customers', icon: TrendingUp, count: coordinator.assignedCustomersCount },
   ];
 
+  // ── Render ────────────────────────────────────────────────────────────────
+
   return (
-    <div className="animate-fade-in pb-10">
-      {/* ── Sticky Header ── */}
-      <div className="sticky top-0 z-20 -mx-4 px-4 py-3 bg-white/95 backdrop-blur-sm border-b border-slate-200/80 shadow-sm lg:-mx-8 lg:px-8 flex items-center gap-3">
-        <button onClick={() => navigate('/admin/coordinators')} className="p-2 rounded-xl hover:bg-slate-100 text-slate-500 transition">
+    <div className="space-y-6 pb-16 animate-fade-in">
+
+      {/* ── Page Header ── */}
+      <div className="flex items-center gap-4">
+        <button
+          onClick={() => navigate('/admin/coordinators')}
+          className="p-2 rounded-lg hover:bg-slate-100 transition text-slate-500"
+        >
           <ArrowLeft className="w-5 h-5" />
         </button>
+
         <div className="flex-1 min-w-0">
-          <h1 className="text-lg font-bold text-slate-900 truncate leading-tight">{coordinator.fullName}</h1>
-          <p className="text-[11px] text-slate-400">{coordinator.employeeCode}</p>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h1 className="text-xl lg:text-2xl font-bold text-slate-900 truncate">{coordinator.fullName}</h1>
+            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
+              coordinator.isActive
+                ? 'bg-blue-50 text-blue-700 border-blue-200'
+                : 'bg-slate-100 text-slate-500 border-slate-200'
+            }`}>
+              {coordinator.isActive ? 'Active' : 'Inactive'}
+            </span>
+          </div>
+          <p className="text-sm text-slate-400 mt-0.5">{coordinator.employeeCode} &nbsp;·&nbsp; Coordinator</p>
         </div>
-        <button
-          onClick={() => toggleActiveMut.mutate()}
-          disabled={toggleActiveMut.isPending}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition disabled:opacity-60 ${
-            coordinator.isActive
-              ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200'
-              : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200'
-          }`}
-        >
-          <Power className="w-3.5 h-3.5" />
-          {toggleActiveMut.isPending ? '...' : (coordinator.isActive ? 'Active' : 'Inactive')}
-        </button>
+
+        <div className="hidden lg:flex items-center gap-2">
+          <button
+            onClick={() => toggleActiveMut.mutate()}
+            disabled={toggleActiveMut.isPending}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition disabled:opacity-50 ${
+              coordinator.isActive
+                ? 'border-red-200 text-red-600 bg-red-50 hover:bg-red-100'
+                : 'border-blue-200 text-blue-600 bg-blue-50 hover:bg-blue-100'
+            }`}
+          >
+            <Power className="w-4 h-4" />
+            {toggleActiveMut.isPending ? '…' : coordinator.isActive ? 'Deactivate' : 'Activate'}
+          </button>
+        </div>
       </div>
 
-      {/* ── Hero Profile Card ── */}
-      <div className="mt-5 bg-gradient-to-br from-teal-600 via-teal-700 to-emerald-700 rounded-2xl p-5 text-white relative overflow-hidden shadow-lg shadow-teal-200">
-        <div className="absolute -top-6 -right-6 w-28 h-28 bg-white/10 rounded-full" />
-        <div className="absolute bottom-0 left-1/2 w-20 h-20 bg-white/5 rounded-full translate-y-1/2" />
-        <div className="relative flex items-start gap-4">
-          <div className="w-16 h-16 rounded-2xl bg-white/20 flex items-center justify-center flex-shrink-0 text-2xl font-extrabold shadow-inner">
-            {coordinator.fullName?.charAt(0)?.toUpperCase()}
-          </div>
-          <div className="flex-1 min-w-0">
-            <h2 className="text-xl font-bold leading-tight">{coordinator.fullName}</h2>
-            <p className="text-teal-200 text-sm mt-0.5">{coordinator.employeeCode}</p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {coordinator.email && (
-                <span className="inline-flex items-center gap-1.5 bg-white/15 rounded-full px-2.5 py-1 text-[11px]">
-                  <Mail className="w-3 h-3" /> {coordinator.email}
-                </span>
-              )}
-              {coordinator.phoneNumber && (
-                <span className="inline-flex items-center gap-1.5 bg-white/15 rounded-full px-2.5 py-1 text-[11px]">
-                  <Phone className="w-3 h-3" /> {coordinator.phoneNumber}
-                </span>
-              )}
-              {coordinator.hireDate && (
-                <span className="inline-flex items-center gap-1.5 bg-white/15 rounded-full px-2.5 py-1 text-[11px]">
-                  <Calendar className="w-3 h-3" /> Since {formatDate(coordinator.hireDate)}
-                </span>
-              )}
-              {coordinator.regionName && (
-                <span className="inline-flex items-center gap-1.5 bg-white/15 rounded-full px-2.5 py-1 text-[11px]">
-                  <MapPin className="w-3 h-3" /> {coordinator.regionName}
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-        <div className="relative mt-4 grid grid-cols-2 gap-2 border-t border-white/20 pt-4">
-          <div className="text-center">
-            <p className="text-xl font-bold">{coordinator.assignedRepsCount}</p>
-            <p className="text-teal-200 text-[11px]">Sales Reps</p>
-          </div>
-          <div className="text-center border-l border-white/20">
-            <p className="text-xl font-bold">{coordinator.assignedCustomersCount}</p>
-            <p className="text-teal-200 text-[11px]">Customers</p>
-          </div>
-        </div>
+      {/* ── Snapshot Stats ── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <StatTile
+          label="Sales Reps"
+          value={coordinator.assignedRepsCount ?? reps.length}
+          icon={<Users className="w-4 h-4" />}
+          accent
+        />
+        <StatTile
+          label="Customers"
+          value={coordinator.assignedCustomersCount ?? customers.length}
+          icon={<TrendingUp className="w-4 h-4" />}
+        />
+        <StatTile
+          label="Region"
+          value={coordinator.regionName || '—'}
+          icon={<MapPin className="w-4 h-4" />}
+        />
+        <StatTile
+          label="Status"
+          value={coordinator.isActive ? 'Active' : 'Inactive'}
+          icon={<Power className="w-4 h-4" />}
+        />
       </div>
 
       {/* ── Tab Bar ── */}
-      <div className="mt-5 flex gap-1 bg-slate-100 p-1 rounded-2xl">
+      <div className="flex gap-1 bg-slate-100 p-1 rounded-xl">
         {tabs.map(tab => {
           const Icon = tab.icon;
           const active = activeTab === tab.id;
           return (
-            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-sm font-semibold transition-all ${active ? 'bg-white text-teal-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                active
+                  ? 'bg-white text-blue-700 shadow-sm border border-slate-200'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
             >
               <Icon className="w-4 h-4" />
               {tab.label}
               {tab.count !== undefined && tab.count > 0 && (
-                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${active ? 'bg-teal-100 text-teal-600' : 'bg-slate-300 text-slate-600'}`}>{tab.count}</span>
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                  active ? 'bg-blue-100 text-blue-600' : 'bg-slate-200 text-slate-500'
+                }`}>
+                  {tab.count}
+                </span>
               )}
             </button>
           );
         })}
       </div>
 
-      {/* ── Overview Tab ── */}
+      {/* ════════════════════════════════════════════
+          OVERVIEW TAB
+      ════════════════════════════════════════════ */}
       {activeTab === 'overview' && (
-        <div className="mt-4 space-y-4">
-          {/* Profile Info */}
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-            <div className="px-4 py-3 border-b border-slate-100">
-              <h3 className="text-sm font-semibold text-slate-700">Coordinator Details</h3>
-            </div>
-            {[
-              { label: 'Full Name', value: coordinator.fullName },
-              { label: 'Employee Code', value: coordinator.employeeCode },
-              { label: 'Email', value: coordinator.email },
-              { label: 'Phone', value: coordinator.phoneNumber },
-              { label: 'Region', value: coordinator.regionName },
-              { label: 'Hire Date', value: coordinator.hireDate ? formatDate(coordinator.hireDate) : undefined },
-            ].filter(i => i.value).map((item, idx, arr) => (
-              <div key={item.label} className={`flex items-center justify-between px-4 py-3 ${idx < arr.length - 1 ? 'border-b border-slate-50' : ''}`}>
-                <span className="text-xs text-slate-400 font-medium w-32 flex-shrink-0">{item.label}</span>
-                <span className="text-sm font-medium text-slate-800 text-right">{item.value}</span>
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
+
+          {/* Left – Coordinator info */}
+          <div className="lg:col-span-3 space-y-5">
+            <Card>
+              <CardHeader
+                title="Coordinator Information"
+                icon={<User className="w-4 h-4" />}
+                action={
+                  infoEditMode ? (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          setInfoEditMode(false);
+                          if (coordinator) {
+                            setInfoForm({
+                              fullName: coordinator.fullName,
+                              employeeCode: coordinator.employeeCode || '',
+                              phoneNumber: coordinator.phoneNumber || '',
+                              regionId: coordinator.regionId || '',
+                              hireDate: coordinator.hireDate ? coordinator.hireDate.split('T')[0] : '',
+                            });
+                          }
+                        }}
+                        className="px-3 py-1 rounded-lg bg-slate-100 text-slate-700 text-xs font-semibold hover:bg-slate-200"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() => updateInfoMut.mutate({
+                          fullName: infoForm.fullName,
+                          employeeCode: infoForm.employeeCode,
+                          phoneNumber: infoForm.phoneNumber,
+                          hireDate: infoForm.hireDate || null,
+                        })}
+                        disabled={updateInfoMut.isPending}
+                        className="px-3 py-1 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 disabled:opacity-50"
+                      >
+                        {updateInfoMut.isPending ? 'Saving…' : 'Save'}
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setInfoEditMode(true)}
+                      className="px-3 py-1 rounded-lg bg-slate-100 text-slate-700 text-xs font-semibold hover:bg-slate-200"
+                    >
+                      Edit
+                    </button>
+                  )
+                }
+              />
+              <div className="p-5 divide-y divide-slate-100">
+                <div onDoubleClick={() => setInfoEditMode(true)} className="space-y-3">
+                  <div className="flex items-center justify-between py-2.5 gap-4">
+                    <span className="text-xs text-slate-400 uppercase tracking-wider w-32 flex-shrink-0">Full Name</span>
+                    {infoEditMode ? (
+                      <input
+                        value={infoForm.fullName}
+                        onChange={e => setInfoForm(p => ({ ...p, fullName: e.target.value }))}
+                        className="w-full max-w-sm px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    ) : (
+                      <span className="text-sm font-medium text-slate-800 text-right truncate">{coordinator.fullName}</span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between py-2.5 gap-4">
+                    <span className="text-xs text-slate-400 uppercase tracking-wider w-32 flex-shrink-0">Employee Code</span>
+                    {infoEditMode ? (
+                      <input
+                        value={infoForm.employeeCode}
+                        onChange={e => setInfoForm(p => ({ ...p, employeeCode: e.target.value }))}
+                        className="w-full max-w-sm px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    ) : (
+                      <span className="text-sm font-medium text-slate-800 text-right truncate">{coordinator.employeeCode}</span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between py-2.5 gap-4">
+                    <span className="text-xs text-slate-400 uppercase tracking-wider w-32 flex-shrink-0">Phone</span>
+                    {infoEditMode ? (
+                      <input
+                        value={infoForm.phoneNumber}
+                        onChange={e => setInfoForm(p => ({ ...p, phoneNumber: e.target.value }))}
+                        className="w-full max-w-sm px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    ) : (
+                      <span className="text-sm font-medium text-slate-800 text-right truncate">{coordinator.phoneNumber}</span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between py-2.5 gap-4">
+                    <span className="text-xs text-slate-400 uppercase tracking-wider w-32 flex-shrink-0">Hire Date</span>
+                    {infoEditMode ? (
+                      <input
+                        type="date"
+                        value={infoForm.hireDate}
+                        onChange={e => setInfoForm(p => ({ ...p, hireDate: e.target.value }))}
+                        className="w-full max-w-sm px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    ) : (
+                      <span className="text-sm font-medium text-slate-800 text-right truncate">{coordinator.hireDate ? formatDate(coordinator.hireDate) : '—'}</span>
+                    )}
+                  </div>
+                </div>
               </div>
-            ))}
+            </Card>
+
+            {/* Mobile-only actions */}
+            <div className="lg:hidden flex gap-3">
+              <button
+                onClick={() => toggleActiveMut.mutate()}
+                disabled={toggleActiveMut.isPending}
+                className={`flex-1 py-2.5 rounded-lg text-sm font-medium border transition disabled:opacity-50 ${
+                  coordinator.isActive
+                    ? 'border-red-200 text-red-600 bg-red-50'
+                    : 'border-blue-200 text-blue-600 bg-blue-50'
+                }`}
+              >
+                {coordinator.isActive ? 'Deactivate' : 'Activate'}
+              </button>
+            </div>
           </div>
 
-          {/* Quick Actions */}
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-            <div className="px-4 py-3 border-b border-slate-100">
-              <h3 className="text-sm font-semibold text-slate-700">Quick Actions</h3>
-            </div>
-            {[
-              { label: 'Edit Details', sublabel: 'Update name, phone, region', icon: BarChart2, color: 'bg-indigo-50 text-indigo-600', action: () => { setEditForm({ fullName: coordinator.fullName, phoneNumber: coordinator.phoneNumber || '', regionId: coordinator.regionId || '' }); setShowEdit(true); } },
-              { label: 'Assign Rep', sublabel: 'Add a sales rep to this coordinator', icon: UserPlus, color: 'bg-teal-50 text-teal-600', action: () => setShowAssignRep(true) },
-            ].map((item, idx) => {
-              const Icon = item.icon;
-              return (
-                <button key={item.label} onClick={item.action}
-                  className={`w-full flex items-center justify-between px-4 py-3.5 hover:bg-slate-50 transition text-left ${idx === 0 ? 'border-b border-slate-50' : ''}`}
-                >
-                  <div className="flex items-center gap-3">
-                    <span className={`w-9 h-9 rounded-xl flex items-center justify-center ${item.color}`}>
-                      <Icon className="w-4 h-4" />
-                    </span>
-                    <div>
-                      <p className="text-sm font-semibold text-slate-800">{item.label}</p>
-                      <p className="text-[11px] text-slate-400">{item.sublabel}</p>
-                    </div>
+          {/* Right – Reps + Customers preview */}
+          <div className="lg:col-span-2 space-y-5">
+
+            {/* Reps preview */}
+            <Card>
+              <CardHeader
+                title="Sales Reps"
+                icon={<Users className="w-4 h-4" />}
+                action={
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setShowAssignRep(true)}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:underline"
+                    >
+                      <UserPlus className="w-3.5 h-3.5" /> Assign
+                    </button>
+                    {reps.length > 4 && (
+                      <button
+                        onClick={() => setActiveTab('reps')}
+                        className="text-xs text-blue-600 font-medium hover:underline flex items-center gap-0.5"
+                      >
+                        View all <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
-                  <ChevronRight className="w-4 h-4 text-slate-300" />
-                </button>
-              );
-            })}
+                }
+              />
+              {reps.length === 0 ? (
+                <div className="p-8 text-center text-slate-400 text-sm">
+                  <Users className="w-8 h-8 mx-auto mb-2 opacity-25" />
+                  No reps assigned yet
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-100">
+                  {reps.slice(0, 4).map((r: any) => (
+                    <button
+                      key={r.id}
+                      onClick={() => navigate(`/admin/reps/${r.id}`)}
+                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition text-left group"
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center font-bold text-blue-600 text-sm flex-shrink-0">
+                        {(r.fullName || '?').charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-slate-800 truncate">{r.fullName}</p>
+                        <p className="text-xs text-slate-400">{r.employeeCode}</p>
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <StatusBadge status={r.isActive ? 'Active' : 'Inactive'} />
+                        <button
+                          onClick={e => {
+                            e.stopPropagation();
+                            if (!confirm('Remove this rep from the coordinator?')) return;
+                            unassignRepMut.mutate(r.id);
+                          }}
+                          disabled={unassigningRepId === r.id}
+                          className="p-1 rounded-md text-red-600 hover:bg-red-50 disabled:opacity-50"
+                          title="Unassign rep"
+                        >
+                          <UserMinus className="w-4 h-4" />
+                        </button>
+                        <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-400 transition" />
+                      </div>
+                    </button>
+                  ))}
+                  {reps.length > 4 && (
+                    <button
+                      onClick={() => setActiveTab('reps')}
+                      className="w-full py-3 text-xs font-medium text-blue-600 hover:bg-blue-50 transition text-center"
+                    >
+                      +{reps.length - 4} more reps
+                    </button>
+                  )}
+                </div>
+              )}
+            </Card>
+
+            {/* Customers preview */}
+            <Card>
+              <CardHeader
+                title="Customers"
+                icon={<TrendingUp className="w-4 h-4" />}
+                action={
+                  customers.length > 4 ? (
+                    <button
+                      onClick={() => setActiveTab('customers')}
+                      className="text-xs text-blue-600 font-medium hover:underline flex items-center gap-0.5"
+                    >
+                      View all <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  ) : null
+                }
+              />
+              {customers.length === 0 ? (
+                <div className="p-8 text-center text-slate-400 text-sm">
+                  <TrendingUp className="w-8 h-8 mx-auto mb-2 opacity-25" />
+                  No customers in this region
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-100">
+                  {customers.slice(0, 4).map((c: any) => (
+                    <button
+                      key={c.id}
+                      onClick={() => navigate(`/admin/customers/${c.id}`)}
+                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition text-left group"
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center font-bold text-slate-500 text-sm flex-shrink-0">
+                        {(c.shopName || c.fullName || '?').charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-slate-800 truncate">{c.shopName || c.fullName}</p>
+                        <p className="text-xs text-slate-400 truncate">{c.email || '—'}</p>
+                      </div>
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-400 transition flex-shrink-0" />
+                    </button>
+                  ))}
+                  {customers.length > 4 && (
+                    <button
+                      onClick={() => setActiveTab('customers')}
+                      className="w-full py-3 text-xs font-medium text-blue-600 hover:bg-blue-50 transition text-center"
+                    >
+                      +{customers.length - 4} more customers
+                    </button>
+                  )}
+                </div>
+              )}
+            </Card>
           </div>
         </div>
       )}
 
-      {/* ── Reps Tab ── */}
+      {/* ════════════════════════════════════════════
+          REPS TAB
+      ════════════════════════════════════════════ */}
       {activeTab === 'reps' && (
-        <div className="mt-4 space-y-3">
+        <div className="space-y-4">
           <button
             onClick={() => setShowAssignRep(true)}
-            className="w-full flex items-center justify-center gap-2 py-3.5 border-2 border-dashed border-teal-300 rounded-2xl text-teal-600 text-sm font-semibold hover:bg-teal-50 transition"
+            className="w-full flex items-center justify-center gap-2 py-3.5 border-2 border-dashed border-blue-200
+                       rounded-xl text-blue-600 text-sm font-semibold hover:bg-blue-50 hover:border-blue-300 transition"
           >
-            <UserPlus className="w-4 h-4" /> Assign Rep
+            <UserPlus className="w-4 h-4" />
+            Assign Sales Rep
           </button>
+
           {reps.length === 0 ? (
-            <div className="text-center py-10 text-slate-400">
-              <Users className="w-10 h-10 mx-auto mb-2 opacity-30" />
-              <p className="text-sm">No reps assigned</p>
+            <div className="text-center py-16 text-slate-400">
+              <Users className="w-12 h-12 mx-auto mb-3 opacity-20" />
+              <p className="font-medium text-slate-500">No reps assigned yet</p>
+              <p className="text-sm mt-1">Use the button above to assign a sales rep.</p>
             </div>
           ) : (
-            reps.map((r: any) => (
-              <button
-                key={r.id}
-                onClick={() => navigate(`/admin/reps/${r.id}`)}
-                className="w-full flex items-center gap-3 bg-white rounded-2xl border border-slate-100 shadow-sm p-3.5 hover:shadow-md hover:-translate-y-0.5 transition-all text-left"
-              >
-                <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center font-bold text-indigo-600 flex-shrink-0">
-                  {(r.fullName || '?').charAt(0).toUpperCase()}
+            <>
+              <p className="text-sm text-slate-500">{reps.length} rep{reps.length !== 1 ? 's' : ''} assigned</p>
+              <Card>
+                <div className="divide-y divide-slate-100">
+                  {reps.map((r: any) => (
+                    <button
+                      key={r.id}
+                      onClick={() => navigate(`/admin/reps/${r.id}`)}
+                      className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-slate-50 transition text-left group"
+                    >
+                      <div className="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center font-bold text-blue-600 text-sm flex-shrink-0">
+                        {(r.fullName || '?').charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-slate-800 truncate">{r.fullName}</p>
+                        <p className="text-xs text-slate-400">{r.employeeCode} · {r.regionName || 'No region'}</p>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <StatusBadge status={r.isActive ? 'Active' : 'Inactive'} />
+                        <button
+                          onClick={e => {
+                            e.stopPropagation();
+                            if (!confirm('Remove this rep from the coordinator?')) return;
+                            unassignRepMut.mutate(r.id);
+                          }}
+                          disabled={unassigningRepId === r.id}
+                          className="p-1 rounded-md text-red-600 hover:bg-red-50 disabled:opacity-50"
+                          title="Unassign rep"
+                        >
+                          <UserMinus className="w-4 h-4" />
+                        </button>
+                        <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-slate-400 transition" />
+                      </div>
+                    </button>
+                  ))}
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-slate-800 truncate">{r.fullName}</p>
-                  <p className="text-xs text-slate-400">{r.employeeCode} · {r.regionName || 'No region'}</p>
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <StatusBadge status={r.isActive ? 'Active' : 'Inactive'} />
-                  <ChevronRight className="w-4 h-4 text-slate-300" />
-                </div>
-              </button>
-            ))
+              </Card>
+            </>
           )}
         </div>
       )}
 
-      {/* ── Customers Tab ── */}
+      {/* ════════════════════════════════════════════
+          CUSTOMERS TAB
+      ════════════════════════════════════════════ */}
       {activeTab === 'customers' && (
-        <div className="mt-4 space-y-2">
+        <div className="space-y-4">
           {customers.length === 0 ? (
-            <div className="text-center py-10 text-slate-400">
-              <TrendingUp className="w-10 h-10 mx-auto mb-2 opacity-30" />
-              <p className="text-sm">No customers in this coordinator's region</p>
+            <div className="text-center py-16 text-slate-400">
+              <TrendingUp className="w-12 h-12 mx-auto mb-3 opacity-20" />
+              <p className="font-medium text-slate-500">No customers in this region</p>
+              <p className="text-sm mt-1">Customers are associated via their assigned sales rep.</p>
             </div>
           ) : (
-            customers.map((c: any) => (
-              <button
-                key={c.id}
-                onClick={() => navigate(`/admin/customers/${c.id}`)}
-                className="w-full flex items-center gap-3 bg-white rounded-2xl border border-slate-100 shadow-sm p-3.5 hover:shadow-md hover:-translate-y-0.5 transition-all text-left"
-              >
-                <div className="w-10 h-10 rounded-xl bg-teal-100 flex items-center justify-center font-bold text-teal-600 flex-shrink-0">
-                  {(c.shopName || c.fullName || '?').charAt(0).toUpperCase()}
+            <>
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-slate-500">{customers.length} customer{customers.length !== 1 ? 's' : ''} in this coordinator's region</p>
+                <button
+                  onClick={() => setShowCreateCustomer(true)}
+                  className="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition"
+                >
+                  <UserPlus className="w-3.5 h-3.5" />
+                  Add Customer
+                </button>
+              </div>
+              <Card>
+                <div className="divide-y divide-slate-100">
+                  {customers.map((c: any) => (
+                    <div
+                      key={c.id}
+                      className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-slate-50 transition text-left"
+                    >
+                      <button
+                        onClick={() => navigate(`/admin/customers/${c.id}`)}
+                        className="flex-1 flex items-center gap-3 text-left"
+                      >
+                        <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center font-bold text-slate-500 text-sm flex-shrink-0">
+                          {(c.shopName || c.fullName || '?').charAt(0).toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-slate-800 truncate">{c.shopName || c.fullName}</p>
+                          <p className="text-xs text-slate-400 truncate">{c.email || '—'}</p>
+                        </div>
+                      </button>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <StatusBadge status={c.isActive ? 'Active' : 'Inactive'} />
+                        <button
+                          onClick={() => {
+                            if (!confirm('Remove this customer from the coordinator?')) return;
+                            unassignCustomerMut.mutate(c.id);
+                          }}
+                          disabled={unassignCustomerMut.isPending}
+                          className="p-1 rounded-md text-red-600 hover:bg-red-50 disabled:opacity-50"
+                          title="Unassign customer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                        <ChevronRight className="w-4 h-4 text-slate-300" />
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-slate-800 truncate">{c.shopName || c.fullName}</p>
-                  <p className="text-xs text-slate-400 truncate">{c.email || '—'}</p>
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <StatusBadge status={c.isActive ? 'Active' : 'Inactive'} />
-                  <ChevronRight className="w-4 h-4 text-slate-300" />
-                </div>
-              </button>
-            ))
+              </Card>
+            </>
           )}
         </div>
       )}
 
-      {/* ── Edit Coordinator Modal ── */}
-      {showEdit && (
-        <BottomSheet open={true} onClose={() => setShowEdit(false)} title="Edit Coordinator">
+      {/* ── Edit Coordinator Bottom Sheet ── */}
+
+      {/* ── Assign Rep Bottom Sheet ── */}
+      {showAssignRep && (
+        <BottomSheet open={true} onClose={() => setShowAssignRep(false)} title="Assign Sales Rep">
           <div className="p-5 space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Full Name</label>
-              <input value={editForm.fullName} onChange={e => setEditForm(p => ({ ...p, fullName: e.target.value }))}
-                className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-teal-500/20" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Phone</label>
-              <input value={editForm.phoneNumber} onChange={e => setEditForm(p => ({ ...p, phoneNumber: e.target.value }))}
-                className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-teal-500/20" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Region</label>
-              <select value={editForm.regionId} onChange={e => setEditForm(p => ({ ...p, regionId: e.target.value }))}
-                className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white outline-none">
-                <option value="">No region</option>
-                {regionList.map((r: any) => <option key={r.id} value={r.id}>{r.name}</option>)}
-              </select>
-            </div>
+            <SelectField
+              label="Select Sales Rep"
+              value={selectedRepId}
+              onChange={setSelectedRepId}
+            >
+              <option value="">Choose a rep…</option>
+              {((allRepsData as any)?.items || []).map((r: any) => (
+                <option key={r.id} value={r.id}>{r.fullName} ({r.employeeCode})</option>
+              ))}
+            </SelectField>
+
             <div className="flex gap-3 pt-2">
-              <button onClick={() => setShowEdit(false)} className="flex-1 py-2.5 bg-slate-100 rounded-xl text-sm font-medium text-slate-600">Cancel</button>
               <button
-                onClick={() => updateMut.mutate({ fullName: editForm.fullName, phoneNumber: editForm.phoneNumber, regionId: editForm.regionId || null })}
-                disabled={updateMut.isPending || !editForm.fullName}
-                className="flex-1 py-2.5 bg-teal-600 text-white rounded-xl text-sm font-medium disabled:opacity-50"
+                onClick={() => setShowAssignRep(false)}
+                className="flex-1 py-2.5 bg-slate-100 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-200 transition"
               >
-                {updateMut.isPending ? 'Saving...' : 'Save'}
+                Cancel
+              </button>
+              <button
+                onClick={() => assignRepMut.mutate()}
+                disabled={!selectedRepId || assignRepMut.isPending}
+                className="flex-1 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-semibold
+                           hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                {assignRepMut.isPending ? 'Assigning…' : 'Assign Rep'}
               </button>
             </div>
           </div>
         </BottomSheet>
       )}
 
-      {/* ── Assign Rep Modal ── */}
-      {showAssignRep && (
-        <BottomSheet open={true} onClose={() => setShowAssignRep(false)} title="Assign Sales Rep">
+      {showCreateCustomer && (
+        <BottomSheet open={true} onClose={() => setShowCreateCustomer(false)} title="Add Customer">
           <div className="p-5 space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Select Sales Rep</label>
-              <select value={selectedRepId} onChange={e => setSelectedRepId(e.target.value)}
-                className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white outline-none">
-                <option value="">Choose a rep...</option>
-                {((allRepsData as any)?.items || []).map((r: any) => (
-                  <option key={r.id} value={r.id}>{r.fullName} ({r.employeeCode})</option>
+            <p className="text-sm text-slate-500">
+              Select an existing customer in this region to assign to this coordinator.
+            </p>
+            <div className="max-h-72 overflow-y-auto space-y-2">
+              {((availableCustomersData as any)?.items || [])
+                .filter((c: any) => !c.assignedCoordinatorId)
+                .map((c: any) => (
+                  <button
+                    key={c.id}
+                    onClick={() => assignCustomerMut.mutate(c.id)}
+                    className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-lg border border-slate-200 hover:bg-slate-50 transition"
+                  >
+                    <div className="flex items-center gap-3 text-left">
+                      <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center font-bold text-slate-500 text-sm flex-shrink-0">
+                        {(c.shopName || c.fullName || '?').charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-800 truncate">{c.shopName || c.fullName}</p>
+                        <p className="text-xs text-slate-400 truncate">{c.email || '—'}</p>
+                      </div>
+                    </div>
+                    <span className="text-xs font-semibold text-blue-600">Assign</span>
+                  </button>
                 ))}
-              </select>
+              {((availableCustomersData as any)?.items || []).filter((c: any) => !c.assignedCoordinatorId).length === 0 && (
+                <div className="text-sm text-slate-500">No available customers in this region.</div>
+              )}
             </div>
             <div className="flex gap-3 pt-2">
-              <button onClick={() => setShowAssignRep(false)} className="flex-1 py-2.5 bg-slate-100 rounded-xl text-sm font-medium text-slate-600">Cancel</button>
               <button
-                onClick={() => assignRepMut.mutate()}
-                disabled={!selectedRepId || assignRepMut.isPending}
-                className="flex-1 py-2.5 bg-teal-600 text-white rounded-xl text-sm font-medium disabled:opacity-50"
+                onClick={() => setShowCreateCustomer(false)}
+                className="flex-1 py-2.5 bg-slate-100 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-200 transition"
               >
-                {assignRepMut.isPending ? 'Assigning...' : 'Assign'}
+                Close
               </button>
             </div>
           </div>

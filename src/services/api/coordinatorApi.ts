@@ -1,6 +1,7 @@
 import api from './axiosConfig';
 import type { ApiResponse, PagedResult } from '../../types/api.types';
 import type { Customer } from '../../types/customer.types';
+import type { RepPerformance, Route } from '../../types/common.types';
 import type {
   Coordinator,
   CreateCoordinatorRequest,
@@ -34,6 +35,11 @@ export const adminUpdateCoordinator = async (id: string, req: UpdateCoordinatorR
   return data.data;
 };
 
+export const adminDeleteCoordinator = async (id: string) => {
+  const { data } = await api.delete<ApiResponse<string>>(`/admin/coordinators/${id}`);
+  return data.data;
+};
+
 export const adminAssignRepToCoordinator = async (coordinatorId: string, repId: string) => {
   const { data } = await api.post<ApiResponse<string>>(`/admin/coordinators/${coordinatorId}/assign-rep`, { repId });
   return data.data;
@@ -46,13 +52,91 @@ export const coordinatorGetProfile = async () => {
   return data.data;
 };
 
+export const coordinatorUpdateProfile = async (req: { fullName?: string; phoneNumber?: string }) => {
+  const { data } = await api.put<ApiResponse<Coordinator>>('/coordinator/profile', req);
+  return data.data;
+};
+
 export const coordinatorGetDashboard = async () => {
   const { data } = await api.get<ApiResponse<CoordinatorDashboard>>('/coordinator/dashboard');
   return data.data;
 };
 
 export const coordinatorGetReps = async () => {
-  const { data } = await api.get<ApiResponse<{ id: string; fullName: string; employeeCode: string; regionId?: string; regionName?: string; email?: string; phoneNumber?: string; isActive: boolean }[]>>('/coordinator/reps');
+  const { data } = await api.get<ApiResponse<{ id: string; fullName: string; employeeCode: string; regionId?: string; regionName?: string; subRegionId?: string; subRegionName?: string; email?: string; phoneNumber?: string; isActive: boolean }[]>>('/coordinator/reps');
+  return data.data;
+};
+
+export const coordinatorGetRepById = async (repId: string) => {
+  const { data } = await api.get<ApiResponse<{ id: string; fullName: string; employeeCode: string; regionId?: string; regionName?: string; subRegionId?: string; subRegionName?: string; email?: string; phoneNumber?: string; isActive: boolean; assignedCustomersCount?: number; hireDate?: string; createdAt?: string }>>(`/coordinator/reps/${repId}`);
+  return data.data;
+};
+
+export const coordinatorGetRepPerformance = async (repId: string, params?: { from?: string; to?: string }) => {
+  const { data } = await api.get<ApiResponse<RepPerformance>>(`/coordinator/reps/${repId}/performance`, { params });
+  return data.data;
+};
+
+export const coordinatorGetRepCustomers = async (repId: string, page = 1, pageSize = 50, search?: string) => {
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+  if (search) params.set('search', search);
+  const { data } = await api.get<ApiResponse<PagedResult<Customer>>>(`/coordinator/reps/${repId}/customers?${params}`);
+  return data.data;
+};
+
+export const coordinatorGetRepRoutes = async (repId: string) => {
+  const { data } = await api.get<ApiResponse<Route[]>>(`/coordinator/reps/${repId}/routes`);
+  return data.data;
+};
+
+export const coordinatorGetRoutes = async () => {
+  const { data } = await api.get<ApiResponse<Route[]>>('/coordinator/routes');
+  return data.data;
+};
+
+export const coordinatorCreateRoute = async (payload: { name: string; description?: string; repId?: string; daysOfWeek?: string[]; estimatedDurationMinutes?: number }) => {
+  const body = {
+    name: payload.name,
+    description: payload.description,
+    repId: payload.repId || undefined,
+    daysOfWeek: JSON.stringify(payload.daysOfWeek || []),
+    estimatedDurationMinutes: payload.estimatedDurationMinutes || 0,
+    customers: [],
+  };
+  const { data } = await api.post<ApiResponse<Route>>('/coordinator/routes', body);
+  return data.data;
+};
+
+export const coordinatorAssignRoute = async (routeId: string, repId: string) => {
+  const { data } = await api.post<ApiResponse<string>>(`/coordinator/routes/${routeId}/assign`, { repId });
+  return data.data;
+};
+
+export const coordinatorCreateRouteForRep = async (repId: string, payload: { name: string; description?: string; daysOfWeek?: string[]; estimatedDurationMinutes?: number }) => {
+  const body = {
+    name: payload.name,
+    description: payload.description,
+    repId,
+    daysOfWeek: JSON.stringify(payload.daysOfWeek || []),
+    estimatedDurationMinutes: payload.estimatedDurationMinutes || 0,
+    customers: [],
+  };
+  const { data } = await api.post<ApiResponse<Route>>(`/coordinator/reps/${repId}/routes`, body);
+  return data.data;
+};
+
+export const coordinatorAddCustomerToRoute = async (routeId: string, payload: { customerId: string; visitOrder: number; visitFrequency?: string }) => {
+  const { data } = await api.post<ApiResponse<string>>(`/coordinator/routes/${routeId}/customers`, payload);
+  return data.data;
+};
+
+export const coordinatorRemoveCustomerFromRoute = async (routeId: string, customerId: string) => {
+  const { data } = await api.delete<ApiResponse<string>>(`/coordinator/routes/${routeId}/customers/${customerId}`);
+  return data.data;
+};
+
+export const coordinatorDeleteRoute = async (routeId: string) => {
+  const { data } = await api.delete<ApiResponse<string>>(`/coordinator/routes/${routeId}`);
   return data.data;
 };
 

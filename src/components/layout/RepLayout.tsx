@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { useSignalR } from '../../hooks/useSignalR';
@@ -6,40 +6,45 @@ import { useQuery } from '@tanstack/react-query';
 import { notificationsApi } from '../../services/api/notificationsApi';
 import {
   LayoutDashboard, MapPin, Users, ShoppingCart,
-  TrendingUp, LogOut, Bell, DollarSign,
-  Menu, X, ChevronLeft, Zap, MessageSquare, FileText
+  TrendingUp, LogOut, Bell,
+  Menu, X, ChevronLeft, Zap, MessageSquare, FileText, User
 } from 'lucide-react';
 import ConfirmModal from '../common/ConfirmModal';
+import NotificationPanel from '../common/NotificationPanel';
+import { useSectionNotificationBadges } from '../../hooks/useSectionNotificationBadges';
+import { useAutoCollapseSidebar } from '../../hooks/useAutoCollapseSidebar';
 
 const navItems = [
   { to: '/rep', icon: LayoutDashboard, label: 'Dashboard', end: true },
   { to: '/rep/routes', icon: MapPin, label: 'Routes' },
   { to: '/rep/orders', icon: ShoppingCart, label: 'Orders' },
-  { to: '/rep/payments', icon: DollarSign, label: 'Payments' },
   { to: '/rep/customers', icon: Users, label: 'Clients' },
   { to: '/rep/quotations', icon: FileText, label: 'Quotations' },
   { to: '/rep/performance', icon: TrendingUp, label: 'Performance' },
-  { to: '/rep/notifications', icon: Bell, label: 'Notifications' },
   { to: '/rep/support', icon: MessageSquare, label: 'Support' },
+  { to: '/rep/profile', icon: User, label: 'Profile' },
 ];
 
 const bottomNavItems = [
   { to: '/rep', icon: LayoutDashboard, label: 'Home', end: true },
   { to: '/rep/routes', icon: MapPin, label: 'Routes' },
   { to: '/rep/orders', icon: ShoppingCart, label: 'Orders' },
-  { to: '/rep/payments', icon: DollarSign, label: 'Payments' },
   { to: '/rep/customers', icon: Users, label: 'Clients' },
   { to: '/rep/performance', icon: TrendingUp, label: 'Stats' },
+  { to: '/rep/profile', icon: User, label: 'Profile' },
 ];
 
 export default function RepLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
   const { user, logout } = useAuth();
   useSignalR();
   const navigate = useNavigate();
   const location = useLocation();
+
+  useAutoCollapseSidebar({ sidebarOpen, setSidebarOpen });
 
   const userId = user?.id;
 
@@ -58,6 +63,43 @@ export default function RepLayout() {
   const currentPage = navItems.find(item =>
     item.end ? location.pathname === item.to : location.pathname.startsWith(item.to)
   );
+
+  const sectionMap = useMemo(() => ({
+    routes: ['RouteCreated', 'RouteAssigned', 'RouteUpdated', 'RouteDeleted'],
+    orders: ['NewOrder', 'OrderStatusUpdate'],
+    quotations: ['QuotationSubmitted', 'QuotationApproved', 'QuotationRejected'],
+    customers: ['CustomerAssignment', 'CustomerApproval', 'CustomerRejection'],
+    support: ['ComplaintUpdate', 'SupportResolution'],
+    performance: ['TargetAchievement'],
+  }), []);
+
+  const { counts, markSectionAsRead } = useSectionNotificationBadges(userId, sectionMap);
+
+  const activeSection = useMemo(() => {
+    const path = location.pathname;
+    if (path.startsWith('/rep/routes')) return 'routes';
+    if (path.startsWith('/rep/orders')) return 'orders';
+    if (path.startsWith('/rep/quotations')) return 'quotations';
+    if (path.startsWith('/rep/customers')) return 'customers';
+    if (path.startsWith('/rep/support')) return 'support';
+    if (path.startsWith('/rep/performance')) return 'performance';
+    return '';
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!activeSection) return;
+    if ((counts[activeSection] || 0) === 0) return;
+    markSectionAsRead(activeSection);
+  }, [activeSection, counts, markSectionAsRead]);
+
+  const itemSection: Record<string, string> = {
+    '/rep/routes': 'routes',
+    '/rep/orders': 'orders',
+    '/rep/quotations': 'quotations',
+    '/rep/customers': 'customers',
+    '/rep/support': 'support',
+    '/rep/performance': 'performance',
+  };
 
   return (
     <div className="flex h-screen bg-slate-50">
@@ -103,11 +145,16 @@ export default function RepLayout() {
                   {sidebarOpen && (
                     <span className="flex-1">{item.label}</span>
                   )}
-                  {sidebarOpen && item.to === '/rep/notifications' && (unreadCount ?? 0) > 0 && (
-                    <span className="bg-emerald-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
-                      {unreadCount}
-                    </span>
-                  )}
+                  {sidebarOpen && (() => {
+                    const section = itemSection[item.to];
+                    const count = section ? (counts[section] || 0) : 0;
+                    if (!count) return null;
+                    return (
+                      <span className="bg-emerald-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                        {count}
+                      </span>
+                    );
+                  })()}
                 </>
               )}
             </NavLink>
@@ -141,8 +188,8 @@ export default function RepLayout() {
       {mobileMenuOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setMobileMenuOpen(false)} />
-          <aside className="fixed left-0 top-0 bottom-0 w-72 bg-white z-50 animate-slide-in shadow-2xl">
-            <div className="flex items-center justify-between px-5 h-14 border-b border-slate-100">
+          <aside className="fixed left-0 top-0 bottom-0 w-[86vw] max-w-[360px] bg-white z-50 animate-slide-in shadow-2xl">
+            <div className="flex items-center justify-between px-5 h-14 md:h-16 border-b border-slate-100 pt-safe">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
                   <Zap className="w-4 h-4 text-white" />
@@ -153,7 +200,7 @@ export default function RepLayout() {
                 <X className="w-5 h-5 text-slate-500" />
               </button>
             </div>
-            <nav className="p-3 space-y-0.5">
+            <nav className="p-3 space-y-0.5 overflow-y-auto h-[calc(100%-124px)] md:h-[calc(100%-136px)]">
               {navItems.map((item) => (
                 <NavLink
                   key={item.to}
@@ -161,18 +208,28 @@ export default function RepLayout() {
                   end={item.end}
                   onClick={() => setMobileMenuOpen(false)}
                   className={({ isActive }) =>
-                    `flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all ${
+                    `flex items-center gap-3 px-3 py-3 rounded-xl text-[13px] font-medium transition-all ${
                       isActive ? 'bg-emerald-50 text-emerald-700' : 'text-slate-500 hover:bg-slate-50'
                     }`
                   }
                 >
                   <item.icon className="w-[18px] h-[18px]" />
-                  <span>{item.label}</span>
+                  <span className="flex-1">{item.label}</span>
+                  {(() => {
+                    const section = itemSection[item.to];
+                    const count = section ? (counts[section] || 0) : 0;
+                    if (!count) return null;
+                    return (
+                      <span className="bg-emerald-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                        {count}
+                      </span>
+                    );
+                  })()}
                 </NavLink>
               ))}
             </nav>
-            <div className="absolute bottom-0 left-0 right-0 p-3 border-t border-slate-100">
-              <button onClick={handleLogout} className="flex items-center gap-3 px-3 py-2.5 text-sm text-red-600 hover:bg-red-50 w-full rounded-xl transition">
+            <div className="absolute bottom-0 left-0 right-0 p-3 border-t border-slate-100 bg-white pb-safe">
+              <button onClick={handleLogout} className="flex items-center gap-3 px-3 py-3 text-sm text-red-600 hover:bg-red-50 w-full rounded-xl transition">
                 <LogOut className="w-[18px] h-[18px]" /><span className="font-medium">Sign Out</span>
               </button>
             </div>
@@ -194,10 +251,10 @@ export default function RepLayout() {
       )}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top Header */}
-        <header className="bg-white/80 backdrop-blur-xl border-b border-slate-200/60 px-4 lg:px-6 h-14 flex items-center justify-between flex-shrink-0 sticky top-0 z-30">
+        <header className="bg-white/85 backdrop-blur-xl border-b border-slate-200/60 px-3 md:px-4 lg:px-6 h-14 md:h-16 lg:h-14 pt-safe lg:pt-0 flex items-center justify-between flex-shrink-0 sticky top-0 z-30">
           <div className="flex items-center gap-3">
             {/* Mobile: hamburger */}
-            <button className="lg:hidden p-2 hover:bg-slate-100 rounded-xl transition" onClick={() => setMobileMenuOpen(true)}>
+            <button className="lg:hidden p-2.5 hover:bg-slate-100 rounded-xl transition" onClick={() => setMobileMenuOpen(true)}>
               <Menu className="w-5 h-5 text-slate-600" />
             </button>
             {/* Desktop: sidebar toggle */}
@@ -206,11 +263,11 @@ export default function RepLayout() {
             </button>
 
             {/* Mobile: brand */}
-            <div className="lg:hidden flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
-                <Zap className="w-3.5 h-3.5 text-white" />
+            <div className="lg:hidden flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
+                <Zap className="w-4 h-4 text-white" />
               </div>
-              <span className="font-bold text-slate-900 text-sm">Sales<span className="text-emerald-600">Rep</span></span>
+              <span className="font-bold text-slate-900 text-sm md:text-base">Sales<span className="text-emerald-600">Rep</span></span>
             </div>
             {/* Desktop: page title */}
             <div className="hidden lg:block">
@@ -219,20 +276,23 @@ export default function RepLayout() {
           </div>
 
           <div className="flex items-center gap-1 lg:gap-2">
-            <button
-              onClick={() => navigate('/rep/notifications')}
-              className="relative p-2.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition"
-            >
-              <Bell className="w-[18px] h-[18px]" />
-              {(unreadCount ?? 0) > 0 && (
-                <span className="absolute top-1 right-1 bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-[9px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1 shadow-lg shadow-emerald-500/30 animate-scale-in">
-                  {unreadCount}
-                </span>
-              )}
-            </button>
+            <div className="relative">
+              <button
+                onClick={() => setShowNotifications((v) => !v)}
+                className="relative p-2.5 md:p-3 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition"
+              >
+                <Bell className="w-[18px] h-[18px]" />
+                {(unreadCount ?? 0) > 0 && (
+                  <span className="absolute top-1 right-1 bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-[9px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1 shadow-lg shadow-emerald-500/30 animate-scale-in">
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+              <NotificationPanel open={showNotifications} onClose={() => setShowNotifications(false)} userId={userId} accent="emerald" />
+            </div>
             {/* Desktop: user info */}
             <div className="hidden lg:flex items-center gap-2.5 ml-1 pl-3 border-l border-slate-200">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-slate-500 to-slate-600 flex items-center justify-center">
                 <span className="text-white text-xs font-bold">{user?.username?.[0]?.toUpperCase()}</span>
               </div>
               <div>
@@ -244,29 +304,29 @@ export default function RepLayout() {
               </button>
             </div>
             {/* Mobile: logout */}
-            <button onClick={handleLogout} className="lg:hidden p-2.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition">
+            <button onClick={handleLogout} className="lg:hidden p-2.5 md:p-3 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition">
               <LogOut className="w-[18px] h-[18px]" />
             </button>
           </div>
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 overflow-y-auto pb-20 lg:pb-0">
-          <div className="lg:p-6 lg:max-w-6xl lg:mx-auto">
+        <main className="flex-1 overflow-y-auto pb-[calc(env(safe-area-inset-bottom,0px)+86px)] md:pb-[calc(env(safe-area-inset-bottom,0px)+92px)] lg:pb-0">
+          <div className="px-3 pt-3 md:px-4 md:pt-4 w-full max-w-[1240px] mx-auto lg:px-6 lg:pt-5 lg:pb-6">
             <Outlet />
           </div>
         </main>
 
         {/* ========== MOBILE BOTTOM NAV (hidden on lg+) ========== */}
-        <nav className="fixed bottom-0 left-0 right-0 z-40 lg:hidden bg-white/90 backdrop-blur-xl border-t border-slate-200/60 flex-shrink-0 pb-safe">
-          <div className="flex justify-around px-2">
+        <nav className="fixed bottom-0 left-0 right-0 z-40 lg:hidden bg-white/90 backdrop-blur-xl border-t border-slate-200/60 shadow-[0_-6px_20px_rgba(15,23,42,0.08)] flex-shrink-0 pb-safe">
+          <div className="flex justify-around px-2 md:px-4 md:max-w-3xl md:mx-auto">
             {bottomNavItems.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
                 end={item.end}
                 className={({ isActive }) =>
-                  `flex flex-col items-center py-2 px-3 min-w-[56px] transition-all duration-200 ${
+                  `flex flex-col items-center py-2.5 md:py-3 px-2.5 min-w-[56px] md:min-w-[68px] transition-all duration-200 ${
                     isActive ? 'text-emerald-600' : 'text-slate-400'
                   }`
                 }

@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { productsApi } from '../../services/api/productsApi';
 import { ordersApi } from '../../services/api/ordersApi';
+import { offersApi } from '../../services/api/offersApi';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { 
-  ShoppingBag, Clock, Wallet, ChevronRight, Package, Sparkles, ArrowRight, 
-  TrendingUp, RotateCcw, Star, Tag, User, HeadphonesIcon,
-  Boxes, Truck, CheckCircle2, Receipt, Grid3x3
+  ShoppingBag, Clock, ChevronRight, Package, Sparkles, ArrowRight, 
+  TrendingUp, Tag, HeadphonesIcon,
+  Boxes, Truck, CheckCircle2, Receipt, Grid3x3, Gift
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
@@ -14,12 +15,14 @@ import { useDispatch } from 'react-redux';
 import { addToCart } from '../../store/slices/cartSlice';
 import type { Product, Category } from '../../types/product.types';
 import type { Order } from '../../types/order.types';
-import { useMemo } from 'react';
+import type { SpecialOffer } from '../../types/offer.types';
+import { useMemo, useState } from 'react';
 
 export default function CustomerHome() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const dispatch = useDispatch();
+  const [flippedOfferId, setFlippedOfferId] = useState<string | null>(null);
 
   const { data: popular, isLoading: popularLoading } = useQuery({
     queryKey: ['customer-popular'],
@@ -35,6 +38,16 @@ export default function CustomerHome() {
     queryKey: ['customer-recent-orders'],
     queryFn: () => ordersApi.customerGetAll({ page: 1, pageSize: 3 }).then(r => r.data.data),
   });
+
+  const { data: specialOffers = [] } = useQuery({
+    queryKey: ['special-offers-public'],
+    queryFn: () => offersApi.getPublic().then(r => r.data.data || []),
+  });
+
+  const movingOffers = useMemo(
+    () => (specialOffers.length > 1 ? [...specialOffers, ...specialOffers] : specialOffers),
+    [specialOffers]
+  );
 
   // Calculate account stats from orders
   const accountStats = useMemo(() => {
@@ -98,7 +111,7 @@ export default function CustomerHome() {
         <div className="grid grid-cols-3 gap-3 lg:gap-4">
           <div className="bg-white rounded-2xl shadow-lg shadow-slate-200/80 border border-slate-100 p-4 lg:p-5">
             <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center shadow-md">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center shadow-md">
                 <Receipt className="w-5 h-5 text-white" />
               </div>
             </div>
@@ -136,8 +149,7 @@ export default function CustomerHome() {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {[
               { icon: ShoppingBag, label: 'Shop Products', to: '/shop/products', gradient: 'from-orange-500 to-rose-500', bg: 'bg-orange-50' },
-              { icon: Clock, label: 'My Orders', to: '/shop/orders', gradient: 'from-blue-500 to-indigo-600', bg: 'bg-blue-50' },
-              { icon: Wallet, label: 'Payments', to: '/shop/ledger', gradient: 'from-emerald-500 to-teal-500', bg: 'bg-emerald-50' },
+              { icon: Clock, label: 'My Orders', to: '/shop/orders', gradient: 'from-orange-500 to-amber-600', bg: 'bg-orange-50' },
               { icon: HeadphonesIcon, label: 'Support', to: '/shop/support', gradient: 'from-purple-500 to-pink-500', bg: 'bg-purple-50' },
             ].map((action) => (
               <button
@@ -190,27 +202,50 @@ export default function CustomerHome() {
           ) : null}
         </div>
 
-        {/* Promotional Banner */}
-        <div className="relative bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-2xl p-6 lg:p-8 overflow-hidden group cursor-pointer hover:shadow-xl transition-shadow"
-             onClick={() => navigate('/shop/products?featured=true')}>
-          <div className="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full translate-x-1/4 -translate-y-1/4 blur-2xl" />
-          <div className="absolute bottom-0 left-0 w-32 h-32 bg-pink-400/20 rounded-full -translate-x-1/4 translate-y-1/4 blur-xl" />
-          
-          <div className="relative z-10">
-            <div className="flex items-center gap-2 mb-2">
-              <Star className="w-5 h-5 text-yellow-300 fill-yellow-300" />
-              <span className="text-sm text-white/90 font-medium">Special Offers</span>
-            </div>
-            <h3 className="text-xl lg:text-2xl font-bold text-white mb-2">
-              Featured Products Available! 🎉
-            </h3>
-            <p className="text-white/90 text-sm lg:text-base mb-4">
-              Check out our hand-picked selection and great deals
-            </p>
-            <div className="inline-flex items-center gap-2 text-white font-semibold text-sm group-hover:gap-3 transition-all">
-              Browse Now <ArrowRight className="w-4 h-4" />
-            </div>
+        {/* Moving Special Offers Chain */}
+        <div className="relative bg-gradient-to-r from-rose-500 via-orange-500 to-amber-500 rounded-2xl p-4 lg:p-5 overflow-hidden border border-rose-300/50 shadow-lg shadow-rose-200/60">
+          <div className="flex items-center gap-2 mb-3">
+            <Gift className="w-5 h-5 text-white" />
+            <span className="text-sm text-white/95 font-semibold">Special Offers</span>
+            <span className="text-xs text-white/80">Tap a card to flip and read the offer</span>
           </div>
+
+          {specialOffers.length > 0 ? (
+            <div className="relative overflow-hidden rounded-xl bg-white/20 backdrop-blur-sm border border-white/30 py-3">
+              <div className="pointer-events-none absolute inset-y-0 left-0 w-10 bg-gradient-to-r from-rose-500/70 to-transparent z-10" />
+              <div className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-amber-500/70 to-transparent z-10" />
+
+              <div className={`flex w-max gap-3 px-3 ${specialOffers.length > 1 ? 'animate-marquee' : ''}`}>
+                {movingOffers.map((offer: SpecialOffer, idx: number) => (
+                  <button
+                    key={`${offer.id}-${idx}`}
+                    onClick={() => setFlippedOfferId(prev => (prev === offer.id ? null : offer.id))}
+                    className="offer-flip-card flex-shrink-0 w-52 h-28 rounded-2xl focus-visible:outline-white"
+                  >
+                    <span className={`offer-flip-inner ${flippedOfferId === offer.id ? 'is-flipped' : ''}`}>
+                      <span className="offer-flip-face offer-flip-front bg-white border border-rose-100 shadow-sm">
+                        <span className="text-2xl leading-none" aria-hidden="true">✨</span>
+                        <span className="text-[10px] uppercase tracking-wide font-bold text-rose-500">Special Offer</span>
+                        <span className="text-sm font-bold text-slate-900 line-clamp-2">{offer.productName}</span>
+                      </span>
+                      <span className="offer-flip-face offer-flip-back bg-rose-600 border border-rose-500 text-white shadow-sm">
+                        <span className="text-[10px] uppercase tracking-wide font-bold text-rose-100">Offer Brief</span>
+                        <span className="text-xs font-medium leading-relaxed line-clamp-3">{offer.offerBrief}</span>
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => navigate('/shop/products')}
+              className="w-full text-left bg-white/20 hover:bg-white/25 rounded-xl border border-white/35 p-4 text-white transition"
+            >
+              <p className="font-semibold text-sm">No active offers right now</p>
+              <p className="text-xs text-white/85 mt-1">Browse products to discover the latest arrivals</p>
+            </button>
+          )}
         </div>
 
         {/* Popular Products & Recent Orders Grid */}
@@ -325,7 +360,7 @@ export default function CustomerHome() {
                       <span className={`text-[10px] px-2 py-1 rounded-lg font-bold ${
                         order.status === 'Delivered' ? 'bg-emerald-100 text-emerald-700' :
                         order.status === 'Pending' ? 'bg-amber-100 text-amber-700' :
-                        'bg-blue-100 text-blue-700'
+                        'bg-orange-100 text-orange-700'
                       }`}>
                         {order.status}
                       </span>
@@ -352,6 +387,7 @@ export default function CustomerHome() {
           </div>
         </div>
       </div>
+
     </div>
   );
 }

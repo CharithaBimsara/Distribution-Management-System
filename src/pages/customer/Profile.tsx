@@ -144,8 +144,8 @@ export default function CustomerProfile() {
                 )}
                 {addressStr && (
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center flex-shrink-0">
-                      <MapPin className="w-5 h-5 text-blue-500" />
+                    <div className="w-10 h-10 bg-orange-50 rounded-xl flex items-center justify-center flex-shrink-0">
+                      <MapPin className="w-5 h-5 text-orange-500" />
                     </div>
                     <div>
                       <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">Location</p>
@@ -155,8 +155,8 @@ export default function CustomerProfile() {
                 )}
                 {profile.regionName && (
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-violet-50 rounded-xl flex items-center justify-center flex-shrink-0">
-                      <Shield className="w-5 h-5 text-violet-500" />
+                    <div className="w-10 h-10 bg-orange-50 rounded-xl flex items-center justify-center flex-shrink-0">
+                      <Shield className="w-5 h-5 text-orange-500" />
                     </div>
                     <div>
                       <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">Region</p>

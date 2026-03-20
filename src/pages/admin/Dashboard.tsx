@@ -1,15 +1,21 @@
 import { useQuery } from '@tanstack/react-query';
 import { reportsApi } from '../../services/api/reportsApi';
 import { repsApi } from '../../services/api/repsApi';
+import { useAuth } from '../../hooks/useAuth';
+import { useTrialCountdown } from '../../hooks/useTrialCountdown';
 import {
   DollarSign, ShoppingCart, Package, Users, AlertTriangle,
   TrendingUp, UserCheck, CreditCard, ArrowUpRight, ArrowDownRight, CalendarDays,
-  FileText
+  FileText, Hourglass, Play, Pause, RotateCcw
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Area, AreaChart } from 'recharts';
 import { formatCurrency } from '../../utils/formatters';
 
 export default function AdminDashboard() {
+  const { user } = useAuth();
+  const isSuperAdmin = user?.role === 'SuperAdmin';
+  const { status, formattedTime, start, pause, reset, isRunning, isExpired } = useTrialCountdown();
+
   const { data, isLoading, error } = useQuery({
     queryKey: ['admin-dashboard'],
     queryFn: () => reportsApi.getDashboard().then(r => r.data.data),
@@ -57,6 +63,40 @@ export default function AdminDashboard() {
         <div className="flex items-center gap-2 text-sm text-slate-500 bg-white px-3 py-2 rounded-xl border border-slate-200 w-fit">
           <CalendarDays className="w-4 h-4" />
           <span>{new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+        </div>
+      </div>
+
+      <div className="card p-4 border-amber-200/80 bg-gradient-to-r from-amber-50 to-orange-50">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+              <Hourglass className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide">Free Trial</p>
+              <p className="text-lg font-bold text-slate-900 truncate">{isExpired ? 'Trial ended' : formattedTime} left</p>
+              <p className="text-xs text-slate-600 mt-0.5">Status: <span className="font-semibold capitalize">{status}</span></p>
+            </div>
+          </div>
+
+          {isSuperAdmin && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={isRunning ? pause : start}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-700 transition"
+              >
+                {isRunning ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                {isRunning ? 'Pause' : isExpired ? 'Restart 7 Days' : 'Start / Resume'}
+              </button>
+              <button
+                onClick={reset}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-white transition"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                Reset
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

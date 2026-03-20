@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { useSignalR } from '../../hooks/useSignalR';
@@ -7,40 +7,36 @@ import { useQuery } from '@tanstack/react-query';
 import type { RootState } from '../../store/store';
 import { notificationsApi } from '../../services/api/notificationsApi';
 import {
-  Home, ShoppingBag, ClipboardList,
-  Wallet, User, ShoppingCart, Bell, LogOut, Menu, X, ChevronLeft,
+  Home, ClipboardList,
+  User, ShoppingCart, Bell, LogOut, Menu, X, ChevronLeft,
   MessageSquare, Sparkles, FileText
 } from 'lucide-react';
 import ConfirmModal from '../common/ConfirmModal';
+import NotificationPanel from '../common/NotificationPanel';
+import { useSectionNotificationBadges } from '../../hooks/useSectionNotificationBadges';
+import { useAutoCollapseSidebar } from '../../hooks/useAutoCollapseSidebar';
 
 const navItems = [
   { to: '/shop', icon: Home, label: 'Home', end: true },
-  { to: '/shop/products', icon: ShoppingBag, label: 'Shop' },
   { to: '/shop/orders', icon: ClipboardList, label: 'Orders' },
   { to: '/shop/quotations', icon: FileText, label: 'Quotations' },
-  { to: '/shop/ledger', icon: Wallet, label: 'Ledger' },
-  { to: '/shop/notifications', icon: Bell, label: 'Notifications' },
   { to: '/shop/support', icon: MessageSquare, label: 'Support' },
   { to: '/shop/profile', icon: User, label: 'Profile' },
 ];
 
-// Bottom nav only shows a subset of items
-const bottomNavItems = [
-  { to: '/shop', icon: Home, label: 'Home', end: true },
-  { to: '/shop/products', icon: ShoppingBag, label: 'Shop' },
-  { to: '/shop/orders', icon: ClipboardList, label: 'Orders' },
-  { to: '/shop/ledger', icon: Wallet, label: 'Ledger' },
-  { to: '/shop/profile', icon: User, label: 'Profile' },
-];
+const bottomNavItems = navItems;
 
 export default function CustomerLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
   const { user, logout } = useAuth();
   useSignalR();
   const navigate = useNavigate();
   const location = useLocation();
+
+  useAutoCollapseSidebar({ sidebarOpen, setSidebarOpen });
   const cartCount = useSelector((state: RootState) => state.cart.items.length);
 
   const userId = user?.id;
@@ -60,6 +56,34 @@ export default function CustomerLayout() {
   const currentPage = navItems.find(item =>
     item.end ? location.pathname === item.to : location.pathname.startsWith(item.to)
   );
+
+  const sectionMap = useMemo(() => ({
+    orders: ['OrderStatusUpdate', 'NewOrder'],
+    quotations: ['QuotationSubmitted', 'QuotationApproved', 'QuotationRejected'],
+    support: ['ComplaintUpdate', 'SupportResolution'],
+  }), []);
+
+  const { counts, markSectionAsRead } = useSectionNotificationBadges(userId, sectionMap);
+
+  const activeSection = useMemo(() => {
+    const path = location.pathname;
+    if (path.startsWith('/shop/orders')) return 'orders';
+    if (path.startsWith('/shop/quotations')) return 'quotations';
+    if (path.startsWith('/shop/support')) return 'support';
+    return '';
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!activeSection) return;
+    if ((counts[activeSection] || 0) === 0) return;
+    markSectionAsRead(activeSection);
+  }, [activeSection, counts, markSectionAsRead]);
+
+  const itemSection: Record<string, string> = {
+    '/shop/orders': 'orders',
+    '/shop/quotations': 'quotations',
+    '/shop/support': 'support',
+  };
 
   return (
     <div className="flex h-screen bg-slate-50">
@@ -105,11 +129,16 @@ export default function CustomerLayout() {
                   {sidebarOpen && (
                     <span className="flex-1">{item.label}</span>
                   )}
-                  {sidebarOpen && item.to === '/shop/notifications' && (unreadCount ?? 0) > 0 && (
-                    <span className="bg-orange-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
-                      {unreadCount}
-                    </span>
-                  )}
+                  {sidebarOpen && (() => {
+                    const section = itemSection[item.to];
+                    const count = section ? (counts[section] || 0) : 0;
+                    if (!count) return null;
+                    return (
+                      <span className="bg-orange-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                        {count}
+                      </span>
+                    );
+                  })()}
                 </>
               )}
             </NavLink>
@@ -169,7 +198,17 @@ export default function CustomerLayout() {
                   }
                 >
                   <item.icon className="w-[18px] h-[18px]" />
-                  <span>{item.label}</span>
+                  <span className="flex-1">{item.label}</span>
+                  {(() => {
+                    const section = itemSection[item.to];
+                    const count = section ? (counts[section] || 0) : 0;
+                    if (!count) return null;
+                    return (
+                      <span className="bg-orange-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                        {count}
+                      </span>
+                    );
+                  })()}
                 </NavLink>
               ))}
             </nav>
@@ -232,17 +271,20 @@ export default function CustomerLayout() {
                 </span>
               )}
             </button>
-            <button
-              onClick={() => navigate('/shop/notifications')}
-              className="relative p-2.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition"
-            >
-              <Bell className="w-[18px] h-[18px]" />
-              {(unreadCount ?? 0) > 0 && (
-                <span className="absolute top-1 right-1 bg-gradient-to-r from-orange-500 to-rose-500 text-white text-[9px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1 shadow-lg shadow-orange-500/30 animate-scale-in">
-                  {unreadCount}
-                </span>
-              )}
-            </button>
+            <div className="relative">
+              <button
+                onClick={() => setShowNotifications((v) => !v)}
+                className="relative p-2.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition"
+              >
+                <Bell className="w-[18px] h-[18px]" />
+                {(unreadCount ?? 0) > 0 && (
+                  <span className="absolute top-1 right-1 bg-gradient-to-r from-orange-500 to-rose-500 text-white text-[9px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1 shadow-lg shadow-orange-500/30 animate-scale-in">
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+              <NotificationPanel open={showNotifications} onClose={() => setShowNotifications(false)} userId={userId} accent="orange" />
+            </div>
             {/* Desktop: user info + logout */}
             <div className="hidden lg:flex items-center gap-2.5 ml-1 pl-3 border-l border-slate-200">
               <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-rose-500 flex items-center justify-center">
@@ -272,14 +314,14 @@ export default function CustomerLayout() {
 
         {/* ========== MOBILE BOTTOM NAV (hidden on lg+) ========== */}
         <nav className="fixed bottom-0 left-0 right-0 z-40 lg:hidden bg-white/90 backdrop-blur-xl border-t border-slate-200/60 flex-shrink-0 pb-safe">
-          <div className="flex justify-around px-2">
+          <div className="flex overflow-x-auto scrollbar-hide px-1.5">
             {bottomNavItems.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
                 end={item.end}
                 className={({ isActive }) =>
-                  `flex flex-col items-center py-2 px-3 min-w-[56px] transition-all duration-200 ${
+                  `relative flex flex-col items-center py-2 px-3 min-w-[72px] transition-all duration-200 ${
                     isActive ? 'text-orange-600' : 'text-slate-400'
                   }`
                 }
@@ -290,6 +332,16 @@ export default function CustomerLayout() {
                       <item.icon className={`w-5 h-5 transition-transform ${isActive ? 'scale-110' : ''}`} />
                     </div>
                     <span className={`text-[10px] mt-0.5 font-medium ${isActive ? 'text-orange-700' : ''}`}>{item.label}</span>
+                    {(() => {
+                      const section = itemSection[item.to];
+                      const count = section ? (counts[section] || 0) : 0;
+                      if (!count) return null;
+                      return (
+                        <span className="absolute top-1.5 right-3 bg-orange-500 text-white text-[9px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1 shadow-sm">
+                          {count}
+                        </span>
+                      );
+                    })()}
                     {isActive && <div className="w-4 h-0.5 bg-orange-500 rounded-full mt-0.5" />}
                   </>
                 )}

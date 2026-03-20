@@ -3,6 +3,7 @@ import { Toaster } from 'react-hot-toast';
 import { useAuth } from './hooks/useAuth';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
+import { useSystemBranding } from './hooks/useSystemBranding';
 
 // Layouts
 import AdminLayout from './components/layout/AdminLayout';
@@ -26,6 +27,7 @@ import AdminProductEditor from './pages/admin/ProductEditor';
 import AdminOrders from './pages/admin/Orders';
 import AdminCustomers from './pages/admin/Customers';
 import AdminCustomerDetail from './pages/admin/CustomerDetail';
+import CustomerSpecialPrices from './pages/admin/CustomerSpecialPrices';
 import AdminCreateCustomer from './pages/admin/CreateCustomer';
 import AdminReps from './pages/admin/Reps';
 import AdminRepDetail from './pages/admin/RepDetail';
@@ -34,13 +36,19 @@ import AdminOrderDetail from './pages/admin/OrderDetail';
 import AdminPayments from './pages/admin/Payments';
 import AdminReports from './pages/admin/Reports';
 import AdminSupport from './pages/admin/Support';
+import AdminSupportDetail from './pages/admin/SupportDetail';
 import AdminNotifications from './pages/admin/Notifications';
 import AdminSettings from './pages/admin/Settings';
+import AdminSpecialOffers from './pages/admin/SpecialOffers';
 import AdminCoordinators from './pages/admin/Coordinators';
 import AdminCoordinatorDetail from './pages/admin/CoordinatorDetail';
+import CreateCoordinator from './pages/admin/CreateCoordinator';
 import AdminQuotations from './pages/admin/Quotations';
 import AdminRegions from './pages/admin/Regions';
+import AdminRouteManagement from './pages/admin/RouteManagement.tsx';
 import RegistrationRequestDetail from './pages/admin/RegistrationRequestDetail';
+import AdminAccounts from './pages/admin/AdminAccounts';
+import CreateAdminAccount from './pages/admin/CreateAdminAccount';
 
 // Rep pages
 import RepDashboard from './pages/rep/Dashboard';
@@ -62,14 +70,22 @@ import RepNotifications from './pages/rep/Notifications';
 import RepSupport from './pages/rep/Support';
 import RepCreateSupport from './pages/rep/RepCreateSupport';
 import RepQuotations from './pages/rep/Quotations';
+import RepCreateQuotation from './pages/rep/RepCreateQuotation';
+import RepProfile from './pages/rep/RepProfile';
+import RepProfileEdit from './pages/rep/RepProfileEdit';
 
 // Coordinator pages
 import CoordinatorDashboard from './pages/coordinator/Dashboard';
 import CoordinatorTeam from './pages/coordinator/Team';
-import CoordinatorCustomers from './pages/coordinator/Customers';
+import CoordinatorRouteManagement from './pages/coordinator/RouteManagement.tsx';
+import CoordinatorOrders from './pages/coordinator/Orders';
+import CoordinatorOrderDetail from './pages/coordinator/OrderDetail';
 import CoordinatorApprovals from './pages/coordinator/Approvals';
 import CoordinatorQuotations from './pages/coordinator/Quotations';
 import CoordinatorNotifications from './pages/coordinator/Notifications';
+import CoordinatorSupport from './pages/coordinator/Support';
+import CoordinatorCreateSupport from './pages/coordinator/CreateSupport';
+import CoordinatorProfile from './pages/coordinator/Profile';
 
 // Customer pages
 import CustomerHome from './pages/customer/Home';
@@ -83,6 +99,7 @@ import CustomerNotifications from './pages/customer/Notifications';
 import CustomerSupport from './pages/customer/Support';
 import CustomerCreateSupport from './pages/customer/CustomerCreateSupport';
 import CustomerQuotations from './pages/customer/Quotations';
+import CustomerCreateQuotation from './pages/customer/CreateQuotation';
 
 // Error pages
 import NotFound from './pages/NotFound';
@@ -91,13 +108,14 @@ import Unauthorized from './pages/Unauthorized';
 function RootRedirect() {
   const { isAuthenticated, user } = useAuth();
   if (!isAuthenticated) return <Navigate to="/login" replace />;
-  const routes: Record<string, string> = { Admin: '/admin', SalesRep: '/rep', Customer: '/shop', SalesCoordinator: '/coordinator' };
+  const routes: Record<string, string> = { SuperAdmin: '/admin', Admin: '/admin', SalesRep: '/rep', Customer: '/shop', SalesCoordinator: '/coordinator' };
   return <Navigate to={routes[user?.role || ''] || '/login'} replace />;
 }
 
 export default function App() {
   const queryClient = useQueryClient();
   const { isAuthenticated } = useAuth();
+  useSystemBranding();
 
   // clear react‑query cache when user signs out (or a different user logs in).
   // prevents showing leftover notification counts from a previous session.
@@ -122,8 +140,10 @@ export default function App() {
         <Route path="/unauthorized" element={<Unauthorized />} />
 
         {/* Admin routes */}
-        <Route path="/admin" element={<ProtectedRoute allowedRoles={['Admin']}><AdminLayout /></ProtectedRoute>}>
+        <Route path="/admin" element={<ProtectedRoute allowedRoles={['Admin', 'SuperAdmin']}><AdminLayout /></ProtectedRoute>}>
           <Route index element={<AdminDashboard />} />
+          <Route path="admin-accounts" element={<ProtectedRoute allowedRoles={['SuperAdmin']}><AdminAccounts /></ProtectedRoute>} />
+          <Route path="admin-accounts/new" element={<ProtectedRoute allowedRoles={['SuperAdmin']}><CreateAdminAccount /></ProtectedRoute>} />
           <Route path="products" element={<AdminProducts />} />
           <Route path="products/new" element={<AdminProductEditor />} />
           <Route path="products/:id/edit" element={<AdminProductEditor />} />
@@ -132,17 +152,22 @@ export default function App() {
           <Route path="customers" element={<AdminCustomers />} />
           <Route path="customers/new" element={<AdminCreateCustomer />} />
           <Route path="customers/:id" element={<AdminCustomerDetail />} />
+          <Route path="customers/:id/special-prices" element={<CustomerSpecialPrices />} />
           <Route path="reps" element={<AdminReps />} />
           <Route path="reps/new" element={<CreateRep />} />
           <Route path="reps/:id" element={<AdminRepDetail />} />
           <Route path="payments" element={<AdminPayments />} />
           <Route path="reports" element={<AdminReports />} />
           <Route path="support" element={<AdminSupport />} />
+          <Route path="support/:id" element={<AdminSupportDetail />} />
           <Route path="notifications" element={<AdminNotifications />} />
+          <Route path="special-offers" element={<AdminSpecialOffers />} />
           <Route path="settings" element={<AdminSettings />} />
           <Route path="coordinators" element={<AdminCoordinators />} />
+          <Route path="coordinators/new" element={<CreateCoordinator />} />
           <Route path="coordinators/:id" element={<AdminCoordinatorDetail />} />
           <Route path="regions" element={<AdminRegions />} />
+          <Route path="routes" element={<AdminRouteManagement />} />
           <Route path="quotations" element={<AdminQuotations />} />
           <Route path="customer-registrations/:id" element={<RegistrationRequestDetail />} />
         </Route>
@@ -168,6 +193,9 @@ export default function App() {
           <Route path="support" element={<RepSupport />} />
           <Route path="support/new" element={<RepCreateSupport />} />
           <Route path="quotations" element={<RepQuotations />} />
+          <Route path="quotations/new" element={<RepCreateQuotation />} />
+          <Route path="profile" element={<RepProfile />} />
+          <Route path="profile/edit" element={<RepProfileEdit />} />
         </Route>
 
         {/* Customer routes */}
@@ -183,6 +211,7 @@ export default function App() {
           <Route path="support" element={<CustomerSupport />} />
           <Route path="support/new" element={<CustomerCreateSupport />} />
           <Route path="quotations" element={<CustomerQuotations />} />
+          <Route path="quotations/new" element={<CustomerCreateQuotation />} />
           <Route path="profile" element={<CustomerProfile />} />
         </Route>
 
@@ -190,10 +219,17 @@ export default function App() {
         <Route path="/coordinator" element={<ProtectedRoute allowedRoles={['SalesCoordinator']}><CoordinatorLayout /></ProtectedRoute>}>
           <Route index element={<CoordinatorDashboard />} />
           <Route path="team" element={<CoordinatorTeam />} />
-          <Route path="customers" element={<CoordinatorCustomers />} />
+          <Route path="routes" element={<CoordinatorRouteManagement />} />
+          <Route path="customers" element={<AdminCustomers />} />
+          <Route path="customers/:id" element={<AdminCustomerDetail />} />
+          <Route path="orders" element={<CoordinatorOrders />} />
+          <Route path="orders/:id" element={<CoordinatorOrderDetail />} />
           <Route path="approvals" element={<CoordinatorApprovals />} />
+          <Route path="support" element={<CoordinatorSupport />} />
+          <Route path="support/new" element={<CoordinatorCreateSupport />} />
           <Route path="quotations" element={<CoordinatorQuotations />} />
           <Route path="notifications" element={<CoordinatorNotifications />} />
+          <Route path="profile" element={<CoordinatorProfile />} />
         </Route>
 
         {/* 404 */}

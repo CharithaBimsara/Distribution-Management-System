@@ -4,7 +4,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { customerRegistrationApi, type RegistrationRequest } from '../../services/api/customerRegistrationApi';
 import { regionsApi } from '../../services/api/regionsApi';
 import { adminGetAllCoordinators } from '../../services/api/coordinatorApi';
-import { repsApi } from '../../services/api/repsApi';
 import { formatDate } from '../../utils/formatters';
 import {
   ArrowLeft, FileText, User, Phone, Mail, MapPin, Building2,
@@ -67,7 +66,6 @@ export default function RegistrationRequestDetail() {
   const [selectedRegionId, setSelectedRegionId] = useState('');
   const [selectedSubRegionId, setSelectedSubRegionId] = useState('');
   const [selectedCoordinatorId, setSelectedCoordinatorId] = useState('');
-  const [selectedRepId, setSelectedRepId] = useState('');
 
   const { data: request, isLoading } = useQuery<RegistrationRequest>({
     queryKey: ['admin-registration-request', id],
@@ -80,7 +78,6 @@ export default function RegistrationRequestDetail() {
       setSelectedRegionId(request.regionId || '');
       setSelectedSubRegionId(request.subRegionId || '');
       setSelectedCoordinatorId(request.assignedCoordinatorId || '');
-      setSelectedRepId(request.assignedRepId || '');
     }
   }, [request]);
 
@@ -93,11 +90,6 @@ export default function RegistrationRequestDetail() {
   const { data: allCoordinators } = useQuery({
     queryKey: ['admin-all-coordinators'],
     queryFn: () => adminGetAllCoordinators(1, 200),
-  });
-
-  const { data: allReps } = useQuery({
-    queryKey: ['admin-all-reps'],
-    queryFn: () => repsApi.adminGetAll({ page: 1, pageSize: 200 }).then(r => r.data.data),
   });
 
   // Filter sub-regions by selected region
@@ -114,25 +106,11 @@ export default function RegistrationRequestDetail() {
     return allCoordinators.items.filter((c: any) => c.regionId === selectedRegionId);
   }, [allCoordinators, selectedRegionId]);
 
-  // Filter reps by selected coordinator
-  const filteredReps = useMemo(() => {
-    if (!allReps?.items) return [];
-    if (!selectedCoordinatorId) return selectedRegionId ? allReps.items.filter((r: any) => r.regionId === selectedRegionId) : allReps.items;
-    return allReps.items.filter((r: any) => r.coordinatorId === selectedCoordinatorId);
-  }, [allReps, selectedCoordinatorId, selectedRegionId]);
-
   // Reset downstream when region changes
   const handleRegionChange = (regionId: string) => {
     setSelectedRegionId(regionId);
     setSelectedSubRegionId('');
     setSelectedCoordinatorId('');
-    setSelectedRepId('');
-  };
-
-  // Reset rep when coordinator changes
-  const handleCoordinatorChange = (coordinatorId: string) => {
-    setSelectedCoordinatorId(coordinatorId);
-    setSelectedRepId('');
   };
 
   const reviewMutation = useMutation({
@@ -156,7 +134,6 @@ export default function RegistrationRequestDetail() {
       regionId: reviewAction === 'Approve' ? selectedRegionId || undefined : undefined,
       subRegionId: reviewAction === 'Approve' ? selectedSubRegionId || undefined : undefined,
       assignedCoordinatorId: reviewAction === 'Approve' ? selectedCoordinatorId || undefined : undefined,
-      assignedRepId: reviewAction === 'Approve' ? selectedRepId || undefined : undefined,
     });
   };
 
@@ -425,7 +402,7 @@ export default function RegistrationRequestDetail() {
                       </label>
                       <select
                         value={selectedCoordinatorId}
-                        onChange={e => handleCoordinatorChange(e.target.value)}
+                        onChange={e => setSelectedCoordinatorId(e.target.value)}
                         className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white outline-none focus:ring-2 focus:ring-indigo-500/15 focus:border-indigo-300 transition"
                       >
                         <option value="">Select coordinator…</option>
@@ -435,26 +412,6 @@ export default function RegistrationRequestDetail() {
                       </select>
                       {selectedRegionId && filteredCoordinators.length === 0 && (
                         <p className="text-xs text-amber-600 mt-1">No coordinators in this region</p>
-                      )}
-                    </div>
-
-                    {/* Sales Rep (filtered by coordinator) */}
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
-                        <User className="w-3.5 h-3.5 inline mr-1" /> Sales Rep
-                      </label>
-                      <select
-                        value={selectedRepId}
-                        onChange={e => setSelectedRepId(e.target.value)}
-                        className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white outline-none focus:ring-2 focus:ring-indigo-500/15 focus:border-indigo-300 transition"
-                      >
-                        <option value="">Select sales rep…</option>
-                        {filteredReps.map((rep: any) => (
-                          <option key={rep.id} value={rep.id}>{rep.fullName}</option>
-                        ))}
-                      </select>
-                      {(selectedCoordinatorId || selectedRegionId) && filteredReps.length === 0 && (
-                        <p className="text-xs text-amber-600 mt-1">No reps available</p>
                       )}
                     </div>
                   </div>
@@ -511,7 +468,7 @@ export default function RegistrationRequestDetail() {
                       Submitting…
                     </>
                   ) : reviewAction === 'Approve' ? (
-                    <><CheckCircle className="w-4 h-4" /> Approve &amp; Assign</>
+                    <><CheckCircle className="w-4 h-4" /> Approve</>
                   ) : reviewAction === 'Reject' ? (
                     <><XCircle className="w-4 h-4" /> Reject Registration</>
                   ) : (

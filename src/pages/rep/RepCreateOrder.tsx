@@ -3,21 +3,51 @@ import type { Order } from '../../types/order.types';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { customersApi } from '../../services/api/customersApi';
 import { ordersApi } from '../../services/api/ordersApi';
+import { productsApi } from '../../services/api/productsApi';
 import { formatCurrency } from '../../utils/formatters';
 import { calculateLine } from '../../utils/calculations';
 import { orderDraftUtils } from '../../utils/orderDraft';
 import { ArrowLeft, User, Package, ShoppingCart, Trash2, CheckCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import { useIsDesktop } from '../../hooks/useMediaQuery';
+import type { Product } from '../../types/product.types';
+
+type DesktopOrderRow = {
+  id: string;
+  product?: Product;
+  qty: number;
+};
 
 export default function RepCreateOrder() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const isDesktop = useIsDesktop();
 
   const [draft, setDraft] = useState(orderDraftUtils.get());
   const [createdOrder, setCreatedOrder] = useState<Order | null>(null);
   const [deliveryAddress, setDeliveryAddress] = useState(draft.deliveryAddress || '');
   const [deliveryNotes, setDeliveryNotes] = useState(draft.deliveryNotes || '');
+  const [desktopCustomerId, setDesktopCustomerId] = useState(draft.customerId || '');
+  const [desktopRows, setDesktopRows] = useState<DesktopOrderRow[]>(() => {
+    if (!draft.items.length) return [{ id: crypto.randomUUID(), qty: 1 }];
+    return draft.items.map(item => ({
+      id: crypto.randomUUID(),
+      qty: item.quantity,
+      product: {
+        id: item.productId,
+        name: item.name,
+        sku: item.sku,
+        sellingPrice: item.price,
+        quantity: 0,
+        createdAt: '',
+        mrp: item.mrp,
+        discountPercent: item.discountPercent,
+        taxAmount: item.taxAmount,
+        taxCode: item.taxCode,
+      },
+    }));
+  });
 
   const downloadReceipt = async () => {
     if (!createdOrder) return;
@@ -278,6 +308,12 @@ export default function RepCreateOrder() {
     queryFn: () => customersApi.repGetCustomers({ page: 1, pageSize: 2000 }).then(r => r.data.data),
   });
 
+  const { data: productCatalog } = useQuery({
+    queryKey: ['rep-products-for-order-create'],
+    queryFn: () => productsApi.getAll({ page: 1, pageSize: 500 }).then(r => r.data.data),
+    enabled: isDesktop,
+  });
+
   const createMut = useMutation({
     mutationFn: (d: { customerId: string; deliveryAddress?: string; deliveryNotes?: string; items: { productId: string; quantity: number }[] }) => ordersApi.repCreate(d),
     onSuccess: (res) => {
@@ -301,10 +337,56 @@ export default function RepCreateOrder() {
     });
   };
 
-  const total = draft.items.reduce((s, i) => s + i.price * i.quantity, 0);
-  const totalWithCalc = draft.items.reduce((s, i) => s + (i.lineTotal ?? 0), 0);
+  const total = draft.items.reduce((s, i) => s + (i.lineTotal ?? calculateLine({ rate: i.price, qty: i.quantity, discountPercent: i.discountPercent, taxAmount: i.taxAmount }).total), 0);
   const itemCount = draft.items.length;
   const exceedsCredit = false;
+  const desktopProducts: Product[] = productCatalog?.items || [];
+  const selectedDesktopCustomer = (customerList?.items || []).find((c: any) => c.id === desktopCustomerId);
+  const isNonTaxCustomer = ((selectedDesktopCustomer?.customerType || '').toLowerCase().replace(/[-\s]/g, '') === 'nontax');
+  const desktopRowsWithProduct = desktopRows.filter(r => !!r.product);
+  const desktopTotal = desktopRowsWithProduct.reduce((sum, row) => {
+    const p = row.product as Product;
+    const calc = calculateLine({
+      rate: p.sellingPrice || 0,
+      qty: row.qty,
+      discountPercent: p.discountPercent ?? 0,
+      taxAmount: p.taxAmount,
+    });
+    return sum + calc.total;
+  }, 0);
+
+  const upsertDesktopRow = (rowId: string, updates: Partial<DesktopOrderRow>) => {
+    setDesktopRows(prev => {
+      const next = prev.map(row => (row.id === rowId ? { ...row, ...updates } : row));
+      const isLast = next[next.length - 1]?.id === rowId;
+      if (isLast && updates.product) {
+        next.push({ id: crypto.randomUUID(), qty: 1 });
+      }
+      return next;
+    });
+  };
+
+  const removeDesktopRow = (rowId: string) => {
+    setDesktopRows(prev => {
+      const filtered = prev.filter(row => row.id !== rowId);
+      return filtered.length ? filtered : [{ id: crypto.randomUUID(), qty: 1 }];
+    });
+  };
+
+  const handleDesktopSubmit = () => {
+    if (!desktopCustomerId) return toast.error('Please select a customer');
+    if (!desktopRowsWithProduct.length) return toast.error('Add at least one product');
+
+    createMut.mutate({
+      customerId: desktopCustomerId,
+      deliveryAddress: deliveryAddress || undefined,
+      deliveryNotes: deliveryNotes || undefined,
+      items: desktopRowsWithProduct.map(row => ({
+        productId: (row.product as Product).id,
+        quantity: row.qty,
+      })),
+    });
+  };
 
   if (createdOrder) {
     return (
@@ -332,69 +414,205 @@ export default function RepCreateOrder() {
     );
   }
 
-  return (
-    <div className="animate-fade-in pb-16">
-      <div className="px-4 lg:px-6 pt-6 max-w-5xl mx-auto">
-        <div className="flex items-center gap-3 mb-6">
-          <button onClick={() => { orderDraftUtils.clear(); navigate(-1); }} className="p-2 rounded-lg bg-slate-50 hover:bg-slate-100">
-            <ArrowLeft className="w-4 h-4" />
-          </button>
-          <div>
-            <h1 className="text-xl font-bold text-slate-900">Create Order</h1>
-            <p className="text-sm text-slate-500 mt-0.5">Select customer → Add products → Place order</p>
+  if (isDesktop) {
+    return (
+      <div className="animate-fade-in pb-16">
+        <div className="px-4 md:px-6 pt-5 max-w-6xl mx-auto space-y-4">
+          <div className="flex items-center gap-3">
+            <button onClick={() => navigate(-1)} className="p-2.5 rounded-lg bg-slate-50 hover:bg-slate-100">
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900">Create Order</h1>
+              <p className="text-sm text-slate-500 mt-0.5">Select customer and products in one table</p>
+            </div>
           </div>
-        </div>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-4">
-          <div className="hidden lg:block mb-4">
-            <label className="block text-sm text-slate-600 mb-1">Customer</label>
+          <div className="bg-white border border-slate-200 rounded-xl p-4">
+            <label className="block text-xs font-semibold text-slate-600 mb-1">Customer</label>
             <select
-              value={draft.customerId || ''}
-              onChange={e => {
-                const id = e.target.value;
-                const cust = customerList?.items.find(c => c.id === id);
-                if (id && cust) {
-                  orderDraftUtils.setCustomer(id, cust.shopName);
-                  setDraft(orderDraftUtils.get());
-                } else {
-                  orderDraftUtils.setCustomer('', '');
-                  setDraft(orderDraftUtils.get());
-                }
-              }}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+              value={desktopCustomerId}
+              onChange={(e) => setDesktopCustomerId(e.target.value)}
+              className="w-full md:max-w-md px-3 py-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-300"
             >
-              <option value="">-- select customer --</option>
-              {customerList?.items.map(c => (
-                <option key={c.id} value={c.id}>{c.shopName}</option>
+              <option value="">Select customer</option>
+              {(customerList?.items || []).map((customer: any) => (
+                <option key={customer.id} value={customer.id}>{customer.shopName}</option>
               ))}
             </select>
           </div>
+
+          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+            <table className="w-full table-auto text-[11px]">
+              <thead>
+                <tr className="bg-slate-100 border-b border-slate-200">
+                  <th className="text-left px-3 py-2 font-semibold text-slate-600 text-[9px] uppercase tracking-wide">Description</th>
+                  <th className="whitespace-nowrap text-left px-3 py-2 font-semibold text-slate-600 text-[9px] uppercase tracking-wide">Item</th>
+                  <th className="whitespace-nowrap text-center px-3 py-2 font-semibold text-slate-600 text-[9px] uppercase tracking-wide">Qty</th>
+                  <th className="whitespace-nowrap text-right px-3 py-2 font-semibold text-slate-600 text-[9px] uppercase tracking-wide">Rate</th>
+                  <th className="whitespace-nowrap text-right px-3 py-2 font-semibold text-slate-600 text-[9px] uppercase tracking-wide">MRP</th>
+                  <th className="whitespace-nowrap text-right px-3 py-2 font-semibold text-slate-600 text-[9px] uppercase tracking-wide">Disc %</th>
+                  <th className="whitespace-nowrap text-right px-3 py-2 font-semibold text-slate-600 text-[9px] uppercase tracking-wide">Disc Amt</th>
+                  {!isNonTaxCustomer && <th className="whitespace-nowrap text-right px-3 py-2 font-semibold text-slate-600 text-[9px] uppercase tracking-wide">Tax</th>}
+                  {!isNonTaxCustomer && <th className="whitespace-nowrap text-right px-3 py-2 font-semibold text-slate-600 text-[9px] uppercase tracking-wide">Tax Amt</th>}
+                  <th className="whitespace-nowrap text-right px-3 py-2 font-semibold text-slate-600 text-[9px] uppercase tracking-wide">Amount</th>
+                  <th className="whitespace-nowrap text-center px-2 py-2 font-semibold text-slate-600 text-[9px] uppercase tracking-wide">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {desktopRows.map((row) => {
+                  const p = row.product;
+                  const selectedIds = new Set(
+                    desktopRows.filter((r) => r.id !== row.id && r.product).map((r) => (r.product as Product).id)
+                  );
+                  const calc = p
+                    ? calculateLine({
+                        rate: p.sellingPrice || 0,
+                        qty: row.qty,
+                        discountPercent: p.discountPercent ?? 0,
+                        taxAmount: isNonTaxCustomer ? 0 : p.taxAmount,
+                      })
+                    : null;
+                  return (
+                    <tr key={row.id} className="odd:bg-white even:bg-slate-50/50">
+                      <td className="px-2 py-1.5 min-w-[260px]">
+                        <select
+                          value={p?.id || ''}
+                          onChange={(e) => {
+                            const selectedId = e.target.value;
+                            const product = desktopProducts.find((item) => item.id === selectedId);
+                            if (!product) return;
+                            upsertDesktopRow(row.id, { product });
+                          }}
+                          className="w-full border border-slate-300 rounded-md px-2 py-1 bg-white text-[11px]"
+                        >
+                          <option value="">Select product</option>
+                          {desktopProducts.map((option) => (
+                            <option key={option.id} value={option.id} disabled={selectedIds.has(option.id)}>
+                              {option.name} ({option.sku})
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="px-3 py-1.5 text-slate-600 font-mono text-[10px] whitespace-nowrap">{p?.sku || ''}</td>
+                      <td className="px-2 py-1.5 text-center">
+                        <input
+                          type="number"
+                          min={1}
+                          value={row.qty}
+                          disabled={!p}
+                          onChange={(e) => upsertDesktopRow(row.id, { qty: Math.max(1, Number(e.target.value) || 1) })}
+                          className="w-14 text-center text-[11px] border border-slate-300 rounded-md px-1 py-0.5"
+                        />
+                      </td>
+                      <td className="px-3 py-1.5 text-right whitespace-nowrap">{p ? formatCurrency(p.sellingPrice || 0) : ''}</td>
+                      <td className="px-3 py-1.5 text-right whitespace-nowrap">{p?.mrp != null ? formatCurrency(p.mrp) : ''}</td>
+                      <td className="px-3 py-1.5 text-right whitespace-nowrap">{p ? (p.discountPercent ?? 0) : ''}</td>
+                      <td className="px-3 py-1.5 text-right whitespace-nowrap">{calc ? formatCurrency(calc.discount) : ''}</td>
+                      {!isNonTaxCustomer && <td className="px-3 py-1.5 text-right whitespace-nowrap">{p?.taxCode || ''}</td>}
+                      {!isNonTaxCustomer && <td className="px-3 py-1.5 text-right whitespace-nowrap">{calc ? formatCurrency(calc.tax) : ''}</td>}
+                      <td className="px-3 py-1.5 text-right font-semibold whitespace-nowrap">{calc ? formatCurrency(calc.total) : ''}</td>
+                      <td className="px-2 py-1.5 text-center">
+                        <button onClick={() => removeDesktopRow(row.id)} className="text-red-500 hover:text-red-700 text-[11px]">x</button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <button
+            onClick={() => setDesktopRows((prev) => [...prev, { id: crypto.randomUUID(), qty: 1 }])}
+            className="w-full py-2 text-xs font-semibold border border-dashed border-slate-300 rounded-xl text-slate-600 hover:bg-slate-50 transition"
+          >
+            + Add Row
+          </button>
+
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
+            <h3 className="text-sm font-bold text-slate-900 mb-3">Delivery Information (Optional)</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <input value={deliveryAddress} onChange={e => setDeliveryAddress(e.target.value)} className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm" placeholder="Delivery address..." />
+              <input value={deliveryNotes} onChange={e => setDeliveryNotes(e.target.value)} className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm" placeholder="Special instructions..." />
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl shadow-lg border-2 border-emerald-200 p-6 mb-4">
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-lg font-semibold text-slate-700">Order Total</span>
+              <span className="text-3xl font-bold text-emerald-600">{formatCurrency(desktopTotal)}</span>
+            </div>
+            <button
+              disabled={!desktopCustomerId || desktopRowsWithProduct.length === 0 || createMut.isPending}
+              onClick={handleDesktopSubmit}
+              className="w-full py-4 bg-emerald-600 text-white font-bold text-lg rounded-xl hover:bg-emerald-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
+            >
+              <ShoppingCart className="w-6 h-6" />
+              {createMut.isPending ? 'Placing Order...' : `Place Order — ${formatCurrency(desktopTotal)}`}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="animate-fade-in pb-24 md:pb-28 lg:pb-16">
+      <div className="px-4 md:px-5 lg:px-6 pt-4 md:pt-6 max-w-5xl mx-auto">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5 md:mb-6">
+          <button onClick={() => { orderDraftUtils.clear(); navigate(-1); }} className="p-2.5 rounded-lg bg-slate-50 hover:bg-slate-100 w-fit">
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <div className="flex-1">
+            <h1 className="text-2xl md:text-3xl lg:text-2xl font-bold text-slate-900">Review & Place Order</h1>
+            <p className="text-sm md:text-base lg:text-sm text-slate-500 mt-1">Confirm customer, products, and delivery details</p>
+          </div>
+        </div>
+
+        {/* Step Status Chips - Mobile/Tablet only */}
+        {!isDesktop && (
+          <div className="grid grid-cols-3 gap-2.5 mb-6 md:mb-7">
+            <StepMini label="Customer" done={!!draft.customerId} />
+            <StepMini label="Products" done={draft.items.length > 0} />
+            <StepMini label="Ready" done={!!draft.customerId && draft.items.length > 0} />
+          </div>
+        )}
+
+        {/* Customer Section */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 md:p-6 mb-4 md:mb-5">
           <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <User className="w-5 h-5 text-emerald-600" />
-              <h2 className="text-lg font-semibold text-slate-900">Customer</h2>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
+                <User className="w-5 h-5 text-emerald-700" />
+              </div>
+              <h2 className="text-lg md:text-base font-bold text-slate-900">Customer</h2>
             </div>
             {draft.customerId && (
-              <button onClick={() => navigate('/rep/orders/new/customers')} className="text-sm text-emerald-600 hover:underline">
+              <button onClick={() => navigate('/rep/orders/new/customers')} className="text-sm font-semibold text-emerald-600 hover:text-emerald-700 transition">
                 Change
               </button>
             )}
           </div>
 
           {!draft.customerId ? (
-            <button onClick={() => navigate('/rep/orders/new/customers')} className="w-full py-12 border-2 border-dashed border-slate-300 rounded-xl hover:border-emerald-500 hover:bg-emerald-50/50 transition group lg:hidden">
+            <button onClick={() => navigate('/rep/orders/new/customers')} className="w-full py-16 md:py-12 border-2 border-dashed border-slate-300 rounded-2xl hover:border-emerald-500 hover:bg-emerald-50/50 transition group">
               <User className="w-12 h-12 mx-auto text-slate-400 group-hover:text-emerald-600 mb-3" />
-              <div className="text-lg font-semibold text-slate-700 group-hover:text-emerald-600">Select Customer</div>
-              <div className="text-sm text-slate-500 mt-1">Tap to choose from your customers</div>
+              <div className="text-lg md:text-base font-bold text-slate-700 group-hover:text-emerald-600">Select Customer</div>
+              <div className="text-sm text-slate-500 mt-2">Tap to choose from your customers</div>
             </button>
           ) : (
-            <div className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl p-4 border border-emerald-200">
-              <div className="text-lg font-bold text-slate-900">{draft.customerName}</div>
+            <div className="bg-gradient-to-br from-emerald-50 to-emerald-100/60 rounded-2xl p-5 md:p-5 border border-emerald-200">
+              <div className="text-lg md:text-base font-bold text-slate-900 mb-3">{draft.customerName}</div>
               {selectedCustomer && (
-                <div className="mt-2 text-sm">
+                <div className="space-y-3">
                   <div>
-                    <div className="text-slate-600">Location</div>
-                    <div className="font-semibold text-slate-900">{selectedCustomer.city}</div>
+                    <div className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">Location</div>
+                    <div className="text-base md:text-sm font-semibold text-slate-900 mt-1">{selectedCustomer.city}</div>
+                  </div>
+                  <div className="pt-3 border-t border-emerald-200">
+                    <div className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">Contact</div>
+                    <div className="text-sm md:text-base font-semibold text-slate-900 mt-1">{selectedCustomer.phoneNumber || 'N/A'}</div>
                   </div>
                 </div>
               )}
@@ -402,101 +620,197 @@ export default function RepCreateOrder() {
           )}
         </div>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-4">
+        {/* Products Section */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 md:p-6 mb-4 md:mb-5">
           <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <Package className="w-5 h-5 text-emerald-600" />
-              <h2 className="text-lg font-semibold text-slate-900">Products</h2>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center">
+                <Package className="w-5 h-5 text-purple-700" />
+              </div>
+              <h2 className="text-lg md:text-base font-bold text-slate-900">Products</h2>
               {draft.items.length > 0 && (
-                <span className="ml-2 px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-full">
-                  {itemCount} item{itemCount !== 1 ? 's' : ''}
+                <span className="ml-2 px-2.5 py-1.5 bg-emerald-100 text-emerald-700 text-xs font-bold rounded-lg">
+                  {draft.items.length}
                 </span>
               )}
             </div>
             {draft.items.length > 0 && (
-              <div className="text-sm font-bold text-slate-900">
-                Total: {formatCurrency(totalWithCalc)}
-              </div>
+              <button onClick={() => navigate('/rep/orders/new/products')} className="text-sm font-semibold text-emerald-600 hover:text-emerald-700 transition">
+                Edit
+              </button>
             )}
           </div>
 
           {draft.items.length === 0 ? (
-            <button onClick={() => navigate('/rep/orders/new/products')} className="w-full py-12 border-2 border-dashed border-slate-300 rounded-xl hover:border-emerald-500 hover:bg-emerald-50/50 transition group">
+            <button onClick={() => navigate('/rep/orders/new/products')} className="w-full py-16 md:py-12 border-2 border-dashed border-slate-300 rounded-2xl hover:border-emerald-500 hover:bg-emerald-50/50 transition group">
               <Package className="w-12 h-12 mx-auto text-slate-400 group-hover:text-emerald-600 mb-3" />
-              <div className="text-lg font-semibold text-slate-700 group-hover:text-emerald-600">Add Products</div>
-              <div className="text-sm text-slate-500 mt-1">Browse catalog and add items to cart</div>
+              <div className="text-lg md:text-base font-bold text-slate-700 group-hover:text-emerald-600">Add Products</div>
+              <div className="text-sm text-slate-500 mt-2">Browse catalog and add items to cart</div>
             </button>
           ) : (
             <>
-              <div className="space-y-2 mb-4">
-                {draft.items.map(item => (
-                  <div key={item.productId} className="flex items-center gap-3 bg-slate-50 rounded-xl p-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-semibold text-slate-900 truncate">{item.name}</div>
-                      <div className="text-xs text-slate-500">{item.sku} • {formatCurrency(item.price)}</div>
-                      {item.discountPercent != null && (
-                        <div className="text-xs text-orange-600">Disc {item.discountPercent}%</div>
-                      )}
-                      {item.taxAmount != null && (
-                        <div className="text-xs text-indigo-600">Tax {formatCurrency(item.taxAmount)}</div>
-                      )}
-                    </div>
-                    <div className="text-sm text-slate-600">
-                      {item.quantity} × {formatCurrency(item.price)} ={' '}
-                      {formatCurrency(item.lineTotal ?? 0)}
-                    </div>
-                    <div className="text-sm font-bold text-slate-900 w-24 text-right">
-                      {formatCurrency(item.lineTotal ?? 0)}
-                    </div>
-                    <button onClick={() => { orderDraftUtils.removeItem(item.productId); setDraft(orderDraftUtils.get()); }} className="p-1.5 text-red-400 hover:text-red-600">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+              <div className="mb-4">
+                {isDesktop ? (
+                  <div className="rounded-xl overflow-x-auto border border-slate-200">
+                    <table className="w-full text-[11px] min-w-[980px]">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200">
+                          <th className="px-3 py-2 text-left font-semibold text-slate-500 uppercase">Description</th>
+                          <th className="px-3 py-2 text-left font-semibold text-slate-500 uppercase">Item</th>
+                          <th className="px-3 py-2 text-center font-semibold text-slate-500 uppercase">Qty</th>
+                          <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Rate</th>
+                          <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">MRP</th>
+                          <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Disc %</th>
+                          <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Disc Amt</th>
+                          <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Tax</th>
+                          <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Tax Amt</th>
+                          <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Amount</th>
+                          <th className="px-3 py-2 text-center font-semibold text-slate-500 uppercase">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {draft.items.map(item => {
+                          const rate = item.price || 0;
+                          const qty = item.quantity || 0;
+                          const discPct = item.discountPercent || 0;
+                          const calc = calculateLine({ rate, qty, discountPercent: discPct, taxAmount: item.taxAmount });
+                          const amount = item.lineTotal ?? calc.total;
+                          return (
+                            <tr key={item.productId}>
+                              <td className="px-3 py-2.5 text-slate-800 max-w-[220px] truncate" title={item.name || '-'}>{item.name || '-'}</td>
+                              <td className="px-3 py-2.5 text-slate-600">{item.sku || '-'}</td>
+                              <td className="px-3 py-2.5 text-center text-slate-600">{qty}</td>
+                              <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(rate)}</td>
+                              <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(item.mrp ?? rate)}</td>
+                              <td className="px-3 py-2.5 text-right text-slate-700">{discPct}</td>
+                              <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(calc.discount)}</td>
+                              <td className="px-3 py-2.5 text-right text-slate-700">{item.taxCode || '-'}</td>
+                              <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(calc.tax)}</td>
+                              <td className="px-3 py-2.5 text-right font-semibold text-slate-900">{formatCurrency(amount)}</td>
+                              <td className="px-3 py-2.5 text-center">
+                                <button onClick={() => { orderDraftUtils.removeItem(item.productId); setDraft(orderDraftUtils.get()); }} className="inline-flex p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition">
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
-                ))}
+                ) : (
+                  <div className="space-y-3">
+                    {draft.items.map(item => (
+                      <div key={item.productId} className="flex flex-col md:flex-row md:items-center gap-3 bg-slate-50 rounded-2xl p-4 md:p-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-base md:text-sm font-bold text-slate-900 truncate">{item.name}</div>
+                          <div className="text-xs md:text-xs text-slate-500 mt-1 space-y-0.5">
+                            <div>{item.sku} • {formatCurrency(item.price)}</div>
+                            {item.discountPercent != null && (
+                              <div className="text-orange-700 font-semibold">Disc {item.discountPercent}%</div>
+                            )}
+                            {item.taxAmount != null && (
+                              <div className="text-emerald-700 font-semibold">Tax {formatCurrency(item.taxAmount)}</div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between md:justify-end gap-3">
+                          <div className="text-sm text-slate-600 md:min-w-[120px] text-right">
+                            {item.quantity} × {formatCurrency(item.price)}
+                          </div>
+                          <div className="text-base md:text-sm font-bold text-slate-900 md:min-w-[100px] text-right">
+                            {formatCurrency(item.lineTotal ?? 0)}
+                          </div>
+                          <button onClick={() => { orderDraftUtils.removeItem(item.productId); setDraft(orderDraftUtils.get()); }} className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition">
+                            <Trash2 className="w-5 h-5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-              <button onClick={() => navigate('/rep/orders/new/products')} className="w-full py-3 border-2 border-emerald-600 text-emerald-600 font-semibold rounded-xl hover:bg-emerald-50 transition">
+              <button onClick={() => navigate('/rep/orders/new/products')} className="w-full py-3.5 md:py-3 border-2 border-emerald-600 text-emerald-600 font-bold rounded-xl hover:bg-emerald-50 transition text-base md:text-sm">
                 + Add More Products
               </button>
             </>
           )}
         </div>
 
+        {/* Delivery Info Section */}
         {draft.customerId && draft.items.length > 0 && (
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-4">
-            <h3 className="text-sm font-semibold text-slate-700 mb-3">Delivery Information (Optional)</h3>
-            <div className="space-y-3">
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 md:p-6 mb-4 md:mb-5">
+            <h3 className="text-lg md:text-base font-bold text-slate-900 mb-4 flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center">
+                <Package className="w-4 h-4 text-amber-700" />
+              </div>
+              Delivery Information
+            </h3>
+            <p className="text-sm text-slate-500 mb-4">(Optional) Add delivery address and special instructions</p>
+            <div className="space-y-4">
               <div>
-                <label className="text-sm text-slate-600 mb-1 block">Delivery Address</label>
-                <input value={deliveryAddress} onChange={e => setDeliveryAddress(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-emerald-500" placeholder="Enter delivery address..." />
+                <label className="text-sm font-semibold text-slate-700 mb-2 block">Delivery Address</label>
+                <input value={deliveryAddress} onChange={e => setDeliveryAddress(e.target.value)} className="w-full px-4 py-3 md:py-2.5 border border-slate-300 rounded-xl text-sm outline-emerald-500 placeholder-slate-400" placeholder="Enter delivery address..." />
               </div>
               <div>
-                <label className="text-sm text-slate-600 mb-1 block">Delivery Notes</label>
-                <textarea value={deliveryNotes} onChange={e => setDeliveryNotes(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-emerald-500 resize-none" rows={2} placeholder="Special instructions..." />
+                <label className="text-sm font-semibold text-slate-700 mb-2 block">Special Instructions</label>
+                <textarea value={deliveryNotes} onChange={e => setDeliveryNotes(e.target.value)} className="w-full px-4 py-3 md:py-2.5 border border-slate-300 rounded-xl text-sm outline-emerald-500 resize-none placeholder-slate-400" rows={3} placeholder="Any special instructions for delivery..." />
               </div>
             </div>
           </div>
         )}
 
-        {draft.items.length > 0 && (
-          <div className="bg-white rounded-2xl shadow-lg border-2 border-emerald-200 p-6">
+        {/* Desktop Order Total */}
+        {draft.items.length > 0 && isDesktop && (
+          <div className="bg-white rounded-2xl shadow-lg border-2 border-emerald-200 p-6 mb-4">
             <div className="flex items-center justify-between mb-4">
               <span className="text-lg font-semibold text-slate-700">Order Total</span>
-              <span className="text-2xl font-bold text-emerald-600">{formatCurrency(total)}</span>
+              <span className="text-3xl font-bold text-emerald-600">{formatCurrency(total)}</span>
             </div>
 
             {exceedsCredit && (
-              <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+              <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800 font-semibold">
                 ⚠️ Warning: This order will exceed customer's credit limit
               </div>
             )}
 
-            <button disabled={!draft.customerId || draft.items.length === 0 || createMut.isPending} onClick={handleSubmit} className="w-full py-4 bg-emerald-600 text-white font-bold text-lg rounded-xl hover:bg-emerald-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-              <ShoppingCart className="w-5 h-5" />
+            <button disabled={!draft.customerId || draft.items.length === 0 || createMut.isPending} onClick={handleSubmit} className="w-full py-4 bg-emerald-600 text-white font-bold text-lg rounded-xl hover:bg-emerald-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3">
+              <ShoppingCart className="w-6 h-6" />
               {createMut.isPending ? 'Placing Order...' : `Place Order — ${formatCurrency(total)}`}
             </button>
           </div>
         )}
       </div>
+
+      {draft.items.length > 0 && !isDesktop && (
+        <div className="fixed left-0 right-0 bottom-[calc(env(safe-area-inset-bottom,0px)+70px)] md:bottom-[calc(env(safe-area-inset-bottom,0px)+74px)] z-40 px-3 md:px-4">
+          <div className="max-w-3xl mx-auto bg-gradient-to-r from-emerald-600 to-emerald-700 border-2 border-emerald-500 rounded-2xl shadow-2xl shadow-emerald-500/30 p-4 flex items-center gap-3 text-white">
+            <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
+              <ShoppingCart className="w-6 h-6 text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-emerald-100 uppercase tracking-wide">{itemCount} Item{itemCount !== 1 ? 's' : ''}</p>
+              <p className="text-base md:text-lg font-bold text-white truncate">{formatCurrency(total)}</p>
+            </div>
+            <button
+              disabled={!draft.customerId || draft.items.length === 0 || createMut.isPending}
+              onClick={handleSubmit}
+              className="px-5 py-3 rounded-xl bg-white text-emerald-700 text-sm font-bold hover:bg-emerald-50 disabled:opacity-60 active:scale-95 transition whitespace-nowrap shadow-lg"
+            >
+              {createMut.isPending ? 'Placing...' : 'Place'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StepMini({ label, done }: { label: string; done: boolean }) {
+  return (
+    <div className={`rounded-xl border-2 px-3 py-3.5 md:py-2.5 transition-all ${done ? 'bg-emerald-50 border-emerald-300 text-emerald-700' : 'bg-white border-slate-200 text-slate-400'}`}>
+      <p className="text-[9px] md:text-[8px] uppercase tracking-widest font-bold opacity-70">{label}</p>
+      <p className="text-sm md:text-xs font-bold mt-1 md:mt-0.5">{done ? '✓ Done' : 'Pending'}</p>
     </div>
   );
 }

@@ -106,7 +106,9 @@ export interface Route {
   id: string;
   name: string;
   description?: string;
-  repId: string;
+  repId?: string;
+  repName?: string;
+  assignedReps?: Array<{ repId: string; repName: string }>;
   daysOfWeek: string[];
   estimatedDurationMinutes: number;
   isActive: boolean;
@@ -125,10 +127,15 @@ export interface RouteCustomer {
 
 export interface Complaint {
   id: string;
-  customerId: string;
+  customerId?: string;
   customerName: string;
+  createdByUserId?: string;
+  createdByRole?: string;
+  createdByName?: string;
+  assignedTo?: string;
   orderId?: string;
   subject: string;
+  ticketType?: 'Support' | 'Complaint';
   description: string;
   priority: string;
   status: string;
@@ -140,6 +147,22 @@ export interface Complaint {
 export interface CreateComplaintRequest {
   orderId?: string;
   subject: string;
+  ticketType?: 'Support' | 'Complaint';
   description: string;
   priority?: string;
+}
+
+export interface ComplaintMessage {
+  id: string;
+  complaintId: string;
+  senderUserId: string;
+  senderRole: string;
+  senderName: string;
+  message: string;
+  isSystemMessage: boolean;
+  createdAt: string;
+}
+
+export interface SendComplaintMessageRequest {
+  message: string;
 }

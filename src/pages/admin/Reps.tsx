@@ -19,7 +19,6 @@ export default function AdminReps() {
   const [search, setSearch] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [showFilters, setShowFilters] = useState(false);
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
   const [filterRegionId, setFilterRegionId] = useState('');
   const [filterCoordinatorId, setFilterCoordinatorId] = useState('');
@@ -27,17 +26,17 @@ export default function AdminReps() {
   const qc = useQueryClient();
   const navigate = useNavigate();
 
-  const activeFilterCount = (filterStatus !== 'all' ? 1 : 0) + (filterRegionId ? 1 : 0) + (filterCoordinatorId ? 1 : 0);
+  const hasActiveFilters = !!(search || filterStatus !== 'all' || filterRegionId || filterCoordinatorId);
 
   const [repForm, setRepForm] = useState({
     fullName: '',
     employeeCode: '',
     regionId: '',
     subRegionId: '',
+    coordinatorId: '',
     email: '',
     phoneNumber: '',
-    username: '',
-    password: '',
+    hireDate: '',
   });
 
   const { data: repsData, isLoading: repsLoading } = useQuery({
@@ -72,8 +71,8 @@ export default function AdminReps() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-reps'] });
       setShowCreate(false);
-      setRepForm({ fullName: '', employeeCode: '', regionId: '', subRegionId: '', email: '', phoneNumber: '', username: '', password: '' });
-      toast.success('Rep created');
+      setRepForm({ fullName: '', employeeCode: '', regionId: '', subRegionId: '', coordinatorId: '', email: '', phoneNumber: '', hireDate: '' });
+      toast.success('Rep created! Credentials have been sent by email.');
     },
     onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed'),
   });
@@ -145,99 +144,68 @@ export default function AdminReps() {
   const someSelected = selectedIds.size > 0;
 
   return (
-    <div className="animate-fade-in space-y-4 lg:space-y-6">
-      {/* Toolbar */}
-      <div className="sticky top-0 z-20 -mx-4 px-4 py-3 bg-white/95 backdrop-blur-sm border-b border-slate-200/80 shadow-sm lg:-mx-8 lg:px-8">
-        <div className="flex items-center gap-2 lg:gap-3">
-          <div className="flex-1 min-w-0">
-            <h1 className="text-xl font-bold text-slate-900">Sales Reps</h1>
-            <p className="text-xs text-slate-500 mt-0.5 hidden sm:block">Manage your sales team</p>
-          </div>
-          <div className="relative hidden lg:block">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
-              value={search}
-              onChange={e => { setSearch(e.target.value); setPage(1); }}
-              placeholder="Search reps..."
-              className="pl-10 pr-4 py-2 border border-slate-200 rounded-xl text-sm w-52 outline-none focus:ring-2 focus:ring-indigo-500/20"
-            />
-          </div>
-          <button onClick={() => exportReps('excel')} title="Export Excel" className="p-2 rounded-xl border border-slate-200 hover:bg-emerald-50 text-slate-500 hover:text-emerald-600 transition hidden lg:flex items-center justify-center">
-            <FileSpreadsheet className="w-4 h-4" />
-          </button>
-          <button onClick={() => exportReps('pdf')} title="Export PDF" className="p-2 rounded-xl border border-slate-200 hover:bg-rose-50 text-slate-500 hover:text-rose-600 transition hidden lg:flex items-center justify-center">
-            <FileText className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => setShowFilters(s => !s)}
-            className={`hidden lg:flex items-center gap-1.5 px-3 py-2 rounded-xl border text-sm font-medium transition relative ${showFilters ? 'bg-indigo-50 border-indigo-300 text-indigo-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}
-          >
-            <Filter className="w-3.5 h-3.5" /> Filters
-            {activeFilterCount > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-indigo-600 text-white text-[10px] font-bold flex items-center justify-center">{activeFilterCount}</span>
-            )}
-          </button>
-          <button
-            onClick={() => isDesktop ? navigate('/admin/reps/new') : setShowCreate(true)}
-            className="flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700"
-          >
-            <Plus className="w-4 h-4" /><span className="hidden sm:inline">Add Rep</span>
-          </button>
-        </div>
-        <div className="mt-2 lg:hidden">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
-              value={search}
-              onChange={e => { setSearch(e.target.value); setPage(1); }}
-              placeholder="Search reps..."
-              className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500/20"
-            />
-          </div>
-          <button
-            onClick={() => setShowFilters(s => !s)}
-            className={`mt-2 flex items-center gap-1.5 px-3 py-2 rounded-xl border text-sm font-medium transition relative ${showFilters ? 'bg-indigo-50 border-indigo-300 text-indigo-700' : 'border-slate-200 text-slate-600'}`}
-          >
-            <Filter className="w-3.5 h-3.5" /> Filters
-            {activeFilterCount > 0 && <span className="ml-1 px-1.5 py-0.5 bg-indigo-600 text-white text-[10px] font-bold rounded-full">{activeFilterCount}</span>}
-          </button>
-        </div>
-        {showFilters && (
-          <div className="mt-3 pt-3 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1">Status</label>
-              <div className="flex gap-1.5">
-                {(['all', 'active', 'inactive'] as const).map(s => (
-                  <button key={s} onClick={() => { setFilterStatus(s); setPage(1); }}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition capitalize ${filterStatus === s ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-                  >{s}</button>
-                ))}
-              </div>
+    <div className="animate-fade-in flex flex-col gap-4 pb-28">
+      <div>
+        <h1 className="text-2xl font-bold text-slate-900">Sales Reps</h1>
+        <p className="text-slate-500 text-sm mt-1">Manage your sales team</p>
+      </div>
+
+      <div className="sticky top-0 z-30">
+        <div className="bg-white/90 backdrop-blur-md border border-slate-200/70 rounded-2xl shadow-[0_2px_16px_-4px_rgba(0,0,0,0.10)] px-4 py-3 space-y-2.5">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <div className="relative flex-1 min-w-[200px] group">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
+              <input
+                type="text"
+                placeholder="Search reps..."
+                value={search}
+                onChange={e => { setSearch(e.target.value); setPage(1); }}
+                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm placeholder-slate-400 focus:bg-white focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/15 outline-none transition-all"
+              />
+              {search && (
+                <button onClick={() => { setSearch(''); setPage(1); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1">Region</label>
-              <select value={filterRegionId} onChange={e => { setFilterRegionId(e.target.value); setPage(1); }}
-                className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs bg-white outline-none">
-                <option value="">All regions</option>
-                {regionList.map((r: any) => <option key={r.id} value={r.id}>{r.name}</option>)}
-              </select>
+
+            <div className="hidden sm:block h-7 w-px bg-slate-200" />
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => isDesktop ? navigate('/admin/reps/new') : setShowCreate(true)}
+                className="flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700"
+              >
+                <Plus className="w-4 h-4" /><span className="hidden sm:inline">Add Rep</span>
+              </button>
             </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1">Coordinator</label>
-              <select value={filterCoordinatorId} onChange={e => { setFilterCoordinatorId(e.target.value); setPage(1); }}
-                className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs bg-white outline-none">
-                <option value="">All coordinators</option>
-                {coordinatorList.map((c: any) => <option key={c.id} value={c.id}>{c.fullName}</option>)}
-              </select>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1.5 text-slate-400">
+              <Filter className="w-3.5 h-3.5" />
+              <span className="text-xs font-medium uppercase tracking-wide">Filters</span>
             </div>
-            {activeFilterCount > 0 && (
-              <div className="sm:col-span-3 flex justify-end">
-                <button onClick={() => { setFilterStatus('all'); setFilterRegionId(''); setFilterCoordinatorId(''); setPage(1); }}
-                  className="text-xs text-red-500 hover:text-red-700 font-medium">Clear all filters</button>
-              </div>
+            <select value={filterStatus} onChange={e => { setFilterStatus(e.target.value as any); setPage(1); }} className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/15 focus:border-indigo-300 transition cursor-pointer">
+              <option value="all">All Status</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+            <select value={filterRegionId} onChange={e => { setFilterRegionId(e.target.value); setPage(1); }} className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/15 focus:border-indigo-300 transition cursor-pointer">
+              <option value="">All Regions</option>
+              {regionList.map((r: any) => <option key={r.id} value={r.id}>{r.name}</option>)}
+            </select>
+            <select value={filterCoordinatorId} onChange={e => { setFilterCoordinatorId(e.target.value); setPage(1); }} className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/15 focus:border-indigo-300 transition cursor-pointer">
+              <option value="">All Coordinators</option>
+              {coordinatorList.map((c: any) => <option key={c.id} value={c.id}>{c.fullName}</option>)}
+            </select>
+            {hasActiveFilters && (
+              <button onClick={() => { setSearch(''); setFilterStatus('all'); setFilterRegionId(''); setFilterCoordinatorId(''); setPage(1); }} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-red-50 text-red-600 border border-red-200 text-xs font-medium hover:bg-red-100 transition">
+                <X className="w-3 h-3" /> Clear
+              </button>
             )}
           </div>
-        )}
+        </div>
       </div>
 
       {/* Desktop table */}
@@ -255,12 +223,12 @@ export default function AdminReps() {
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50/70">
                   <th className="w-10 px-4 py-3">
-                    <button
-                      onClick={toggleAll}
-                      className={`w-5 h-5 rounded border-2 flex items-center justify-center transition ${allSelected ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300 hover:border-indigo-400'}`}
-                    >
-                      {allSelected && <Check className="w-3 h-3 text-white" />}
-                    </button>
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={toggleAll}
+                      className="shrink-0"
+                    />
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Name</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Region</th>
@@ -279,12 +247,13 @@ export default function AdminReps() {
                     onClick={() => navigate(`/admin/reps/${r.id}`)}
                   >
                     <td className="px-4 py-3">
-                      <button
-                        onClick={e => { e.stopPropagation(); toggleSelect(r.id); }}
-                        className={`w-5 h-5 rounded border-2 flex items-center justify-center transition ${selectedIds.has(r.id) ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300 hover:border-indigo-400'}`}
-                      >
-                        {selectedIds.has(r.id) && <Check className="w-3 h-3 text-white" />}
-                      </button>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(r.id)}
+                      onChange={e => { e.stopPropagation(); toggleSelect(r.id); }}
+                      onClick={e => e.stopPropagation()}
+                      className="shrink-0"
+                    />
                     </td>
                     <td className="px-4 py-3">
                       <p className="font-semibold text-slate-900 text-sm">{r.fullName}</p>
@@ -333,12 +302,13 @@ export default function AdminReps() {
             <div className="p-4" onClick={() => navigate(`/admin/reps/${r.id}`)}>
               <div className="flex items-start justify-between gap-3 mb-2">
                 <div className="flex items-start gap-3">
-                  <button
-                    onClick={e => { e.stopPropagation(); toggleSelect(r.id); }}
-                    className={`mt-0.5 w-5 h-5 rounded border-2 flex-shrink-0 flex items-center justify-center transition ${selectedIds.has(r.id) ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300'}`}
-                  >
-                    {selectedIds.has(r.id) && <Check className="w-3 h-3 text-white" />}
-                  </button>
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(r.id)}
+                    onChange={e => { e.stopPropagation(); toggleSelect(r.id); }}
+                    onClick={e => e.stopPropagation()}
+                    className="mt-1 shrink-0"
+                  />
                   <div>
                     <p className="font-semibold text-slate-900">{r.fullName}</p>
                     <p className="text-xs text-slate-400">{r.employeeCode} · {r.regionName || 'No region'}</p>
@@ -372,8 +342,6 @@ export default function AdminReps() {
               { label: 'Employee Code', key: 'employeeCode', type: 'text' },
               { label: 'Email', key: 'email', type: 'email' },
               { label: 'Phone', key: 'phoneNumber', type: 'tel' },
-              { label: 'Username', key: 'username', type: 'text' },
-              { label: 'Password', key: 'password', type: 'password' },
             ].map(f => (
               <div key={f.key}>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">{f.label}</label>
@@ -385,11 +353,75 @@ export default function AdminReps() {
                 />
               </div>
             ))}
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">Hire Date</label>
+                <input
+                  type="date"
+                  value={repForm.hireDate}
+                  onChange={e => setRepForm(p => ({ ...p, hireDate: e.target.value }))}
+                  className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500/20"
+                />
+              </div>
+              <div />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Region</label>
+                <select
+                  value={repForm.regionId}
+                  onChange={e => setRepForm(p => ({ ...p, regionId: e.target.value, subRegionId: '', coordinatorId: '' }))}
+                  className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500/20"
+                >
+                  <option value="">Select region…</option>
+                  {regionList.map((r: any) => (
+                    <option key={r.id} value={r.id}>{r.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Sub-region</label>
+                <select
+                  value={repForm.subRegionId}
+                  onChange={e => setRepForm(p => ({ ...p, subRegionId: e.target.value }))}
+                  disabled={!repForm.regionId}
+                  className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-50"
+                >
+                  <option value="">Select sub-region…</option>
+                  {regionList
+                    .find((r: any) => r.id === repForm.regionId)
+                    ?.subRegions?.map((s: any) => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Coordinator</label>
+                <select
+                  value={repForm.coordinatorId}
+                  onChange={e => setRepForm(p => ({ ...p, coordinatorId: e.target.value }))}
+                  disabled={!repForm.regionId}
+                  className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-50"
+                >
+                  <option value="">Select coordinator…</option>
+                  {coordinatorList
+                    .filter((c: any) => !repForm.regionId || c.regionId === repForm.regionId)
+                    .map((c: any) => (
+                      <option key={c.id} value={c.id}>{c.fullName}</option>
+                    ))}
+                </select>
+              </div>
+            </div>
+
             <div className="flex gap-3 pt-2">
               <button onClick={() => setShowCreate(false)} className="flex-1 py-2.5 bg-slate-100 rounded-xl text-sm font-medium text-slate-600">Cancel</button>
               <button
                 onClick={() => createRepMut.mutate({ ...repForm })}
-                disabled={createRepMut.isPending || !repForm.fullName || !repForm.username || !repForm.password}
+                disabled={createRepMut.isPending || !repForm.fullName || !repForm.email}
                 className="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium disabled:opacity-50"
               >
                 {createRepMut.isPending ? 'Creating...' : 'Create'}

@@ -1,12 +1,12 @@
-import { useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { coordinatorGetQuotations, coordinatorApproveQuotation, coordinatorRejectQuotation } from '../../services/api/quotationApi';
 import { formatCurrency, formatRelative } from '../../utils/formatters';
-import { FileText, Check, X, Loader2 } from 'lucide-react';
+import { downloadQuotationPdf } from '../../utils/quotationPdf';
+import { FileText, Check, X, Loader2, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
 import PageHeader from '../../components/common/PageHeader';
-import DataTable, { type Column } from '../../components/common/DataTable';
 import MobileTileList from '../../components/common/MobileTileList';
 import BottomSheet from '../../components/common/BottomSheet';
 import StatusBadge from '../../components/common/StatusBadge';
@@ -38,10 +38,14 @@ export default function CoordinatorQuotations() {
   const approveMut = useMutation({
     mutationFn: ({ id, notes }: { id: string; notes?: string }) => coordinatorApproveQuotation(id, { notes }),
     onSuccess: () => {
-      toast.success('Quotation approved');
+      toast.success('Quotation approved and moved to orders');
       setSelected(null); setApproveNotes('');
       queryClient.invalidateQueries({ queryKey: ['coordinator-quotations'] });
       queryClient.invalidateQueries({ queryKey: ['coordinator-dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['coordinator-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['rep-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['customer-orders'] });
     },
     onError: () => toast.error('Failed to approve quotation'),
   });
@@ -62,37 +66,15 @@ export default function CoordinatorQuotations() {
   const isPendingStatus = (s: QuotationStatus) => s === 'Submitted' || s === 'UnderReview';
   const inputCls = 'w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-300';
 
-  const columns: Column<Quotation>[] = [
-    {
-      key: 'quotationNumber', header: 'Quotation',
-      render: (q) => (
-        <div>
-          <p className="font-semibold text-slate-800">{q.quotationNumber}</p>
-          <p className="text-xs text-slate-400">{formatRelative(q.createdAt)}</p>
-        </div>
-      ),
-    },
-    { key: 'customerName', header: 'Customer', render: (q) => q.customerName || q.shopName || '—' },
-    { key: 'repName', header: 'Rep', render: (q) => q.repName || '—' },
-    { key: 'totalAmount', header: 'Total', align: 'right' as const, render: (q) => <span className="font-semibold">{formatCurrency(q.totalAmount)}</span> },
-    { key: 'items', header: 'Items', align: 'center' as const, render: (q) => q.items?.length || 0 },
-    { key: 'status', header: 'Status', align: 'center' as const, render: (q) => <StatusBadge status={q.status} type="quotations" /> },
-    {
-      key: 'actions', header: 'Actions', align: 'center' as const,
-      render: (q) => isPendingStatus(q.status) ? (
-        <div className="flex items-center gap-2 justify-center">
-          <button onClick={(e) => { e.stopPropagation(); setSelected(q); setApproveNotes(''); }}
-            className="px-3 py-1.5 bg-emerald-500 text-white text-xs font-semibold rounded-lg hover:bg-emerald-600 transition flex items-center gap-1">
-            <Check className="w-3.5 h-3.5" /> Approve
-          </button>
-          <button onClick={(e) => { e.stopPropagation(); setRejectTarget(q); setRejectReason(''); }}
-            className="px-3 py-1.5 border border-red-200 text-red-600 text-xs font-semibold rounded-lg hover:bg-red-50 transition flex items-center gap-1">
-            <X className="w-3.5 h-3.5" /> Reject
-          </button>
-        </div>
-      ) : null,
-    },
-  ];
+  useEffect(() => {
+    if (!selected) return;
+    const updated = quotations.find((item) => item.id === selected.id);
+    if (!updated) {
+      setSelected(null);
+      return;
+    }
+    setSelected(updated);
+  }, [quotations, selected]);
 
   return (
     <div className="animate-fade-in space-y-4 lg:space-y-6">
@@ -111,9 +93,165 @@ export default function CoordinatorQuotations() {
       </div>
 
       {isDesktop ? (
-        <DataTable columns={columns} data={quotations} isLoading={isLoading} keyExtractor={(q) => q.id}
-          onRowClick={(q) => setSelected(q)} emptyIcon={<FileText className="w-12 h-12 text-slate-300" />}
-          emptyTitle="No quotations found" page={page} totalPages={totalPages} onPageChange={setPage} />
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          {isLoading ? (
+            <div className="p-10 text-center text-slate-400 text-sm">Loading quotations</div>
+          ) : quotations.length === 0 ? (
+            <div className="p-14 text-center">
+              <FileText className="w-10 h-10 text-slate-200 mx-auto mb-2" />
+              <p className="text-slate-400 text-sm">No quotations found</p>
+            </div>
+          ) : (
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-slate-100 bg-slate-50/70">
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Quotation</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Customer</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Rep</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Total</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wide">Items</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wide">Status</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wide">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {quotations.map((q) => (
+                  <Fragment key={q.id}>
+                    <tr
+                      onClick={() => setSelected((prev) => (prev?.id === q.id ? null : q))}
+                      className={`border-b border-slate-50 cursor-pointer transition-colors ${
+                        selected?.id === q.id ? 'bg-blue-50/50 border-blue-100' : 'hover:bg-slate-50/70'
+                      }`}
+                    >
+                      <td className="px-4 py-3.5">
+                        <p className="font-semibold text-slate-800">{q.quotationNumber}</p>
+                        <p className="text-xs text-slate-400">{formatRelative(q.createdAt)}</p>
+                      </td>
+                      <td className="px-4 py-3.5 text-slate-700">{q.customerName || q.shopName || '—'}</td>
+                      <td className="px-4 py-3.5 text-slate-500">{q.repName || '—'}</td>
+                      <td className="px-4 py-3.5 text-right font-semibold">{formatCurrency(q.totalAmount)}</td>
+                      <td className="px-4 py-3.5 text-center">{q.items?.length || 0}</td>
+                      <td className="px-4 py-3.5 text-center"><StatusBadge status={q.status} type="quotations" /></td>
+                      <td className="px-4 py-3.5 text-center">
+                        {isPendingStatus(q.status) ? (
+                          <div className="flex items-center gap-2 justify-center">
+                            <button onClick={(e) => { e.stopPropagation(); setSelected(q); setApproveNotes(''); }}
+                              className="px-3 py-1.5 bg-emerald-500 text-white text-xs font-semibold rounded-lg hover:bg-emerald-600 transition flex items-center gap-1">
+                              <Check className="w-3.5 h-3.5" /> Approve
+                            </button>
+                            <button onClick={(e) => { e.stopPropagation(); setRejectTarget(q); setRejectReason(''); }}
+                              className="px-3 py-1.5 border border-red-200 text-red-600 text-xs font-semibold rounded-lg hover:bg-red-50 transition flex items-center gap-1">
+                              <X className="w-3.5 h-3.5" /> Reject
+                            </button>
+                          </div>
+                        ) : null}
+                      </td>
+                    </tr>
+
+                    {selected?.id === q.id && (
+                      <tr className="border-b border-blue-100">
+                        <td colSpan={7} className="p-0">
+                          <div className="bg-gradient-to-b from-blue-50/70 to-slate-50/20 px-6 py-4" style={{ animation: 'fadeIn 0.18s ease-out both' }}>
+                            {q.items?.length > 0 && (
+                              <div className="rounded-xl overflow-x-auto border border-slate-200 mb-4">
+                                <table className="w-full text-[11px] min-w-[980px]">
+                                  <thead>
+                                    <tr className="bg-slate-50">
+                                      <th className="px-3 py-2 text-left font-semibold text-slate-500 uppercase">Description</th>
+                                      <th className="px-3 py-2 text-left font-semibold text-slate-500 uppercase">Item</th>
+                                      <th className="px-3 py-2 text-center font-semibold text-slate-500 uppercase">Qty</th>
+                                      <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Rate</th>
+                                      <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">MRP</th>
+                                      <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Disc %</th>
+                                      <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Disc Amt</th>
+                                      <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Tax</th>
+                                      <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Tax Amt</th>
+                                      <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Amount</th>
+                                      <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Request Price</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-100">
+                                    {q.items.map((item: any) => {
+                                      const rate = item.unitPrice || 0;
+                                      const qty = item.quantity || 0;
+                                      const discPct = item.discountPercent || 0;
+                                      const discAmt = (rate * qty * discPct) / 100;
+                                      const taxAmt = item.taxAmount || 0;
+                                      const amount = item.lineTotal ?? ((rate * qty) - discAmt + taxAmt);
+                                      return (
+                                        <tr key={item.id}>
+                                          <td className="px-3 py-2.5 text-slate-800 max-w-[220px] truncate" title={item.productName || '-'}>{item.productName || '-'}</td>
+                                          <td className="px-3 py-2.5 text-slate-600">{item.productSKU || '-'}</td>
+                                          <td className="px-3 py-2.5 text-center text-slate-600">{qty}</td>
+                                          <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(rate)}</td>
+                                          <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(item.mrp ?? rate)}</td>
+                                          <td className="px-3 py-2.5 text-right text-slate-700">{discPct}</td>
+                                          <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(discAmt)}</td>
+                                          <td className="px-3 py-2.5 text-right text-slate-700">{item.taxCode || '-'}</td>
+                                          <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(taxAmt)}</td>
+                                          <td className="px-3 py-2.5 text-right font-semibold text-slate-900">{formatCurrency(amount)}</td>
+                                          <td className="px-3 py-2.5 text-right text-slate-700">{item.expectedPrice != null ? formatCurrency(item.expectedPrice) : '-'}</td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+
+                            {isPendingStatus(q.status) ? (
+                              <>
+                                <div className="mb-4">
+                                  <label className="block text-xs font-semibold text-slate-600 mb-1">Notes (optional)</label>
+                                  <textarea value={approveNotes} onChange={e => setApproveNotes(e.target.value)} rows={2} placeholder="Add notes..." className={inputCls + ' resize-none'} />
+                                </div>
+                                <div className="flex gap-2 justify-end">
+                                  <button
+                                    onClick={() => downloadQuotationPdf(q)}
+                                    className="px-4 py-2.5 border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-50 transition flex items-center justify-center gap-2"
+                                  >
+                                    <Download className="w-4 h-4" /> Download PDF
+                                  </button>
+                                  <button onClick={() => { setRejectTarget(q); }}
+                                    className="px-4 py-2.5 border border-red-200 text-red-600 rounded-xl text-sm font-semibold hover:bg-red-50 transition flex items-center justify-center gap-2">
+                                    <X className="w-4 h-4" /> Reject
+                                  </button>
+                                  <button onClick={() => approveMut.mutate({ id: q.id, notes: approveNotes || undefined })} disabled={approveMut.isPending}
+                                    className="px-4 py-2.5 bg-emerald-500 text-white rounded-xl text-sm font-semibold hover:bg-emerald-600 transition flex items-center justify-center gap-2 disabled:opacity-50">
+                                    {approveMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Approve
+                                  </button>
+                                </div>
+                              </>
+                            ) : (
+                              <div className="flex justify-end">
+                                <button
+                                  onClick={() => downloadQuotationPdf(q)}
+                                  className="px-4 py-2.5 border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-50 transition flex items-center justify-center gap-2"
+                                >
+                                  <Download className="w-4 h-4" /> Download PDF
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          )}
+
+          {totalPages > 1 && (
+            <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-between">
+              <span className="text-xs text-slate-500">{data?.totalCount || 0} total • page {page} of {totalPages}</span>
+              <div className="flex gap-1">
+                <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1} className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none transition">Prev</button>
+                <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none transition">Next</button>
+              </div>
+            </div>
+          )}
+        </div>
       ) : (
         <MobileTileList data={quotations} isLoading={isLoading} keyExtractor={(q) => q.id}
           onTileClick={(q) => setSelected(q)} page={page} totalPages={totalPages} onPageChange={setPage}
@@ -166,7 +304,7 @@ export default function CoordinatorQuotations() {
       )}
 
       {/* Approve BottomSheet */}
-      <BottomSheet isOpen={!!selected} onClose={() => { setSelected(null); setApproveNotes(''); }}
+      <BottomSheet isOpen={!!selected && !isDesktop} onClose={() => { setSelected(null); setApproveNotes(''); }}
         title={selected ? `${selected.quotationNumber} — Details` : 'Quotation'}>
         {selected && (
           <div className="space-y-4">
@@ -182,24 +320,68 @@ export default function CoordinatorQuotations() {
             </div>
 
             {selected.items?.length > 0 && (
-              <div className="bg-slate-50 rounded-xl p-3 space-y-1">
+              <div>
                 <p className="text-xs font-semibold text-slate-600 mb-2">Items</p>
-                {selected.items.map(item => (
-                  <div key={item.id} className="flex justify-between text-sm text-slate-600 py-1">
-                    <span>{item.productName} x{item.quantity}</span>
-                    <span className="font-medium">{formatCurrency(item.lineTotal)}</span>
-                  </div>
-                ))}
+                <div className="rounded-xl overflow-x-auto border border-slate-200">
+                  <table className="w-full text-[11px] min-w-[980px]">
+                    <thead>
+                      <tr className="bg-slate-50">
+                        <th className="px-3 py-2 text-left font-semibold text-slate-500 uppercase">Description</th>
+                        <th className="px-3 py-2 text-left font-semibold text-slate-500 uppercase">Item</th>
+                        <th className="px-3 py-2 text-center font-semibold text-slate-500 uppercase">Qty</th>
+                        <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Rate</th>
+                        <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">MRP</th>
+                        <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Disc %</th>
+                        <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Disc Amt</th>
+                        <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Tax</th>
+                        <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Tax Amt</th>
+                        <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Amount</th>
+                        <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Request Price</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {selected.items.map((item: any) => {
+                        const rate = item.unitPrice || 0;
+                        const qty = item.quantity || 0;
+                        const discPct = item.discountPercent || 0;
+                        const discAmt = (rate * qty * discPct) / 100;
+                        const taxAmt = item.taxAmount || 0;
+                        const amount = item.lineTotal ?? ((rate * qty) - discAmt + taxAmt);
+                        return (
+                          <tr key={item.id}>
+                            <td className="px-3 py-2.5 text-slate-800 max-w-[220px] truncate" title={item.productName || '-'}>{item.productName || '-'}</td>
+                            <td className="px-3 py-2.5 text-slate-600">{item.productSKU || '-'}</td>
+                            <td className="px-3 py-2.5 text-center text-slate-600">{qty}</td>
+                            <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(rate)}</td>
+                            <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(item.mrp ?? rate)}</td>
+                            <td className="px-3 py-2.5 text-right text-slate-700">{discPct}</td>
+                            <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(discAmt)}</td>
+                            <td className="px-3 py-2.5 text-right text-slate-700">{item.taxCode || '-'}</td>
+                            <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(taxAmt)}</td>
+                            <td className="px-3 py-2.5 text-right font-semibold text-slate-900">{formatCurrency(amount)}</td>
+                            <td className="px-3 py-2.5 text-right text-slate-700">{item.expectedPrice != null ? formatCurrency(item.expectedPrice) : '-'}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
 
-            {isPendingStatus(selected.status) && (
+            {isPendingStatus(selected.status) ? (
               <>
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1">Notes (optional)</label>
                   <textarea value={approveNotes} onChange={e => setApproveNotes(e.target.value)} rows={2} placeholder="Add notes..." className={inputCls + ' resize-none'} />
                 </div>
                 <div className="flex gap-2 pt-2">
+                  <button
+                    onClick={() => downloadQuotationPdf(selected)}
+                    className="flex-1 px-4 py-2.5 border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-50 transition flex items-center justify-center gap-2"
+                  >
+                    <Download className="w-4 h-4" /> Download PDF
+                  </button>
                   <button onClick={() => { setRejectTarget(selected); setSelected(null); }}
                     className="flex-1 px-4 py-2.5 border border-red-200 text-red-600 rounded-xl text-sm font-semibold hover:bg-red-50 transition flex items-center justify-center gap-2">
                     <X className="w-4 h-4" /> Reject
@@ -210,6 +392,15 @@ export default function CoordinatorQuotations() {
                   </button>
                 </div>
               </>
+            ) : (
+              <div className="pt-2">
+                <button
+                  onClick={() => downloadQuotationPdf(selected)}
+                  className="w-full px-4 py-2.5 border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-50 transition flex items-center justify-center gap-2"
+                >
+                  <Download className="w-4 h-4" /> Download PDF
+                </button>
+              </div>
             )}
           </div>
         )}

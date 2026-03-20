@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { useSignalR } from '../../hooks/useSignalR';
@@ -7,36 +7,47 @@ import { notificationsApi } from '../../services/api/notificationsApi';
 import {
   LayoutDashboard, Users, UserCheck, FileText,
   LogOut, Bell, Menu, X, ChevronLeft,
-  Shield, UsersRound
+  Shield, UsersRound, ShoppingCart, MessageSquare, User, MapPin
 } from 'lucide-react';
 import ConfirmModal from '../common/ConfirmModal';
+import NotificationPanel from '../common/NotificationPanel';
+import { useSectionNotificationBadges } from '../../hooks/useSectionNotificationBadges';
+import { useAutoCollapseSidebar } from '../../hooks/useAutoCollapseSidebar';
 
 const navItems = [
   { to: '/coordinator', icon: LayoutDashboard, label: 'Dashboard', end: true },
   { to: '/coordinator/team', icon: UsersRound, label: 'My Team' },
+  { to: '/coordinator/routes', icon: MapPin, label: 'Route Manage' },
   { to: '/coordinator/customers', icon: Users, label: 'Customers' },
+  { to: '/coordinator/orders', icon: ShoppingCart, label: 'Orders' },
   { to: '/coordinator/approvals', icon: UserCheck, label: 'Approvals' },
+  { to: '/coordinator/support', icon: MessageSquare, label: 'Support' },
   { to: '/coordinator/quotations', icon: FileText, label: 'Quotations' },
-  { to: '/coordinator/notifications', icon: Bell, label: 'Notifications' },
+  { to: '/coordinator/profile', icon: User, label: 'Profile' },
 ];
 
 const bottomNavItems = [
   { to: '/coordinator', icon: LayoutDashboard, label: 'Home', end: true },
   { to: '/coordinator/team', icon: UsersRound, label: 'Team' },
+  { to: '/coordinator/routes', icon: MapPin, label: 'Routes' },
+  { to: '/coordinator/orders', icon: ShoppingCart, label: 'Orders' },
+  { to: '/coordinator/support', icon: MessageSquare, label: 'Support' },
   { to: '/coordinator/approvals', icon: UserCheck, label: 'Approvals' },
   { to: '/coordinator/quotations', icon: FileText, label: 'Quotes' },
-  { to: '/coordinator/customers', icon: Users, label: 'Clients' },
-  { to: '/coordinator/notifications', icon: Bell, label: 'Alerts' },
+  { to: '/coordinator/profile', icon: User, label: 'Profile' },
 ];
 
 export default function CoordinatorLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
   const { user, logout } = useAuth();
   useSignalR();
   const navigate = useNavigate();
   const location = useLocation();
+
+  useAutoCollapseSidebar({ sidebarOpen, setSidebarOpen });
 
   const userId = user?.id;
 
@@ -52,6 +63,43 @@ export default function CoordinatorLayout() {
   const currentPage = navItems.find(item =>
     item.end ? location.pathname === item.to : location.pathname.startsWith(item.to)
   );
+
+  const sectionMap = useMemo(() => ({
+    routes: ['RouteCreated', 'RouteAssigned', 'RouteUpdated', 'RouteDeleted'],
+    orders: ['NewOrder', 'OrderStatusUpdate'],
+    quotations: ['QuotationSubmitted', 'QuotationApproved', 'QuotationRejected'],
+    approvals: ['CustomerRegistration', 'CustomerApproval', 'CustomerRejection', 'CustomerAssignment'],
+    support: ['ComplaintUpdate', 'SupportResolution'],
+    customers: ['CustomerRegistration', 'CustomerApproval', 'CustomerRejection', 'CustomerAssignment'],
+  }), []);
+
+  const { counts, markSectionAsRead } = useSectionNotificationBadges(userId, sectionMap);
+
+  const activeSection = useMemo(() => {
+    const path = location.pathname;
+    if (path.startsWith('/coordinator/routes')) return 'routes';
+    if (path.startsWith('/coordinator/orders')) return 'orders';
+    if (path.startsWith('/coordinator/quotations')) return 'quotations';
+    if (path.startsWith('/coordinator/approvals')) return 'approvals';
+    if (path.startsWith('/coordinator/support')) return 'support';
+    if (path.startsWith('/coordinator/customers')) return 'customers';
+    return '';
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!activeSection) return;
+    if ((counts[activeSection] || 0) === 0) return;
+    markSectionAsRead(activeSection);
+  }, [activeSection, counts, markSectionAsRead]);
+
+  const itemSection: Record<string, string> = {
+    '/coordinator/routes': 'routes',
+    '/coordinator/orders': 'orders',
+    '/coordinator/quotations': 'quotations',
+    '/coordinator/approvals': 'approvals',
+    '/coordinator/support': 'support',
+    '/coordinator/customers': 'customers',
+  };
 
   return (
     <div className="flex h-screen bg-slate-50">
@@ -97,11 +145,16 @@ export default function CoordinatorLayout() {
                   {sidebarOpen && (
                     <span className="flex-1">{item.label}</span>
                   )}
-                  {sidebarOpen && item.to === '/coordinator/notifications' && (unreadCount ?? 0) > 0 && (
-                    <span className="bg-cyan-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
-                      {unreadCount}
-                    </span>
-                  )}
+                  {sidebarOpen && (() => {
+                    const section = itemSection[item.to];
+                    const count = section ? (counts[section] || 0) : 0;
+                    if (!count) return null;
+                    return (
+                      <span className="bg-cyan-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                        {count}
+                      </span>
+                    );
+                  })()}
                 </>
               )}
             </NavLink>
@@ -161,7 +214,17 @@ export default function CoordinatorLayout() {
                   }
                 >
                   <item.icon className="w-[18px] h-[18px]" />
-                  <span>{item.label}</span>
+                  <span className="flex-1">{item.label}</span>
+                  {(() => {
+                    const section = itemSection[item.to];
+                    const count = section ? (counts[section] || 0) : 0;
+                    if (!count) return null;
+                    return (
+                      <span className="bg-cyan-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                        {count}
+                      </span>
+                    );
+                  })()}
                 </NavLink>
               ))}
             </nav>
@@ -208,17 +271,20 @@ export default function CoordinatorLayout() {
           </div>
 
           <div className="flex items-center gap-1 lg:gap-2">
-            <button
-              onClick={() => navigate('/coordinator/notifications')}
-              className="relative p-2.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition"
-            >
-              <Bell className="w-[18px] h-[18px]" />
-              {(unreadCount ?? 0) > 0 && (
-                <span className="absolute top-1 right-1 bg-gradient-to-r from-cyan-500 to-blue-500 text-white text-[9px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1 shadow-lg shadow-cyan-500/30 animate-scale-in">
-                  {unreadCount}
-                </span>
-              )}
-            </button>
+            <div className="relative">
+              <button
+                onClick={() => setShowNotifications((v) => !v)}
+                className="relative p-2.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition"
+              >
+                <Bell className="w-[18px] h-[18px]" />
+                {(unreadCount ?? 0) > 0 && (
+                  <span className="absolute top-1 right-1 bg-gradient-to-r from-cyan-500 to-blue-500 text-white text-[9px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1 shadow-lg shadow-cyan-500/30 animate-scale-in">
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+              <NotificationPanel open={showNotifications} onClose={() => setShowNotifications(false)} userId={userId} />
+            </div>
             <div className="hidden lg:flex items-center gap-2.5 ml-1 pl-3 border-l border-slate-200">
               <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center">
                 <span className="text-white text-xs font-bold">{user?.username?.[0]?.toUpperCase()}</span>

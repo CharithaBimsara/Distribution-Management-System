@@ -1,13 +1,13 @@
-import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { createPortal } from 'react-dom';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSelector, useDispatch } from 'react-redux';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { productsApi } from '../../services/api/productsApi';
+import { customersApi } from '../../services/api/customersApi';
 import { addToCart, updateQuantity, removeFromCart, clearCart } from '../../store/slices/cartSlice';
 import type { RootState } from '../../store/store';
-import { Search, SlidersHorizontal, X, ChevronLeft, ChevronRight, Minus, Plus, ShoppingCart, Package, Store } from 'lucide-react';
+import { SlidersHorizontal, ChevronLeft, ChevronRight, Minus, Plus, Package, Store } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import type { Product } from '../../types/product.types';
 import { formatCurrency } from '../../utils/formatters';
@@ -28,8 +28,20 @@ export default function CustomerProducts() {
   const initialQuick: QuickRow[] = savedQuick ? JSON.parse(savedQuick) : [{ id: crypto.randomUUID(), qty: 1 }];
   const [quickRows, setQuickRows] = useState<QuickRow[]>(initialQuick);
   const addQuickRow = () => setQuickRows(r => [...r, { id: crypto.randomUUID(), qty: 1 }]);
-  const updateQuickRow = (id: string, changes: Partial<QuickRow>) => setQuickRows(r => r.map(row => row.id === id ? { ...row, ...changes } : row));
-  const removeQuickRow = (id: string) => setQuickRows(r => r.filter(row => row.id !== id));
+  const updateQuickRow = (id: string, changes: Partial<QuickRow>) => setQuickRows(r => {
+    if (changes.product) {
+      const duplicateExists = r.some(row => row.id !== id && row.product?.id === changes.product?.id);
+      if (duplicateExists) {
+        toast.error('This product is already selected in another row');
+        return r;
+      }
+    }
+    return r.map(row => row.id === id ? { ...row, ...changes } : row);
+  });
+  const removeQuickRow = (id: string) => setQuickRows(r => {
+    const next = r.filter(row => row.id !== id);
+    return next.length ? next : [{ id: crypto.randomUUID(), qty: 1 }];
+  });
 
   // persist quick rows whenever they change
   useEffect(() => {
@@ -65,17 +77,29 @@ export default function CustomerProducts() {
   const cartTotal = cartItems.reduce((s, i) => s + i.lineTotal, 0);
   const cartCount = cartItems.reduce((s, i) => s + i.quantity, 0);
 
+  // API sellingPrice is post-discount. Rebuild the base rate when a discount override is active.
+  const getBaseRate = (p: Product) => (p.sellingPrice || 0) + (p.discountAmount || 0);
+
+  const getCalcInput = (p: Product) => {
+    const isSpecialPrice = (p.discountPercent == null) && ((p.discountAmount || 0) > 0);
+    const rate = isSpecialPrice ? (p.sellingPrice || 0) : getBaseRate(p);
+    const discountPercent = isSpecialPrice ? 0 : (p.discountPercent ?? 0);
+    const taxAmount = p.taxAmount ?? 0;
+    return { rate, discountPercent, taxAmount, isSpecialPrice };
+  };
+
   // quick order totals
   // count number of filled rows (distinct products) for quick order
   const quickCount = quickRows.filter(r => !!r.product).length;
   // calculate quick order total using dynamic formula rather than stored totals
   const quickTotal = quickRows.reduce((s, r) => {
     if (!r.product) return s;
+    const pricing = getCalcInput(r.product);
     const calc = calculateLine({
-      rate: r.product.sellingPrice || 0,
+      rate: pricing.rate,
       qty: r.qty,
-      discountPercent: r.product.discountPercent,
-      taxAmount: r.product.taxAmount,
+      discountPercent: pricing.discountPercent,
+      taxAmount: pricing.taxAmount,
     });
     return s + calc.total;
   }, 0);
@@ -95,27 +119,27 @@ export default function CustomerProducts() {
       quickRows.forEach(r => {
         if (!r.product) return;
         const prod = r.product;
-        const discPct = prod.discountPercent ?? 0;
+        const pricing = getCalcInput(prod);
         // derive tax rate from stored tax amount
         let taxRate = 0;
-        if (prod.taxAmount != null) {
-          const basePerUnit = prod.sellingPrice * (1 - discPct / 100);
-          if (basePerUnit > 0) taxRate = prod.taxAmount / basePerUnit;
+        if (pricing.taxAmount != null) {
+          const basePerUnit = pricing.rate * (1 - pricing.discountPercent / 100);
+          if (basePerUnit > 0) taxRate = pricing.taxAmount / basePerUnit;
         }
         const calc = calculateLine({
-          rate: prod.sellingPrice,
+          rate: pricing.rate,
           qty: r.qty,
-          discountPercent: discPct,
-          taxAmount: prod.taxAmount,
+          discountPercent: pricing.discountPercent,
+          taxAmount: pricing.taxAmount,
         });
         dispatch(addToCart({
           lineId: r.id,
           productId: prod.id,
           productName: prod.name,
-          unitPrice: prod.sellingPrice,
+          unitPrice: pricing.rate,
           quantity: r.qty,
           sku: prod.sku,
-          discountPercent: discPct,
+          discountPercent: pricing.discountPercent,
           taxRate,
           lineTotal: calc.total,
         }));
@@ -127,6 +151,14 @@ export default function CustomerProducts() {
     queryKey: ['customer-categories'],
     queryFn: () => productsApi.customerCategories().then(r => r.data.data),
   });
+
+  const { data: customerProfile } = useQuery({
+    queryKey: ['customer-profile-for-order-table-tax-mode'],
+    queryFn: () => customersApi.customerGetProfile().then((r) => r.data.data),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const isNonTaxCustomer = ((customerProfile?.customerType || '').toLowerCase().replace(/[-\s]/g, '') === 'nontax');
 
   const exportProducts = async (format: 'excel' | 'pdf') => {
     const resp = await productsApi.customerCatalog({
@@ -204,27 +236,27 @@ export default function CustomerProducts() {
 
   const handleIncrement = (product: Product) => {
     const qty = getCartQty(product.id);
-    const discPct = product.discountPercent ?? 0;
+    const pricing = getCalcInput(product);
     let taxRate = 0;
-    if (product.taxAmount != null) {
-      const basePerUnit = product.sellingPrice * (1 - discPct / 100);
-      if (basePerUnit > 0) taxRate = product.taxAmount / basePerUnit;
+    if (pricing.taxAmount != null) {
+      const basePerUnit = pricing.rate * (1 - pricing.discountPercent / 100);
+      if (basePerUnit > 0) taxRate = pricing.taxAmount / basePerUnit;
     }
     if (qty === 0) {
       const calc = calculateLine({
-        rate: product.sellingPrice,
+        rate: pricing.rate,
         qty: 1,
-        discountPercent: discPct,
-        taxAmount: product.taxAmount,
+        discountPercent: pricing.discountPercent,
+        taxAmount: pricing.taxAmount,
       });
       dispatch(addToCart({
         lineId: crypto.randomUUID(),
         productId: product.id,
         productName: product.name,
-        unitPrice: product.sellingPrice,
+        unitPrice: pricing.rate,
         quantity: 1,
         sku: product.sku,
-        discountPercent: discPct,
+        discountPercent: pricing.discountPercent,
         taxRate,
         lineTotal: calc.total,
       }));
@@ -335,272 +367,225 @@ export default function CustomerProducts() {
     );
   };
 
+  const goToCreateOrder = () => {
+    dispatch(clearCart());
+    quickRows.forEach(r => {
+      if (!r.product) return;
+      const prod = r.product;
+      const pricing = getCalcInput(prod);
+      let taxRate = 0;
+      if (pricing.taxAmount != null) {
+        const basePerUnit = pricing.rate * (1 - pricing.discountPercent / 100);
+        if (basePerUnit > 0) taxRate = pricing.taxAmount / basePerUnit;
+      }
+      const calc = calculateLine({
+        rate: pricing.rate,
+        qty: r.qty,
+        discountPercent: pricing.discountPercent,
+        taxAmount: pricing.taxAmount,
+      });
+      dispatch(addToCart({
+        productId: prod.id,
+        productName: prod.name,
+        unitPrice: pricing.rate,
+        quantity: r.qty,
+        sku: prod.sku,
+        discountPercent: pricing.discountPercent,
+        taxRate,
+        lineTotal: calc.total,
+      }));
+    });
+    navigate('/shop/checkout');
+  };
+
   return (
-    <div className="min-h-screen bg-slate-50">
-
-      {/* ── Hero Header with Gradient ── */}
-      <div className="relative bg-gradient-to-br from-orange-500 via-orange-500 to-rose-500 text-white px-4 pt-6 pb-20 lg:pb-12 overflow-hidden">
-        <div className="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/4 blur-2xl" />
-        <div className="absolute bottom-0 left-0 w-32 h-32 bg-rose-400/20 rounded-full translate-y-1/2 -translate-x-1/3 blur-xl" />
-        <div className="relative z-10 max-w-screen-xl mx-auto">
-          <div className="flex items-center gap-2 mb-2">
-            <Store className="w-5 h-5 text-orange-200" />
-            <span className="text-sm text-orange-100 font-medium">Shop Catalog</span>
-          </div>
-          <h1 className="text-2xl lg:text-3xl font-bold mb-1">Quick Order</h1>
-          <p className="text-orange-100 text-sm">{data?.totalCount ?? 0} products available</p>
+    <div className="animate-fade-in space-y-4 lg:space-y-6 pb-20">
+      <div className="flex items-center justify-between gap-3 px-4 lg:px-0">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Create Order</h1>
+          <p className="text-sm text-slate-500 mt-1">Select products using the table and create your order</p>
         </div>
       </div>
 
-      {/* ── Sticky Search & Filters Bar (constrained to main content width on desktop) ── */}
-      <div className="sticky top-0 z-20 bg-white border-b border-slate-200/80 shadow-sm -mt-12 lg:-mt-6 mx-4 lg:mx-auto lg:max-w-screen-xl rounded-t-2xl">
+      <div className="px-4 lg:px-0">
+        <div className="max-w-screen-xl mx-auto rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-4 border-b border-slate-100 bg-slate-50/60">
+            <div className="flex items-center gap-2">
+              <Store className="w-4 h-4 text-slate-400" />
+              <h2 className="text-sm font-bold text-slate-900">Product Selection Table</h2>
+            </div>
+            <p className="text-xs text-slate-500">{quickCount} items selected</p>
+          </div>
 
-        {/* Cart Summary Row (desktop only) */}
-        <div className="hidden lg:block px-4 pt-3 pb-2 border-b border-slate-100">
-          <div className="flex items-center justify-between max-w-screen-xl mx-auto">
-            <p className="text-xs text-slate-500">Browse and add items to cart</p>
-            {quickCount > 0 && (
-              <button
-                onClick={() => {
-                  // keep the quick table intact but navigate straight to checkout
-                  if (quickCount > 0) {
-                    dispatch(clearCart());
-                    quickRows.forEach(r => {
-                      if (!r.product) return;
-                      const prod = r.product;
-                      const discPct = prod.discountPercent ?? 0;
-                      let taxRate = 0;
-                      if (prod.taxAmount != null) {
-                        const basePerUnit = prod.sellingPrice * (1 - discPct / 100);
-                        if (basePerUnit > 0) taxRate = prod.taxAmount / basePerUnit;
-                      }
-                      const calc = calculateLine({
-                        rate: prod.sellingPrice,
-                        qty: r.qty,
-                        discountPercent: discPct,
-                        taxAmount: prod.taxAmount,
-                      });
-                      dispatch(addToCart({
-                        productId: prod.id,
-                        productName: prod.name,
-                        unitPrice: prod.sellingPrice,
-                        quantity: r.qty,
-                        sku: prod.sku,
-                        discountPercent: discPct,
-                        taxRate,
-                        lineTotal: calc.total,
-                      }));
-                    });
+          <div className="p-4 overflow-x-auto">
+            <table className="w-full table-auto text-[11px] border border-slate-300 rounded-xl overflow-hidden">
+              <thead>
+                <tr className="bg-slate-100 border-b border-slate-300">
+                  <th className="text-left px-3 py-2 font-semibold text-slate-700 text-[9px] uppercase tracking-wide border-r border-slate-300">Description</th>
+                  <th className="whitespace-nowrap text-left px-3 py-2 font-semibold text-slate-700 text-[9px] uppercase tracking-wide border-r border-slate-300">Item</th>
+                  <th className="whitespace-nowrap text-center px-3 py-2 font-semibold text-slate-700 text-[9px] uppercase tracking-wide border-r border-slate-300">Qty</th>
+                  <th className="whitespace-nowrap text-right px-3 py-2 font-semibold text-slate-700 text-[9px] uppercase tracking-wide border-r border-slate-300">Rate</th>
+                  <th className="whitespace-nowrap text-right px-3 py-2 font-semibold text-slate-700 text-[9px] uppercase tracking-wide border-r border-slate-300">MRP</th>
+                  <th className="whitespace-nowrap text-right px-3 py-2 font-semibold text-slate-700 text-[9px] uppercase tracking-wide border-r border-slate-300">Disc %</th>
+                  <th className="whitespace-nowrap text-right px-3 py-2 font-semibold text-slate-700 text-[9px] uppercase tracking-wide border-r border-slate-300">Disc Amt</th>
+                  {!isNonTaxCustomer && <th className="whitespace-nowrap text-right px-3 py-2 font-semibold text-slate-700 text-[9px] uppercase tracking-wide border-r border-slate-300">Tax</th>}
+                  {!isNonTaxCustomer && <th className="whitespace-nowrap text-right px-3 py-2 font-semibold text-slate-700 text-[9px] uppercase tracking-wide border-r border-slate-300">Tax Amt</th>}
+                  <th className="whitespace-nowrap text-right px-3 py-2 font-semibold text-slate-700 text-[9px] uppercase tracking-wide border-r border-slate-300">Amount</th>
+                  <th className="whitespace-nowrap text-center px-2 py-2 font-semibold text-slate-700 text-[9px] uppercase tracking-wide">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {quickRows.map(row => {
+                  const prod = row.product;
+                  const selectedProductIds = new Set(
+                    quickRows
+                      .filter(r => r.id !== row.id && r.product)
+                      .map(r => r.product!.id)
+                  );
+                  let rate = 0;
+                  let discPct = 0;
+                  let discAmt = 0;
+                  let taxAmt = 0;
+                  let amount = 0;
+                  if (prod) {
+                    const pricing = getCalcInput(prod);
+                    rate = pricing.rate;
+                    discPct = pricing.discountPercent;
+                    discAmt = pricing.isSpecialPrice ? 0 : (prod.discountAmount || 0);
+                    taxAmt = isNonTaxCustomer ? 0 : (prod.taxAmount || 0);
+                    amount = (rate * row.qty) - (discAmt * row.qty) + (taxAmt * row.qty);
                   }
-                  navigate('/shop/checkout');
-                }}
-                className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold shadow-sm shadow-orange-500/20 active:scale-95 transition-all"
+                  return (
+                    <tr key={row.id} className="border-b border-slate-100 odd:bg-white even:bg-slate-50/50 hover:bg-orange-50/40 transition-colors">
+                      <td className="px-2 py-1.5 border border-slate-200 align-top min-w-[260px]">
+                        <select
+                          value={prod?.id || ''}
+                          onChange={(e) => {
+                            const selectedId = e.target.value;
+                            const selectedProduct = ((data?.items || []) as Product[]).find((p) => p.id === selectedId);
+                            if (!selectedProduct) return;
+                            updateQuickRow(row.id, { product: selectedProduct, qty: 1 });
+                            if (quickRows[quickRows.length - 1].id === row.id) addQuickRow();
+                          }}
+                          className="w-full border border-slate-300 rounded-md px-2 py-1 bg-white text-[11px]"
+                        >
+                          <option value="">Select product</option>
+                          {((data?.items || []) as Product[]).map((option) => (
+                            <option
+                              key={option.id}
+                              value={option.id}
+                              disabled={selectedProductIds.has(option.id)}
+                            >
+                              {option.name} ({option.sku})
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="px-3 py-1.5 text-slate-600 font-mono text-[10px] border border-slate-200 whitespace-nowrap">{prod?.sku || ''}</td>
+                      <td className="px-2 py-1.5 text-center border border-slate-200">
+                        <input
+                          type="number"
+                          min={1}
+                          value={row.qty}
+                          disabled={!prod}
+                          onChange={e => updateQuickRow(row.id, { qty: Math.max(1, parseInt(e.target.value) || 1) })}
+                          className="w-14 text-center text-[11px] border border-slate-300 rounded-md px-1 py-0.5 focus:ring-2 focus:ring-orange-300/30 focus:border-orange-400 no-number-spin"
+                        />
+                      </td>
+                      <td className="px-3 py-1.5 text-right border border-slate-200 whitespace-nowrap">{prod ? formatCurrency(rate) : ''}</td>
+                      <td className="px-3 py-1.5 text-right border-r border-slate-200 whitespace-nowrap">{prod?.mrp != null ? formatCurrency(prod.mrp) : ''}</td>
+                      <td className="px-3 py-1.5 text-right border-r border-slate-200 whitespace-nowrap">{prod ? discPct : ''}</td>
+                      <td className="px-3 py-1.5 text-right border-r border-slate-200 whitespace-nowrap">{prod ? formatCurrency(discAmt) : ''}</td>
+                      {!isNonTaxCustomer && <td className="px-3 py-1.5 text-right border-r border-slate-200 whitespace-nowrap">{prod?.taxCode || ''}</td>}
+                      {!isNonTaxCustomer && <td className="px-3 py-1.5 text-right border-r border-slate-200 whitespace-nowrap">{prod ? formatCurrency(taxAmt) : ''}</td>}
+                      <td className="px-3 py-1.5 text-right font-bold border-r border-slate-200 whitespace-nowrap">{prod ? formatCurrency(amount) : ''}</td>
+                      <td className="px-2 py-1.5 text-center border-slate-200">
+                        <button
+                          onClick={() => removeQuickRow(row.id)}
+                          className="px-2 py-0.5 text-[10px] font-semibold text-red-600 hover:text-red-700 hover:bg-red-50 rounded-md transition"
+                          title="Delete row"
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+
+            <button
+              onClick={addQuickRow}
+              className="mt-3 w-full py-2 text-xs font-semibold border border-dashed border-slate-300 rounded-xl text-slate-600 hover:bg-slate-50 transition"
+            >
+              + Add Row
+            </button>
+
+            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:p-4 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Total Amount</p>
+                <p className="text-xl font-bold text-slate-900 mt-0.5">{formatCurrency(quickTotal)}</p>
+              </div>
+              <button
+                onClick={goToCreateOrder}
+                disabled={quickCount === 0}
+                className="px-4 py-2.5 bg-orange-600 text-white rounded-xl text-sm font-semibold disabled:opacity-50 hover:bg-orange-700 transition"
               >
-                <ShoppingCart className="w-3.5 h-3.5" />
-                <span className="tabular-nums">{quickCount}</span>
-                <span className="hidden sm:inline text-orange-100">|</span>
-                <span className="hidden sm:inline font-bold text-sm">{formatCurrency(quickTotal)}</span>
+                Create Order
               </button>
-            )}
+            </div>
           </div>
         </div>
 
-        {/* Search + filter row */}
-        <div className="px-4 lg:px-6 py-3">
-          <div className="flex items-center gap-2 max-w-screen-xl mx-auto">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search products..."
-                value={search}
-                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:bg-white focus:border-orange-400 focus:ring-1 focus:ring-orange-400/20 outline-none transition"
-              />
-            </div>
-
-            {/* Mobile filter trigger */}
-              {categoryFilter && categories && (
-                <span className="flex items-center gap-1 text-[11px] bg-orange-50 border border-orange-200 text-orange-700 px-2.5 py-1 rounded-full font-medium">
-                  {categories.find((c: any) => c.id === categoryFilter)?.name}
-                  <button onClick={() => setCategoryFilter(null)} className="ml-0.5 text-orange-500"><X className="w-3 h-3" /></button>
-                </span>
-              )}
-              {brandFilter && (
-                <span className="flex items-center gap-1 text-[11px] bg-orange-50 border border-orange-200 text-orange-700 px-2.5 py-1 rounded-full font-medium">
-                  {brandFilter}
-                  <button onClick={() => setBrandFilter('')} className="ml-0.5 text-orange-500"><X className="w-3 h-3" /></button>
-                </span>
-              )}
-              {(minPriceFilter || maxPriceFilter) && (
-                <span className="flex items-center gap-1 text-[11px] bg-orange-50 border border-orange-200 text-orange-700 px-2.5 py-1 rounded-full font-medium">
-                  LKR {minPriceFilter || '0'} – {maxPriceFilter || '∞'}
-                  <button onClick={() => { setMinPriceFilter(''); setMaxPriceFilter(''); }} className="ml-0.5 text-orange-500"><X className="w-3 h-3" /></button>
-                </span>
-              )}
-            </div>
-
-          {/* Quick order table (all screen sizes) */}
-            <div className="bg-white p-4 mt-2 mb-4 rounded-xl shadow-lg overflow-x-auto mx-4 lg:mx-auto lg:max-w-screen-2xl">
-              <table className="w-full text-xs border border-slate-300">
-                <colgroup><col className="w-3/5"/><col className="w-1/12"/><col className="w-1/12"/><col className="w-1/8"/><col className="w-1/12"/><col className="w-1/12"/><col className="w-1/12"/><col className="w-1/12"/><col className="w-1/12"/><col className="w-12"/></colgroup>
-                <thead>
-                  <tr className="bg-slate-100 border-b border-slate-300">
-                    <th className="text-left px-6 py-3 font-medium text-slate-700 text-[10px] uppercase tracking-wide border-r border-slate-300">Description</th>
-                    <th className="text-left px-6 py-3 font-medium text-slate-700 text-[10px] uppercase tracking-wide border-r border-slate-300">Item</th>
-                    <th className="text-center px-6 py-3 font-medium text-slate-700 text-[10px] uppercase tracking-wide border-r border-slate-300">Qty</th>
-                    <th className="text-right px-6 py-3 font-medium text-slate-700 text-[10px] uppercase tracking-wide border-r border-slate-300">Rate</th>
-                    <th className="text-right px-6 py-3 font-medium text-slate-700 text-[10px] uppercase tracking-wide border-r border-slate-300">Disc %</th>
-                    <th className="text-right px-6 py-3 font-medium text-slate-700 text-[10px] uppercase tracking-wide border-r border-slate-300">Disc Amt</th>
-                    <th className="text-right px-6 py-3 font-medium text-slate-700 text-[10px] uppercase tracking-wide border-r border-slate-300">Tax</th>
-                    <th className="text-right px-6 py-3 font-medium text-slate-700 text-[10px] uppercase tracking-wide border-r border-slate-300">Tax Amt</th>
-                    <th className="text-right px-6 py-3 font-medium text-slate-700 text-[10px] uppercase tracking-wide border-r border-slate-300">Amount</th>
-                    <th className="text-center px-6 py-3 font-medium text-slate-700 text-[10px] uppercase tracking-wide">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200">
-                  {quickRows.map(row => {
-                    const prod = row.product;
-                    // always use sellingPrice per unit
-                    const unitAmt = prod ? (prod.sellingPrice || 0) : 0;
-                    let amt = 0;
-                    if (prod) {
-                      const calc = calculateLine({
-                        rate: unitAmt,
-                        qty: row.qty,
-                        discountPercent: prod.discountPercent,
-                        taxAmount: prod.taxAmount,
-                      });
-                      amt = calc.total;
-                    }
-                    return (
-                      <tr key={row.id} className="border-b border-slate-100">
-                        <td className="px-3 py-2 border border-slate-200">
-                          <select
-                            value={prod?.id || ''}
-                            onChange={e => {
-                              const p = data?.items.find((i: Product) => i.id === e.target.value);
-                              updateQuickRow(row.id, { product: p, qty: 1 });
-                              // if last row was selected, add another
-                              if (quickRows[quickRows.length - 1].id === row.id) addQuickRow();
-                            }}
-                            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-xs bg-white hover:bg-slate-50 transition"
-                          >
-                            <option value="">Select product</option>
-                            {data?.items.map((p: Product) => (
-                              <option key={p.id} value={p.id} className="text-xs">{p.name}</option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="px-6 py-3 text-slate-600 font-mono text-xs border border-slate-200">{prod?.sku || ''}</td>
-                        <td className="px-3 py-2 text-center">
-                          <input
-                            type="number"
-                            min={1}
-                            value={row.qty}
-                            disabled={!prod}
-                            onChange={e => updateQuickRow(row.id, { qty: Math.max(1, parseInt(e.target.value) || 1) })}
-                            className="w-16 text-center border border-slate-300 rounded-lg px-1 py-0.5 focus:ring-1 focus:ring-orange-300"
-                          />
-                        </td>
-                        <td className="px-3 py-2 text-right border border-slate-200">{prod ? formatCurrency(prod.sellingPrice) : ''}</td>
-                        <td className="px-3 py-2 text-right border-r border-slate-200">{prod?.discountPercent ?? ''}</td>
-                        <td className="px-3 py-2 text-right border-r border-slate-200">{prod?.discountAmount ? formatCurrency(prod.discountAmount) : ''}</td>
-                        <td className="px-3 py-2 text-right border-r border-slate-200">{prod?.taxCode || ''}</td>
-                        <td className="px-3 py-2 text-right border-r border-slate-200">{prod?.taxAmount ? formatCurrency(prod.taxAmount) : ''}</td>
-                        <td className="px-6 py-3 text-right font-bold border-r border-slate-200">{prod ? formatCurrency(amt) : ''}</td>
-                        <td className="px-3 py-2 text-center">
-                          <button onClick={() => removeQuickRow(row.id)} className="text-red-500 hover:text-red-700 text-sm">✕</button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-          {/* Skeleton loading */}
-          {isLoading ? (
-            <div className="mt-2">
-              {Array.from({ length: 10 }).map((_, i) => (
-                <div key={i} className="flex items-center gap-4 px-4 py-3.5 border-b border-slate-100 animate-pulse">
-                  <div className="flex-1 space-y-1.5">
-                    <div className="h-3 bg-slate-200 rounded-full w-3/5" />
-                    <div className="h-2 bg-slate-100 rounded-full w-2/5" />
-                  </div>
-                  <div className="h-4 bg-slate-200 rounded-full w-16" />
-                  <div className="h-8 bg-slate-100 rounded-lg w-24" />
+        {isLoading ? (
+          <div className="mt-2 max-w-screen-xl mx-auto bg-white rounded-2xl border border-slate-200 overflow-hidden">
+            {Array.from({ length: 10 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-4 px-4 py-3.5 border-b border-slate-100 animate-pulse">
+                <div className="flex-1 space-y-1.5">
+                  <div className="h-3 bg-slate-200 rounded-full w-3/5" />
+                  <div className="h-2 bg-slate-100 rounded-full w-2/5" />
                 </div>
-              ))}
-            </div>
-
-          ) : !data?.items?.length ? (
-            <div className="text-center py-20 mx-3 mt-3 bg-white rounded-2xl border border-slate-200 shadow-sm">
-              <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Package className="w-8 h-8 text-slate-300" />
+                <div className="h-4 bg-slate-200 rounded-full w-16" />
+                <div className="h-8 bg-slate-100 rounded-lg w-24" />
               </div>
-              <p className="font-bold text-slate-700 text-base">No products found</p>
-              <p className="text-xs text-slate-400 mt-1">Try adjusting your search or filters</p>
+            ))}
+          </div>
+        ) : !data?.items?.length ? (
+          <div className="text-center py-20 mt-3 max-w-screen-xl mx-auto bg-white rounded-2xl border border-slate-200 shadow-sm">
+            <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Package className="w-8 h-8 text-slate-300" />
             </div>
-
-          ) : (
-            <>
-              {/* ── Product List (Rows) ── */}
-              {/* table already handles product rendering, so mobile row list removed */}
-
-              {/* Pagination */}
-              {data.totalPages > 1 && (
-                <div className="flex items-center justify-between px-4 pt-5">
-                  <span className="text-xs text-slate-400 font-medium tabular-nums">
-                    Page {page} of {data.totalPages}
-                  </span>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setPage(p => Math.max(1, p - 1))}
-                      disabled={page === 1}
-                      className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-white border border-slate-200 text-slate-600 rounded-xl disabled:opacity-40 hover:bg-slate-50 active:scale-95 transition-all shadow-sm"
-                    >
-                      <ChevronLeft className="w-3.5 h-3.5" />
-                      Prev
-                    </button>
-                    <button
-                      onClick={() => setPage(p => p + 1)}
-                      disabled={page >= data.totalPages}
-                      className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-orange-500 text-white rounded-xl disabled:opacity-40 hover:bg-orange-600 active:scale-95 transition-all shadow-lg shadow-orange-500/20"
-                    >
-                      Next
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </div>
+            <p className="font-bold text-slate-700 text-base">No products found</p>
+            <p className="text-xs text-slate-400 mt-1">Try adjusting your search or filters</p>
+          </div>
+        ) : (
+          data.totalPages > 1 && (
+            <div className="max-w-screen-xl mx-auto flex items-center justify-between px-4 pt-5">
+              <span className="text-xs text-slate-400 font-medium tabular-nums">
+                Page {page} of {data.totalPages}
+              </span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-white border border-slate-200 text-slate-600 rounded-xl disabled:opacity-40 hover:bg-slate-50 active:scale-95 transition-all shadow-sm"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                  Prev
+                </button>
+                <button
+                  onClick={() => setPage(p => p + 1)}
+                  disabled={page >= data.totalPages}
+                  className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-orange-500 text-white rounded-xl disabled:opacity-40 hover:bg-orange-600 active:scale-95 transition-all shadow-lg shadow-orange-500/20"
+                >
+                  Next
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          )
+        )}
       </div>
-
-      {/* ── Fixed Bottom Cart Bar (Mobile) ── */}
-      {cartCount > 0 && (
-        <div className="fixed bottom-14 left-0 right-0 z-30 lg:hidden px-3 pb-2">
-          <button
-            onClick={() => navigate('/shop/checkout')}
-            className="w-full flex items-center justify-between bg-slate-900 text-white px-4 py-3.5 rounded-2xl shadow-2xl shadow-slate-900/40 active:scale-[0.98] transition-all"
-          >
-            <div className="flex items-center gap-3">
-              <div className="relative">
-                <ShoppingCart className="w-5 h-5" />
-                <span className="absolute -top-1.5 -right-1.5 bg-orange-500 text-white text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
-                  {cartCount}
-                </span>
-              </div>
-              <span className="text-sm font-semibold">View Cart</span>
-            </div>
-            <span className="text-sm font-bold tabular-nums">{formatCurrency(cartTotal)}</span>
-          </button>
-        </div>
-      )}
-
-      {/* ── Cart Drawer ── */}
 
     </div>
   );

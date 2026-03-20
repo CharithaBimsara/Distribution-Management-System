@@ -1,22 +1,22 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { productsApi } from '../../services/api/productsApi';
+import { customersApi } from '../../services/api/customersApi';
 import { orderDraftUtils, type OrderDraftItem } from '../../utils/orderDraft';
 import { formatCurrency } from '../../utils/formatters';
 import { calculateLine } from '../../utils/calculations';
-import { ArrowLeft, Search, ShoppingCart, Plus, Minus, Package, X } from 'lucide-react';
+import { ArrowLeft, Search, ShoppingCart, Plus, Minus, Package } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import type { Product } from '../../types/product.types';
+import { useIsDesktop } from '../../hooks/useMediaQuery';
 
 export default function RepSelectProducts() {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [cartOpen, setCartOpen] = useState(false);
   const [draft, setDraft] = useState(orderDraftUtils.get());
-
-  const isDesktop = () => typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches;
+  const isDesktop = useIsDesktop();
 
   interface QuickRow { id: string; product?: Product; qty: number; }
   const [quickRows, setQuickRows] = useState<QuickRow[]>([]);
@@ -67,6 +67,14 @@ export default function RepSelectProducts() {
     }).then(r => r.data.data),
   });
 
+  const selectedCustomerId = draft.customerId;
+  const { data: selectedCustomerData } = useQuery({
+    queryKey: ['rep-selected-customer', selectedCustomerId],
+    queryFn: () => customersApi.repGetById(selectedCustomerId!).then(r => r.data.data),
+    enabled: !!selectedCustomerId,
+  });
+  const isNonTaxCustomer = ((selectedCustomerData?.customerType || '').toLowerCase().replace(/[-\s]/g, '') === 'nontax');
+
   // whenever catalog data arrives, fill in missing fields (disc/tax) on existing rows
   useEffect(() => {
     if (!data) return;
@@ -89,7 +97,9 @@ export default function RepSelectProducts() {
       name: product.name,
       price: product.sellingPrice,
       sku: product.sku,
+      mrp: product.mrp,
       discountPercent: product.discountPercent,
+      taxCode: product.taxCode,
       taxAmount: product.taxAmount,
       lineTotal: calculateLine({ rate: product.sellingPrice || 0, qty: 1, discountPercent: product.discountPercent, taxAmount: product.taxAmount }).total,
     };
@@ -101,6 +111,7 @@ export default function RepSelectProducts() {
   const syncRowItem = (row: QuickRow) => {
     if (!row.product) return;
     const prod = row.product;
+    const effectiveTaxAmount = isNonTaxCustomer ? 0 : prod.taxAmount;
     const existing = orderDraftUtils.get().items.find(i => i.productId === prod.id);
     if (existing) {
       orderDraftUtils.updateQuantity(prod.id, row.qty);
@@ -111,9 +122,11 @@ export default function RepSelectProducts() {
         name: prod.name,
         price: prod.sellingPrice,
         sku: prod.sku,
+        mrp: prod.mrp,
         discountPercent: prod.discountPercent,
-        taxAmount: prod.taxAmount,
-        lineTotal: calculateLine({ rate: prod.sellingPrice || 0, qty: row.qty, discountPercent: prod.discountPercent, taxAmount: prod.taxAmount }).total,
+        taxCode: prod.taxCode,
+        taxAmount: effectiveTaxAmount,
+        lineTotal: calculateLine({ rate: prod.sellingPrice || 0, qty: row.qty, discountPercent: prod.discountPercent, taxAmount: effectiveTaxAmount }).total,
       });
     }
     setDraft(orderDraftUtils.get());
@@ -141,48 +154,55 @@ export default function RepSelectProducts() {
     }
   };
 
-  const handleRemoveItem = (productId: string) => {
-    orderDraftUtils.removeItem(productId);
-    setDraft(orderDraftUtils.get());
-    toast.success('Removed from cart');
-  };
-
   const cartCount = orderDraftUtils.getItemCount();
   const cartTotal = orderDraftUtils.getTotal();
   // compute quickRows total directly to reflect table values
   const quickTotal = quickRows.reduce((sum, r) => {
     if (!r.product) return sum;
-    const calc = calculateLine({ rate: r.product.sellingPrice || 0, qty: r.qty, discountPercent: r.product.discountPercent, taxAmount: r.product.taxAmount });
+    const calc = calculateLine({
+      rate: r.product.sellingPrice || 0,
+      qty: r.qty,
+      discountPercent: r.product.discountPercent,
+      taxAmount: isNonTaxCustomer ? 0 : r.product.taxAmount,
+    });
     return sum + calc.total;
   }, 0);
 
   return (
-    <div className="animate-fade-in pb-20">
-      <div className="px-4 lg:px-6 pt-6 max-w-7xl mx-auto">
+    <div className="animate-fade-in pb-24 md:pb-28 lg:pb-20">
+      <div className="px-4 md:px-5 lg:px-6 pt-4 md:pt-6 max-w-7xl mx-auto">
         {/* Header */}
-        <div className="flex items-center gap-3 mb-6">
-          <button onClick={() => navigate(-1)} className="p-2 rounded-lg bg-slate-50 hover:bg-slate-100">
-            <ArrowLeft className="w-4 h-4" />
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5 md:mb-6">
+          <button onClick={() => navigate(-1)} className="p-2.5 rounded-lg bg-slate-50 hover:bg-slate-100 w-fit">
+            <ArrowLeft className="w-5 h-5" />
           </button>
           <div className="flex-1">
-            <h1 className="text-xl font-bold text-slate-900">Add Products</h1>
-            <p className="text-sm text-slate-500 mt-0.5">Browse and add items to cart</p>
+            <h1 className="text-2xl md:text-3xl lg:text-2xl font-bold text-slate-900">Add Products</h1>
+            <p className="text-sm md:text-base lg:text-sm text-slate-500 mt-1">Browse the catalog and add items to your order</p>
           </div>
-          <button onClick={() => navigate(-1)} className="px-4 py-2 bg-emerald-600 text-white font-semibold rounded-xl hover:bg-emerald-700 transition">
-            Done
+          <button onClick={() => navigate(-1)} className="w-full sm:w-auto px-4 py-3.5 md:py-2.5 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition text-sm">
+            Continue
           </button>
         </div>
 
-        {/* Search Bar */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 mb-6">
+        {!isDesktop && (
+          <div className="grid grid-cols-3 gap-2 md:gap-3 mb-5 md:mb-6">
+            <MiniStat label="Items" value={String(cartCount)} />
+            <MiniStat label="Page" value={String(data?.items?.length || 0)} tone="green" />
+            <MiniStat label="Total" value={formatCurrency(quickTotal)} tone="emerald" />
+          </div>
+        )}
+
+        {/* Search Bar - Sticky on scroll */}
+        <div className="sticky top-0 z-20 bg-white/95 backdrop-blur-sm rounded-2xl shadow-sm border border-slate-100 p-4 mb-5 md:mb-6 -mx-4 md:-mx-5 lg:-mx-6 px-4 md:px-5 lg:px-6">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
             <input
               type="text"
               value={searchTerm}
               onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-              placeholder="Search products by name, SKU, or brand..."
-              className="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-xl outline-emerald-500 text-base"
+              placeholder="Search by product name, SKU, or brand..."
+              className="w-full pl-10 pr-4 py-3.5 md:py-3 border border-slate-300 rounded-xl outline-emerald-500 text-base placeholder-slate-400"
             />
           </div>
         </div>
@@ -209,9 +229,9 @@ export default function RepSelectProducts() {
 
         {/* Loading State */}
         {isLoading && (
-          <div className="text-center py-12">
+          <div className="text-center py-16 md:py-20">
             <div className="inline-block w-8 h-8 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin"></div>
-            <div className="text-sm text-slate-500 mt-3">Loading products...</div>
+            <div className="text-sm text-slate-500 mt-4">Loading products...</div>
           </div>
         )}
 
@@ -219,29 +239,28 @@ export default function RepSelectProducts() {
         {!isLoading && data && (
           <>
             {data.items.length === 0 ? (
-              <div className="text-center py-16">
+              <div className="text-center py-16 md:py-20">
                 <Package className="w-16 h-16 mx-auto text-slate-300 mb-4" />
-                <div className="text-lg font-semibold text-slate-700">No products found</div>
+                <div className="text-lg md:text-xl font-semibold text-slate-700">No products found</div>
                 <div className="text-sm text-slate-500 mt-2">Try adjusting your search</div>
               </div>
             ) : (
               <>
-                {isDesktop() ? (
+                {isDesktop ? (
                   <div className="bg-white p-4 mt-2 mb-6 rounded-xl shadow-lg overflow-x-auto">
-                    <table className="w-full text-xs border border-slate-300">
-                      <colgroup><col className="w-3/5"/><col className="w-1/12"/><col className="w-1/12"/><col className="w-1/8"/><col className="w-1/12"/><col className="w-1/12"/><col className="w-1/12"/><col className="w-1/12"/><col className="w-1/12"/><col className="w-12"/></colgroup>
+                    <table className="w-full table-auto text-[11px] border border-slate-300">
                       <thead>
                         <tr className="bg-slate-100 border-b border-slate-300">
-                          <th className="text-left px-6 py-3 font-medium text-slate-700 text-[10px] uppercase tracking-wide border-r border-slate-300">Description</th>
-                          <th className="text-left px-6 py-3 font-medium text-slate-700 text-[10px] uppercase tracking-wide border-r border-slate-300">Item</th>
-                          <th className="text-center px-6 py-3 font-medium text-slate-700 text-[10px] uppercase tracking-wide border-r border-slate-300">Qty</th>
-                          <th className="text-right px-6 py-3 font-medium text-slate-700 text-[10px] uppercase tracking-wide border-r border-slate-300">Rate</th>
-                          <th className="text-right px-6 py-3 font-medium text-slate-700 text-[10px] uppercase tracking-wide border-r border-slate-300">Disc %</th>
-                          <th className="text-right px-6 py-3 font-medium text-slate-700 text-[10px] uppercase tracking-wide border-r border-slate-300">Disc Amt</th>
-                          <th className="text-right px-6 py-3 font-medium text-slate-700 text-[10px] uppercase tracking-wide border-r border-slate-300">Tax</th>
-                          <th className="text-right px-6 py-3 font-medium text-slate-700 text-[10px] uppercase tracking-wide border-r border-slate-300">Tax Amt</th>
-                          <th className="text-right px-6 py-3 font-medium text-slate-700 text-[10px] uppercase tracking-wide border-r border-slate-300">Amount</th>
-                          <th className="text-center px-6 py-3 font-medium text-slate-700 text-[10px] uppercase tracking-wide">Actions</th>
+                          <th className="text-left px-3 py-2 font-medium text-slate-700 text-[9px] uppercase tracking-wide border-r border-slate-300">Description</th>
+                          <th className="whitespace-nowrap text-left px-3 py-2 font-medium text-slate-700 text-[9px] uppercase tracking-wide border-r border-slate-300">Item</th>
+                          <th className="whitespace-nowrap text-center px-3 py-2 font-medium text-slate-700 text-[9px] uppercase tracking-wide border-r border-slate-300">Qty</th>
+                          <th className="whitespace-nowrap text-right px-3 py-2 font-medium text-slate-700 text-[9px] uppercase tracking-wide border-r border-slate-300">Rate</th>
+                          <th className="whitespace-nowrap text-right px-3 py-2 font-medium text-slate-700 text-[9px] uppercase tracking-wide border-r border-slate-300">Disc %</th>
+                          <th className="whitespace-nowrap text-right px-3 py-2 font-medium text-slate-700 text-[9px] uppercase tracking-wide border-r border-slate-300">Disc Amt</th>
+                          {!isNonTaxCustomer && <th className="whitespace-nowrap text-right px-3 py-2 font-medium text-slate-700 text-[9px] uppercase tracking-wide border-r border-slate-300">Tax</th>}
+                          {!isNonTaxCustomer && <th className="whitespace-nowrap text-right px-3 py-2 font-medium text-slate-700 text-[9px] uppercase tracking-wide border-r border-slate-300">Tax Amt</th>}
+                          <th className="whitespace-nowrap text-right px-3 py-2 font-medium text-slate-700 text-[9px] uppercase tracking-wide border-r border-slate-300">Amount</th>
+                          <th className="whitespace-nowrap text-center px-2 py-2 font-medium text-slate-700 text-[9px] uppercase tracking-wide">Actions</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200">
@@ -250,47 +269,56 @@ export default function RepSelectProducts() {
                           const unitAmt = prod ? prod.sellingPrice || 0 : 0;
                           let amt = 0;
                           if (prod) {
-                            const calc = calculateLine({ rate: unitAmt, qty: row.qty, discountPercent: prod.discountPercent, taxAmount: prod.taxAmount });
+                            const calc = calculateLine({
+                              rate: unitAmt,
+                              qty: row.qty,
+                              discountPercent: prod.discountPercent,
+                              taxAmount: isNonTaxCustomer ? 0 : prod.taxAmount,
+                            });
                             amt = calc.total;
                           }
                           return (
                             <tr key={row.id} className="border-b border-slate-100">
-                              <td className="px-3 py-2 border border-slate-200">
+                              <td className="px-2 py-1.5 border border-slate-200 min-w-[260px]">
                                 <select
                                   value={prod?.id || ''}
-                                  onChange={e => {
-                                    const p = data?.items.find((i: Product) => i.id === e.target.value);
+                                  onChange={(e) => {
+                                    const selectedId = e.target.value;
+                                    const p = ((data?.items || []) as Product[]).find((item) => item.id === selectedId);
+                                    if (!p) return;
                                     updateQuickRow(row.id, { product: p, qty: 1 });
                                     if (quickRows[quickRows.length - 1].id === row.id) addQuickRow();
-                                    if (p) syncRowItem({ ...row, product: p, qty: 1 });
+                                    syncRowItem({ ...row, product: { ...p, taxAmount: isNonTaxCustomer ? 0 : p.taxAmount }, qty: 1 });
                                   }}
-                                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-xs bg-white hover:bg-slate-50 transition"
+                                  className="w-full border border-slate-300 rounded-md px-2 py-1 bg-white text-[11px]"
                                 >
                                   <option value="">Select product</option>
-                                  {data?.items.map((p: Product) => (
-                                    <option key={p.id} value={p.id} className="text-xs">{p.name}</option>
+                                  {((data?.items || []) as Product[]).map((option) => (
+                                    <option key={option.id} value={option.id}>
+                                      {option.name} ({option.sku})
+                                    </option>
                                   ))}
                                 </select>
                               </td>
-                              <td className="px-6 py-3 text-slate-600 font-mono text-xs border border-slate-200">{prod?.sku || ''}</td>
-                              <td className="px-3 py-2 text-center">
+                              <td className="px-3 py-1.5 text-slate-600 font-mono text-[10px] border border-slate-200 whitespace-nowrap">{prod?.sku || ''}</td>
+                              <td className="px-2 py-1.5 text-center">
                                 <input
                                   type="number"
                                   min={1}
                                   value={row.qty}
                                   disabled={!prod}
                                   onChange={e => { const q = Math.max(1, parseInt(e.target.value) || 1); updateQuickRow(row.id, { qty: q }); if (prod) { syncRowItem({ ...row, qty: q }); } }}
-                                  className="w-16 text-center border border-slate-300 rounded-lg px-1 py-0.5 focus:ring-1 focus:ring-orange-300"
+                                  className="w-14 text-center text-[11px] border border-slate-300 rounded-md px-1 py-0.5 focus:ring-1 focus:ring-orange-300"
                                 />
                               </td>
-                              <td className="px-3 py-2 text-right border border-slate-200">{prod ? formatCurrency(prod.sellingPrice) : ''}</td>
-                              <td className="px-3 py-2 text-right border-r border-slate-200">{prod?.discountPercent ?? ''}</td>
-                              <td className="px-3 py-2 text-right border-r border-slate-200">{prod?.discountAmount ? formatCurrency(prod.discountAmount) : ''}</td>
-                              <td className="px-3 py-2 text-right border-r border-slate-200">{prod?.taxCode || ''}</td>
-                              <td className="px-3 py-2 text-right border-r border-slate-200">{prod?.taxAmount ? formatCurrency(prod.taxAmount) : ''}</td>
-                              <td className="px-6 py-3 text-right font-bold border-r border-slate-200">{prod ? formatCurrency(amt) : ''}</td>
-                              <td className="px-3 py-2 text-center">
-                                <button onClick={() => removeQuickRow(row.id)} className="text-red-500 hover:text-red-700 text-sm">✕</button>
+                              <td className="px-3 py-1.5 text-right border border-slate-200 whitespace-nowrap">{prod ? formatCurrency(prod.sellingPrice) : ''}</td>
+                              <td className="px-3 py-1.5 text-right border-r border-slate-200 whitespace-nowrap">{prod?.discountPercent ?? ''}</td>
+                              <td className="px-3 py-1.5 text-right border-r border-slate-200 whitespace-nowrap">{prod?.discountAmount ? formatCurrency(prod.discountAmount) : ''}</td>
+                              {!isNonTaxCustomer && <td className="px-3 py-1.5 text-right border-r border-slate-200 whitespace-nowrap">{prod?.taxCode || ''}</td>}
+                              {!isNonTaxCustomer && <td className="px-3 py-1.5 text-right border-r border-slate-200 whitespace-nowrap">{prod?.taxAmount ? formatCurrency(prod.taxAmount) : ''}</td>}
+                              <td className="px-3 py-1.5 text-right font-bold border-r border-slate-200 whitespace-nowrap">{prod ? formatCurrency(amt) : ''}</td>
+                              <td className="px-2 py-1.5 text-center">
+                                <button onClick={() => removeQuickRow(row.id)} className="text-red-500 hover:text-red-700 text-[11px]">✕</button>
                               </td>
                             </tr>
                           );
@@ -299,24 +327,26 @@ export default function RepSelectProducts() {
                     </table>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5 mb-6 md:mb-8">
                     {data.items.map((product: Product) => {
                       const qty = getCartQty(product.id);
                       return (
-                        <div key={product.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 flex flex-col hover:shadow-md transition">
+                        <div key={product.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 md:p-5 flex flex-col hover:shadow-md hover:border-emerald-200 transition-all active:scale-95">
                           {/* Product Info */}
-                          <div className="flex-1 mb-3">
-                            <h3 className="text-base font-bold text-slate-900 line-clamp-2 mb-1">
+                          <div className="flex-1 mb-4">
+                            <h3 className="text-lg md:text-base font-bold text-slate-900 line-clamp-2 mb-2">
                               {product.name}
                             </h3>
-                            <div className="text-xs text-slate-500 mb-2">
+                            <div className="text-sm text-slate-500 mb-3 font-mono">
                               {product.sku}
                             </div>
-                            <div className="text-lg font-bold text-emerald-600">
+                            <div className="text-2xl md:text-xl font-bold text-emerald-600 mb-2">
                               {formatCurrency(product.sellingPrice)}
                             </div>
                             {product.brand && (
-                              <div className="text-xs text-slate-400 mt-1">{product.brand}</div>
+                              <div className="text-xs text-slate-400 bg-slate-50 px-2.5 py-1.5 rounded-lg w-fit">
+                                {product.brand}
+                              </div>
                             )}
                           </div>
 
@@ -324,27 +354,27 @@ export default function RepSelectProducts() {
                           {qty === 0 ? (
                             <button
                               onClick={() => handleAddToCart(product)}
-                              className="w-full py-2.5 bg-emerald-600 text-white font-semibold rounded-xl hover:bg-emerald-700 transition flex items-center justify-center gap-2"
+                              className="w-full py-4 md:py-3 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition flex items-center justify-center gap-2 active:scale-95"
                             >
-                              <Plus className="w-4 h-4" />
+                              <Plus className="w-5 h-5" />
                               Add to Cart
                             </button>
                           ) : (
                             <div className="flex items-center gap-2">
                               <button
                                 onClick={() => handleDecrement(product.id)}
-                                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 rounded-xl transition flex items-center justify-center"
+                                className="flex-1 py-4 md:py-3 bg-slate-100 hover:bg-slate-200 rounded-xl transition flex items-center justify-center active:scale-95"
                               >
-                                <Minus className="w-4 h-4 text-slate-700" />
+                                <Minus className="w-5 h-5 text-slate-700" />
                               </button>
-                              <div className="px-4 py-2.5 bg-emerald-50 border-2 border-emerald-600 rounded-xl font-bold text-emerald-700 min-w-[3rem] text-center">
+                              <div className="px-4 py-4 md:py-3 bg-emerald-50 border-2 border-emerald-600 rounded-xl font-bold text-emerald-700 min-w-[4.5rem] md:min-w-[3.25rem] text-center text-lg md:text-base">
                                 {qty}
                               </div>
                               <button
                                 onClick={() => handleIncrement(product)}
-                                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 rounded-xl transition flex items-center justify-center"
+                                className="flex-1 py-4 md:py-3 bg-emerald-600 hover:bg-emerald-700 rounded-xl transition flex items-center justify-center active:scale-95"
                               >
-                                <Plus className="w-4 h-4 text-white" />
+                                <Plus className="w-5 h-5 text-white" />
                               </button>
                             </div>
                           )}
@@ -356,15 +386,15 @@ export default function RepSelectProducts() {
 
                 {/* Pagination */}
                 {data.totalPages > 1 && (
-                  <div className="flex items-center justify-center gap-2 mt-8">
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-2 mt-8 md:mt-10">
                     <button
                       onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                       disabled={currentPage === 1}
-                      className="px-4 py-2 rounded-lg border border-slate-300 text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
+                      className="w-full sm:w-auto px-4 py-3 md:py-2 rounded-lg border border-slate-300 text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 transition"
                     >
-                      Previous
+                      ← Previous
                     </button>
-                    <div className="flex items-center gap-1">
+                    <div className="hidden md:flex items-center gap-1">
                       {Array.from({ length: Math.min(5, data.totalPages) }, (_, i) => {
                         const page = i + 1;
                         return (
@@ -383,12 +413,15 @@ export default function RepSelectProducts() {
                       })}
                       {data.totalPages > 5 && <span className="px-2 text-slate-400">...</span>}
                     </div>
+                    <div className="md:hidden text-sm font-semibold text-slate-700 bg-slate-100 rounded-lg px-4 py-2">
+                      {currentPage} / {data.totalPages}
+                    </div>
                     <button
                       onClick={() => setCurrentPage(p => Math.min(data.totalPages, p + 1))}
                       disabled={currentPage === data.totalPages}
-                      className="px-4 py-2 rounded-lg border border-slate-300 text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
+                      className="w-full sm:w-auto px-4 py-3 md:py-2 rounded-lg border border-slate-300 text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 transition"
                     >
-                      Next
+                      Next →
                     </button>
                   </div>
                 )}
@@ -399,93 +432,49 @@ export default function RepSelectProducts() {
       </div>
 
 
-      {/* Cart Drawer/Modal */}
-      {cartOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-end md:items-center md:justify-center" onClick={() => setCartOpen(false)}>
-          <div className="bg-white w-full md:max-w-2xl md:rounded-3xl md:max-h-[85vh] flex flex-col animate-slide-up" onClick={e => e.stopPropagation()}>
-            {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b border-slate-200">
-              <div>
-                <h2 className="text-xl font-bold text-slate-900">Your Cart</h2>
-                <p className="text-sm text-slate-500 mt-0.5">{cartCount} items • {formatCurrency(cartTotal)}</p>
-              </div>
-              <button onClick={() => setCartOpen(false)} className="p-2 hover:bg-slate-100 rounded-lg transition">
-                <X className="w-5 h-5" />
-              </button>
+      {!isDesktop && cartCount > 0 && (
+        <div className="fixed left-0 right-0 bottom-[calc(env(safe-area-inset-bottom,0px)+70px)] md:bottom-[calc(env(safe-area-inset-bottom,0px)+74px)] z-40 px-3 md:px-4">
+          <div className="max-w-3xl mx-auto bg-gradient-to-r from-emerald-600 to-emerald-700 border-2 border-emerald-500 rounded-2xl shadow-2xl shadow-emerald-500/30 p-4 flex items-center gap-3 text-white">
+            <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
+              <ShoppingCart className="w-6 h-6 text-white" />
             </div>
-
-            {/* Cart Items */}
-            <div className="flex-1 overflow-y-auto p-6">
-              {draft.items.length === 0 ? (
-                <div className="text-center py-12">
-                  <ShoppingCart className="w-16 h-16 mx-auto text-slate-300 mb-4" />
-                  <div className="text-lg font-semibold text-slate-700">Cart is empty</div>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {draft.items.map((item) => (
-                    <div key={item.productId} className="flex items-center gap-4 bg-slate-50 rounded-xl p-4">
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-bold text-slate-900 truncate">{item.name}</div>
-                        <div className="text-xs text-slate-500 mt-1">
-                          {item.sku} • {formatCurrency(item.price)}
-                        </div>
-                        {item.discountPercent != null && (
-                          <div className="text-xs text-orange-600">Disc {item.discountPercent}%</div>
-                        )}
-                        {item.taxAmount != null && (
-                          <div className="text-xs text-indigo-600">Tax {formatCurrency(item.taxAmount)}</div>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handleDecrement(item.productId)}
-                          className="w-8 h-8 bg-white border border-slate-300 rounded-lg flex items-center justify-center hover:bg-slate-100"
-                        >
-                          <Minus className="w-4 h-4" />
-                        </button>
-                        <div className="w-12 text-center font-bold text-slate-900">{item.quantity}</div>
-                        <button
-                          onClick={() => {
-                            orderDraftUtils.updateQuantity(item.productId, item.quantity + 1);
-                            setDraft(orderDraftUtils.get());
-                          }}
-                          className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center hover:bg-emerald-700"
-                        >
-                          <Plus className="w-4 h-4 text-white" />
-                        </button>
-                      </div>
-                      <div className="text-sm font-bold text-slate-900 w-24 text-right">
-                        {formatCurrency(calculateLine({ rate: item.price, qty: item.quantity, discountPercent: item.discountPercent, taxAmount: item.taxAmount }).total)}
-                      </div>
-                      <button
-                        onClick={() => handleRemoveItem(item.productId)}
-                        className="text-red-400 hover:text-red-600 p-1"
-                      >
-                        <X className="w-5 h-5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-emerald-100 uppercase tracking-wide">{cartCount} Item{cartCount !== 1 ? 's' : ''}</p>
+              <p className="text-base md:text-lg font-bold text-white truncate">{formatCurrency(quickTotal)}</p>
             </div>
-
-            {/* Footer */}
-            <div className="border-t border-slate-200 p-6">
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-lg font-semibold text-slate-700">Total</span>
-                <span className="text-2xl font-bold text-emerald-600">{formatCurrency(cartTotal)}</span>
-              </div>
-              <button
-                onClick={() => { setCartOpen(false); navigate('/rep/orders/new'); }}
-                className="w-full py-3 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition"
-              >
-                Continue to Order
-              </button>
-            </div>
+            <button
+              onClick={() => navigate('/rep/orders/new')}
+              className="px-5 py-3 rounded-xl bg-white text-emerald-700 font-bold text-sm hover:bg-emerald-50 active:scale-95 transition whitespace-nowrap shadow-lg"
+            >
+              Continue
+            </button>
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function MiniStat({
+  label,
+  value,
+  tone = 'slate',
+}: {
+  label: string;
+  value: string;
+  tone?: 'slate' | 'green' | 'emerald';
+}) {
+  const cls =
+    tone === 'green'
+      ? 'bg-emerald-50 border-emerald-100 text-emerald-700'
+      : tone === 'emerald'
+      ? 'bg-emerald-50 border-emerald-100 text-emerald-700'
+      : 'bg-white border-slate-200 text-slate-700';
+
+  return (
+    <div className={`rounded-xl border px-3.5 py-3 md:py-2.5 ${cls}`}>
+      <p className="text-[10px] uppercase tracking-wide font-bold opacity-75">{label}</p>
+      <p className="text-base md:text-sm font-bold mt-1 md:mt-0.5 truncate">{value}</p>
     </div>
   );
 }

@@ -60,6 +60,50 @@ export function useSignalR() {
   const notificationConn = useRef<HubConnection | null>(null);
   const orderConn = useRef<HubConnection | null>(null);
 
+  const refreshQuotationQueries = useCallback(() => {
+    const quotationKeys = [
+      ['customer-quotations'],
+      ['rep-quotations'],
+      ['coordinator-quotations'],
+      ['admin-quotations'],
+    ] as const;
+
+    for (const key of quotationKeys) {
+      queryClient.invalidateQueries({ queryKey: key });
+      queryClient.refetchQueries({ queryKey: key, type: 'active' });
+    }
+  }, [queryClient]);
+
+  const refreshOrderQueries = useCallback(() => {
+    const orderKeys = [
+      ['admin-orders'],
+      ['rep-orders'],
+      ['customer-orders'],
+      ['coordinator-orders'],
+      ['admin-order'],
+      ['rep-order'],
+      ['customer-order'],
+      ['coordinator-order'],
+    ] as const;
+
+    for (const key of orderKeys) {
+      queryClient.invalidateQueries({ queryKey: key });
+    }
+  }, [queryClient]);
+
+  const refreshSupportQueries = useCallback(() => {
+    const supportKeys = [
+      ['admin-complaints'],
+      ['customer-complaints'],
+      ['rep-complaints'],
+      ['coordinator-complaints'],
+    ] as const;
+
+    for (const key of supportKeys) {
+      queryClient.invalidateQueries({ queryKey: key });
+    }
+  }, [queryClient]);
+
   const createConnection = useCallback((hubPath: string): HubConnection => {
     const token = localStorage.getItem('accessToken') || '';
     return new HubConnectionBuilder()
@@ -82,6 +126,8 @@ export function useSignalR() {
       // invalidation keys include userId so that cache updates for the current user
       queryClient.invalidateQueries({ queryKey: ['notifications', user?.id] });
       queryClient.invalidateQueries({ queryKey: ['unread-count', user?.id] });
+      refreshQuotationQueries();
+      refreshSupportQueries();
     });
 
     conn.on('NewOrder', (data: { id: string; orderNumber: string; actorName?: string; customerName?: string }) => {
@@ -97,9 +143,7 @@ export function useSignalR() {
 
     conn.on('OrderStatusChanged', (data: { orderId: string; status: string }) => {
       toast(`Order status updated to ${data.status}`, { icon: '📦', duration: 4000 });
-      queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
-      queryClient.invalidateQueries({ queryKey: ['rep-orders'] });
-      queryClient.invalidateQueries({ queryKey: ['customer-orders'] });
+      refreshOrderQueries();
     });
 
     conn.on('PriceUpdated', (data: { name: string; sellingPrice: number }) => {
@@ -111,7 +155,7 @@ export function useSignalR() {
     startConnection(conn, cancelled, 'NotificationHub');
 
     return () => safeStop(conn, cancelled);
-  }, [isAuthenticated, createConnection, queryClient]);
+  }, [isAuthenticated, createConnection, queryClient, refreshOrderQueries, refreshQuotationQueries, refreshSupportQueries, user?.id]);
 
   // Connect to OrderTrackingHub (all roles)
   useEffect(() => {
@@ -122,15 +166,13 @@ export function useSignalR() {
     orderConn.current = conn;
 
     conn.on('OrderStatusChanged', (data: { orderId: string; status: string; reason?: string }) => {
-      queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
-      queryClient.invalidateQueries({ queryKey: ['rep-orders'] });
-      queryClient.invalidateQueries({ queryKey: ['customer-orders'] });
+      refreshOrderQueries();
     });
 
     startConnection(conn, cancelled, 'OrderTrackingHub');
 
     return () => safeStop(conn, cancelled);
-  }, [isAuthenticated, createConnection, queryClient]);
+  }, [isAuthenticated, createConnection, refreshOrderQueries]);
 
 
   // Join/leave order tracking group

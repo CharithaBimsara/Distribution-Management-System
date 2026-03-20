@@ -2,6 +2,7 @@ export interface Customer {
   id: string;
   userId: string;
   shopName: string;
+  customerType?: string;
   businessRegistrationNumber?: string;
   regionId?: string;
   regionName?: string;
@@ -27,6 +28,19 @@ export interface Customer {
   totalOrderValue?: number;
 }
 
+export interface PriceDetail {
+  productId: string;
+  productName: string;
+  specialPrice?: number;
+  discountPercent?: number;
+}
+
+export interface PriceSpecialRequest {
+  productId: string;
+  specialPrice?: number;
+  discountPercent?: number;
+}
+
 export interface CustomerSummary {
   customer: Customer;
   totalPurchases: number;
@@ -43,13 +57,26 @@ export interface RegistrationSummary {
   incorporateDate?: string;
   businessName?: string;
   businessLocation?: string;
+  telephone?: string;
+  email?: string;
   bankBranch?: string;
   province?: string;
   town?: string;
   proprietorName?: string;
   proprietorTp?: string;
+  proprietorEmail?: string;
   managerName?: string;
   managerTp?: string;
+  managerEmail?: string;
+  chefName?: string;
+  chefTp?: string;
+  chefEmail?: string;
+  purchasingName?: string;
+  purchasingTp?: string;
+  purchasingEmail?: string;
+  accountantName?: string;
+  accountantTp?: string;
+  accountantEmail?: string;
   businessRegDocPath?: string;
   businessAddressDocPath?: string;
   vatDocPath?: string;

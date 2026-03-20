@@ -651,7 +651,14 @@ export default function AdminOrders() {
                         />
                       </td>
                       <td className="px-4 py-3.5">
-                        <span className="font-semibold text-slate-900 text-sm">{order.orderNumber}</span>
+                        <div className="flex flex-col gap-1">
+                          <span className="font-semibold text-slate-900 text-sm">{order.orderNumber}</span>
+                          {order.isFromApprovedQuotation && (
+                            <span className="inline-flex w-fit px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              Approved Quotation
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3.5 text-sm text-slate-700">{order.customerName}</td>
                       <td className="px-4 py-3.5 text-sm text-slate-500">{order.repName || ''}</td>

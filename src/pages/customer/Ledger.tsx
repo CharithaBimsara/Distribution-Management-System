@@ -68,18 +68,18 @@ export default function CustomerLedger() {
   return (
     <div className="animate-fade-in">
       {/* Hero Balance */}
-      <div className="relative bg-indigo-600 text-white px-5 pt-6 pb-14 overflow-hidden">
+      <div className="relative bg-orange-600 text-white px-5 pt-6 pb-14 overflow-hidden">
         <div className="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/4 blur-2xl" />
-        <div className="absolute bottom-0 left-0 w-32 h-32 bg-indigo-400/20 rounded-full translate-y-1/2 -translate-x-1/3 blur-xl" />
+        <div className="absolute bottom-0 left-0 w-32 h-32 bg-orange-400/20 rounded-full translate-y-1/2 -translate-x-1/3 blur-xl" />
         <div className="relative z-10">
           <div className="flex items-center gap-2 mb-3">
-            <Wallet className="w-5 h-5 text-indigo-200" />
-            <span className="text-sm text-indigo-100 font-medium">Current Balance</span>
+            <Wallet className="w-5 h-5 text-orange-100" />
+            <span className="text-sm text-orange-100 font-medium">Current Balance</span>
           </div>
           <p className="text-3xl font-bold tracking-tight">{formatCurrency(ledger?.totalOutstanding || 0)}</p>
           <div className="flex items-center gap-1.5 mt-2">
-            <TrendingUp className="w-3.5 h-3.5 text-indigo-200" />
-            <span className="text-xs text-indigo-100">Updated in real-time</span>
+            <TrendingUp className="w-3.5 h-3.5 text-orange-100" />
+            <span className="text-xs text-orange-100">Updated in real-time</span>
           </div>
         </div>
       </div>
@@ -90,7 +90,7 @@ export default function CustomerLedger() {
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
               <div className="flex items-center gap-2 mb-2">
-                <ShoppingBag className="w-4 h-4 text-indigo-500" />
+                <ShoppingBag className="w-4 h-4 text-orange-500" />
                 <span className="text-xs text-slate-400 font-medium">Outstanding</span>
               </div>
               <p className="text-xl font-bold text-slate-900">{formatCurrency(ledger.totalOutstanding)}</p>
@@ -135,10 +135,10 @@ export default function CustomerLedger() {
                   <div className="flex items-center gap-3">
                     <div
                       className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                        payment.status === 'Verified' ? 'bg-emerald-50' : 'bg-blue-50'
+                        payment.status === 'Verified' ? 'bg-emerald-50' : 'bg-orange-50'
                       }`}
                     >
-                      <CreditCard className={`w-5 h-5 ${payment.status === 'Verified' ? 'text-emerald-600' : 'text-blue-600'}`} />
+                      <CreditCard className={`w-5 h-5 ${payment.status === 'Verified' ? 'text-emerald-600' : 'text-orange-600'}`} />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-slate-900">{payment.paymentMethod || 'Payment'}</p>
@@ -181,9 +181,9 @@ export default function CustomerLedger() {
               </div>
             </div>
 
-            <div className="bg-indigo-50 rounded-xl p-4 flex justify-between items-center">
+            <div className="bg-orange-50 rounded-xl p-4 flex justify-between items-center">
               <span className="font-bold text-slate-900">Amount</span>
-              <span className="text-lg font-bold text-indigo-600">{formatCurrency(selectedPayment.amount)}</span>
+              <span className="text-lg font-bold text-orange-600">{formatCurrency(selectedPayment.amount)}</span>
             </div>
 
             {selectedPayment.notes && (

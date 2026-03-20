@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { useSignalR } from '../../hooks/useSignalR';
@@ -7,23 +7,28 @@ import { notificationsApi } from '../../services/api/notificationsApi';
 import {
   LayoutDashboard, Package, ShoppingCart, Users, UserCheck,
   BarChart3, Bell, Settings, LogOut, Menu, X, ChevronLeft, Search,
-  DollarSign, MessageSquare, Shield, FileText, MapPin
+  MessageSquare, Shield, FileText, MapPin, Gift, Hourglass
 } from 'lucide-react';
 import ConfirmModal from '../common/ConfirmModal';
+import NotificationPanel from '../common/NotificationPanel';
+import { useSectionNotificationBadges } from '../../hooks/useSectionNotificationBadges';
+import { useAutoCollapseSidebar } from '../../hooks/useAutoCollapseSidebar';
+import { useSystemBranding } from '../../hooks/useSystemBranding';
+import { useTrialCountdown } from '../../hooks/useTrialCountdown';
 
-const navItems = [
+const baseNavItems = [
   { to: '/admin', icon: LayoutDashboard, label: 'Dashboard', end: true },
   { to: '/admin/products', icon: Package, label: 'Products' },
   { to: '/admin/orders', icon: ShoppingCart, label: 'Orders' },
   { to: '/admin/customers', icon: Users, label: 'Customers' },
   { to: '/admin/reps', icon: UserCheck, label: 'Sales Reps' },
+  { to: '/admin/routes', icon: MapPin, label: 'Route Manage' },
   { to: '/admin/coordinators', icon: Shield, label: 'Coordinators' },
   { to: '/admin/regions', icon: MapPin, label: 'Regions' },
   { to: '/admin/quotations', icon: FileText, label: 'Quotations' },
-  { to: '/admin/payments', icon: DollarSign, label: 'Payments' },
   { to: '/admin/reports', icon: BarChart3, label: 'Reports' },
   { to: '/admin/support', icon: MessageSquare, label: 'Support' },
-  { to: '/admin/notifications', icon: Bell, label: 'Notifications' },
+  { to: '/admin/special-offers', icon: Gift, label: 'Special Offers' },
   { to: '/admin/settings', icon: Settings, label: 'Settings' },
 ];
 
@@ -31,10 +36,23 @@ export default function AdminLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
   const { user, logout } = useAuth();
+  const { config } = useSystemBranding();
+  const { formattedTime, isExpired } = useTrialCountdown();
   useSignalR();
   const navigate = useNavigate();
   const location = useLocation();
+
+  const navItems = useMemo(() => {
+    const items = [...baseNavItems];
+    if (user?.role === 'SuperAdmin') {
+      items.splice(1, 0, { to: '/admin/admin-accounts', icon: Shield, label: 'Admin Section' });
+    }
+    return items;
+  }, [user?.role]);
+
+  useAutoCollapseSidebar({ sidebarOpen, setSidebarOpen });
 
   const userId = user?.id;
 
@@ -54,6 +72,37 @@ export default function AdminLayout() {
     item.end ? location.pathname === item.to : location.pathname.startsWith(item.to)
   );
 
+  const sectionMap = useMemo(() => ({
+    orders: ['NewOrder', 'OrderStatusUpdate'],
+    quotations: ['QuotationSubmitted', 'QuotationApproved', 'QuotationRejected'],
+    customers: ['CustomerRegistration', 'CustomerApproval', 'CustomerRejection', 'CustomerAssignment'],
+    support: ['ComplaintUpdate', 'SupportResolution'],
+  }), []);
+
+  const { counts, markSectionAsRead } = useSectionNotificationBadges(userId, sectionMap);
+
+  const activeSection = useMemo(() => {
+    const path = location.pathname;
+    if (path.startsWith('/admin/orders')) return 'orders';
+    if (path.startsWith('/admin/quotations')) return 'quotations';
+    if (path.startsWith('/admin/customers')) return 'customers';
+    if (path.startsWith('/admin/support')) return 'support';
+    return '';
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!activeSection) return;
+    if ((counts[activeSection] || 0) === 0) return;
+    markSectionAsRead(activeSection);
+  }, [activeSection, counts, markSectionAsRead]);
+
+  const itemSection: Record<string, string> = {
+    '/admin/orders': 'orders',
+    '/admin/quotations': 'quotations',
+    '/admin/customers': 'customers',
+    '/admin/support': 'support',
+  };
+
   return (
     <div className="flex h-screen bg-slate-50/50">
       {/* Desktop Sidebar */}
@@ -64,12 +113,19 @@ export default function AdminLayout() {
       >
         {/* Sidebar Header */}
         <div className={`flex items-center h-16 border-b border-slate-100 ${sidebarOpen ? 'px-5 gap-3' : 'justify-center'}`}>
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20 flex-shrink-0">
-            <span className="text-white font-black text-sm">D</span>
+          <div
+            className="w-9 h-9 rounded-xl flex items-center justify-center shadow-lg flex-shrink-0 overflow-hidden"
+            style={{ background: 'linear-gradient(135deg, var(--brand-primary), var(--brand-secondary))' }}
+          >
+            {config?.companyLogo ? (
+              <img src={config.companyLogo} alt={config.companyName || 'Company logo'} className="h-full w-full object-cover" />
+            ) : (
+              <span className="text-white font-black text-sm">D</span>
+            )}
           </div>
           {sidebarOpen && (
             <div className="overflow-hidden">
-              <span className="font-bold text-slate-900 text-sm">Distribution<span className="text-indigo-500">MS</span></span>
+              <span className="font-bold text-slate-900 text-sm">{config?.companyName || 'Distribution'}<span style={{ color: 'var(--brand-primary)' }}>MS</span></span>
               <p className="text-[10px] text-slate-400 -mt-0.5">Admin Panel</p>
             </div>
           )}
@@ -95,7 +151,17 @@ export default function AdminLayout() {
                   <div className={`flex-shrink-0 ${isActive ? '' : 'group-hover:scale-110 transition-transform'}`}>
                     <item.icon className={`w-[18px] h-[18px] ${isActive ? 'text-indigo-600' : ''}`} />
                   </div>
-                  {sidebarOpen && <span>{item.label}</span>}
+                  {sidebarOpen && <span className="flex-1">{item.label}</span>}
+                  {sidebarOpen && (() => {
+                    const section = itemSection[item.to];
+                    const count = section ? (counts[section] || 0) : 0;
+                    if (!count) return null;
+                    return (
+                      <span className="bg-indigo-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                        {count}
+                      </span>
+                    );
+                  })()}
                 </>
               )}
             </NavLink>
@@ -106,12 +172,15 @@ export default function AdminLayout() {
         <div className="p-3 border-t border-slate-100">
           {sidebarOpen ? (
             <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-slate-50">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center flex-shrink-0">
+              <div
+                className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+                style={{ background: 'linear-gradient(135deg, var(--brand-primary), var(--brand-secondary))' }}
+              >
                 <span className="text-white text-xs font-bold">{user?.username?.[0]?.toUpperCase()}</span>
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-semibold text-slate-700 truncate">{user?.username}</p>
-                <p className="text-[10px] text-slate-400">Administrator</p>
+                <p className="text-[10px] text-slate-400">{user?.role === 'SuperAdmin' ? 'Super Admin' : 'Administrator'}</p>
               </div>
               <button onClick={handleLogout} className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition">
                 <LogOut className="w-4 h-4" />
@@ -132,10 +201,17 @@ export default function AdminLayout() {
           <aside className="fixed left-0 top-0 bottom-0 w-72 bg-white z-50 animate-slide-in shadow-2xl">
             <div className="flex items-center justify-between px-5 h-16 border-b border-slate-100">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
-                  <span className="text-white font-black text-sm">D</span>
+                  <div
+                    className="w-9 h-9 rounded-xl flex items-center justify-center overflow-hidden"
+                    style={{ background: 'linear-gradient(135deg, var(--brand-primary), var(--brand-secondary))' }}
+                  >
+                    {config?.companyLogo ? (
+                      <img src={config.companyLogo} alt={config.companyName || 'Company logo'} className="h-full w-full object-cover" />
+                    ) : (
+                      <span className="text-white font-black text-sm">D</span>
+                    )}
                 </div>
-                <span className="font-bold text-slate-900 text-sm">Janasiri <span className="text-indigo-500">Dist.</span></span>
+                  <span className="font-bold text-slate-900 text-sm">{config?.companyName || 'Janasiri'} <span style={{ color: 'var(--brand-primary)' }}>Dist.</span></span>
               </div>
               <button onClick={() => setMobileOpen(false)} className="p-2 hover:bg-slate-100 rounded-xl transition">
                 <X className="w-5 h-5 text-slate-500" />
@@ -155,7 +231,17 @@ export default function AdminLayout() {
                   }
                 >
                   <item.icon className="w-[18px] h-[18px]" />
-                  <span>{item.label}</span>
+                  <span className="flex-1">{item.label}</span>
+                  {(() => {
+                    const section = itemSection[item.to];
+                    const count = section ? (counts[section] || 0) : 0;
+                    if (!count) return null;
+                    return (
+                      <span className="bg-indigo-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                        {count}
+                      </span>
+                    );
+                  })()}
                 </NavLink>
               ))}
             </nav>
@@ -195,23 +281,33 @@ export default function AdminLayout() {
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => navigate('/admin/notifications')}
-              className="relative p-2.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition"
-            >
-              <Bell className="w-[18px] h-[18px]" />
+            <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-amber-200 bg-amber-50 text-amber-700">
+              <Hourglass className="w-3.5 h-3.5" />
+              <span className="text-[11px] font-semibold">Trial {isExpired ? 'ended' : formattedTime}</span>
+            </div>
+            <div className="relative">
+              <button
+                onClick={() => setShowNotifications((v) => !v)}
+                className="relative p-2.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition"
+              >
+                <Bell className="w-[18px] h-[18px]" />
 
-              {(unreadCount ?? 0) > 0 ? (
-                <span className="absolute top-2 right-2 bg-gradient-to-r from-orange-500 to-rose-500 text-white text-[9px] font-bold rounded-full min-w-[18px] h-4 flex items-center justify-center px-1 shadow-lg shadow-orange-500/30 animate-scale-in">
-                  {unreadCount}
-                </span>
-              ) : (
-                <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full ring-2 ring-white" />
-              )}
-            </button>
+                {(unreadCount ?? 0) > 0 ? (
+                  <span className="absolute top-2 right-2 bg-gradient-to-r from-orange-500 to-rose-500 text-white text-[9px] font-bold rounded-full min-w-[18px] h-4 flex items-center justify-center px-1 shadow-lg shadow-orange-500/30 animate-scale-in">
+                    {unreadCount}
+                  </span>
+                ) : (
+                  <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full ring-2 ring-white" />
+                )}
+              </button>
+              <NotificationPanel open={showNotifications} onClose={() => setShowNotifications(false)} userId={userId} />
+            </div>
 
             <div className="hidden sm:flex items-center gap-2.5 ml-1 pl-3 border-l border-slate-200">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+              <div
+                className="w-8 h-8 rounded-full flex items-center justify-center"
+                style={{ background: 'linear-gradient(135deg, var(--brand-primary), var(--brand-secondary))' }}
+              >
                 <span className="text-white text-xs font-bold">{user?.username?.[0]?.toUpperCase()}</span>
               </div>
               <div>

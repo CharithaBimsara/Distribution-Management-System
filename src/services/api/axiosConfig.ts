@@ -2,6 +2,18 @@ import axios from 'axios';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 
+const PUBLIC_PATH_PREFIXES = [
+  '/customer-registrations',
+  '/auth/login',
+  '/auth/register',
+  '/auth/refresh-token',
+];
+
+function isPublicRequest(url?: string) {
+  if (!url) return false;
+  return PUBLIC_PATH_PREFIXES.some((prefix) => url.startsWith(prefix));
+}
+
 const api = axios.create({
   baseURL: API_URL,
   headers: { 
@@ -13,6 +25,13 @@ const api = axios.create({
 
 // Request interceptor — attach JWT
 api.interceptors.request.use((config) => {
+  if (isPublicRequest(config.url)) {
+    if (config.headers?.Authorization) {
+      delete config.headers.Authorization;
+    }
+    return config;
+  }
+
   const token = localStorage.getItem('accessToken');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
@@ -25,6 +44,11 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
+
+    if (isPublicRequest(originalRequest?.url)) {
+      return Promise.reject(error);
+    }
+
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
       const refreshToken = localStorage.getItem('refreshToken');

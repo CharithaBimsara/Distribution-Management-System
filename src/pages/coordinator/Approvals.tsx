@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { coordinatorGetPendingApprovals, coordinatorApproveCustomer, coordinatorRejectCustomer, coordinatorGetReps } from '../../services/api/coordinatorApi';
+import { customerRegistrationApi, type RegistrationRequest } from '../../services/api/customerRegistrationApi';
 import { formatRelative } from '../../utils/formatters';
 import { UserCheck, MapPin, X, Check, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -9,48 +9,43 @@ import PageHeader from '../../components/common/PageHeader';
 import DataTable, { type Column } from '../../components/common/DataTable';
 import MobileTileList from '../../components/common/MobileTileList';
 import BottomSheet from '../../components/common/BottomSheet';
-import type { Customer } from '../../types/customer.types';
-import type { ApproveCustomerRequest } from '../../types/coordinator.types';
 
 export default function CoordinatorApprovals() {
   const queryClient = useQueryClient();
   const isDesktop = useIsDesktop();
   const [page, setPage] = useState(1);
-  const [approveTarget, setApproveTarget] = useState<Customer | null>(null);
-  const [rejectTarget, setRejectTarget] = useState<Customer | null>(null);
+  const [approveTarget, setApproveTarget] = useState<RegistrationRequest | null>(null);
+  const [rejectTarget, setRejectTarget] = useState<RegistrationRequest | null>(null);
   const [rejectReason, setRejectReason] = useState('');
 
-  // Approval form
-  const [assignedRepId, setAssignedRepId] = useState('');
-
   const { data, isLoading } = useQuery({
-    queryKey: ['coordinator-pending-approvals', page],
-    queryFn: () => coordinatorGetPendingApprovals(page, 20),
-  });
-
-  const { data: reps } = useQuery({
-    queryKey: ['coordinator-reps'],
-    queryFn: () => coordinatorGetReps(),
+    queryKey: ['coordinator-registration-approvals', page],
+    queryFn: () => customerRegistrationApi.coordinatorGetAll({ page, pageSize: 20, status: 'Pending' }).then(r => r.data.data),
   });
 
   const approveMut = useMutation({
-    mutationFn: ({ id, req }: { id: string; req: ApproveCustomerRequest }) => coordinatorApproveCustomer(id, req),
+    mutationFn: ({ id }: { id: string }) => customerRegistrationApi.coordinatorReview(id, {
+      action: 'Approve',
+    }),
     onSuccess: () => {
       toast.success('Customer approved');
       setApproveTarget(null);
-      queryClient.invalidateQueries({ queryKey: ['coordinator-pending-approvals'] });
+      queryClient.invalidateQueries({ queryKey: ['coordinator-registration-approvals'] });
       queryClient.invalidateQueries({ queryKey: ['coordinator-dashboard'] });
     },
     onError: () => toast.error('Failed to approve customer'),
   });
 
   const rejectMut = useMutation({
-    mutationFn: ({ id, reason }: { id: string; reason: string }) => coordinatorRejectCustomer(id, { reason }),
+    mutationFn: ({ id, reason }: { id: string; reason: string }) => customerRegistrationApi.coordinatorReview(id, {
+      action: 'Reject',
+      rejectionReason: reason,
+    }),
     onSuccess: () => {
       toast.success('Customer rejected');
       setRejectTarget(null);
       setRejectReason('');
-      queryClient.invalidateQueries({ queryKey: ['coordinator-pending-approvals'] });
+      queryClient.invalidateQueries({ queryKey: ['coordinator-registration-approvals'] });
       queryClient.invalidateQueries({ queryKey: ['coordinator-dashboard'] });
     },
     onError: () => toast.error('Failed to reject customer'),
@@ -60,7 +55,6 @@ export default function CoordinatorApprovals() {
     if (!approveTarget) return;
     approveMut.mutate({
       id: approveTarget.id,
-      req: { assignedRepId: assignedRepId || undefined },
     });
   };
 
@@ -68,23 +62,23 @@ export default function CoordinatorApprovals() {
   const totalPages = data ? Math.ceil(data.totalCount / data.pageSize) : 0;
   const inputCls = 'w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-300';
 
-  const columns: Column<Customer>[] = [
+  const columns: Column<RegistrationRequest>[] = [
     {
       key: 'shopName', header: 'Shop',
       render: (c) => (
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center">
-            <span className="text-white font-bold text-sm">{c.shopName[0]}</span>
+            <span className="text-white font-bold text-sm">{(c.customerName || '?')[0]}</span>
           </div>
           <div>
-            <p className="font-semibold text-slate-800">{c.shopName}</p>
-            {c.city && <p className="text-xs text-slate-400">{c.city}</p>}
+            <p className="font-semibold text-slate-800">{c.customerName}</p>
+            <p className="text-xs text-slate-400">{c.regionName || 'No region'}</p>
           </div>
         </div>
       ),
     },
-    { key: 'email', header: 'Contact', render: (c) => <div><p className="text-sm">{c.email || '—'}</p><p className="text-xs text-slate-400">{c.phoneNumber || ''}</p></div> },
-    { key: 'assignedCoordinatorName', header: 'Rep', render: (c) => (c as any).assignedCoordinatorName || c.assignedRepName || '—' },
+    { key: 'email', header: 'Contact', render: (c) => <div><p className="text-sm">{c.email || '—'}</p><p className="text-xs text-slate-400">{c.telephone || ''}</p></div> },
+    { key: 'assignedRepName', header: 'Rep', render: (c) => c.assignedRepName || '—' },
     { key: 'createdAt', header: 'Registered', render: (c) => <span className="text-xs text-slate-500">{formatRelative(c.createdAt)}</span> },
     {
       key: 'actions', header: 'Actions', align: 'center' as const,
@@ -105,7 +99,7 @@ export default function CoordinatorApprovals() {
 
   return (
     <div className="animate-fade-in space-y-4 lg:space-y-6">
-      <PageHeader title="Customer Approvals" subtitle={`${data?.totalCount || 0} pending registrations`} />
+          <PageHeader title="Customer Approvals" subtitle={`${data?.totalCount || 0} pending registration requests`} />
 
       {isDesktop ? (
         <DataTable columns={columns} data={customers} isLoading={isLoading} keyExtractor={(c) => c.id}
@@ -119,12 +113,12 @@ export default function CoordinatorApprovals() {
             <div>
               <div className="flex items-start gap-3">
                 <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center flex-shrink-0">
-                  <span className="text-white font-bold text-sm">{c.shopName[0]}</span>
+                  <span className="text-white font-bold text-sm">{(c.customerName || '?')[0]}</span>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-slate-800 text-sm">{c.shopName}</p>
+                  <p className="font-semibold text-slate-800 text-sm">{c.customerName}</p>
                   <div className="flex flex-wrap gap-2 mt-1 text-[11px] text-slate-400">
-                    {c.city && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{c.city}</span>}
+                    {c.regionName && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{c.regionName}</span>}
                     {c.email && <span>{c.email}</span>}
                   </div>
                   <p className="text-[10px] text-slate-300 mt-1">{formatRelative(c.createdAt)}</p>
@@ -146,19 +140,10 @@ export default function CoordinatorApprovals() {
       )}
 
       {/* Approve BottomSheet */}
-      <BottomSheet isOpen={!!approveTarget} onClose={() => setApproveTarget(null)} title={`Approve ${approveTarget?.shopName || ''}`}>
+      <BottomSheet isOpen={!!approveTarget} onClose={() => setApproveTarget(null)} title={`Approve ${approveTarget?.customerName || ''}`}>
         {approveTarget && (
           <div className="space-y-4">
-            <p className="text-sm text-slate-500">Assign a sales rep before approving this customer.</p>
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">Assign Sales Rep (optional)</label>
-              <select value={assignedRepId} onChange={e => setAssignedRepId(e.target.value)} className={inputCls}>
-                <option value="">Select rep…</option>
-                {(reps || []).map((r: any) => (
-                  <option key={r.id} value={r.id}>{r.fullName}</option>
-                ))}
-              </select>
-            </div>
+            <p className="text-sm text-slate-500">Approve this customer. Sales rep ownership is managed through route assignment.</p>
             <div className="flex gap-2 pt-2">
               <button onClick={() => setApproveTarget(null)} className="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50">Cancel</button>
               <button onClick={handleApprove} disabled={approveMut.isPending}
@@ -171,7 +156,7 @@ export default function CoordinatorApprovals() {
       </BottomSheet>
 
       {/* Reject BottomSheet */}
-      <BottomSheet isOpen={!!rejectTarget} onClose={() => { setRejectTarget(null); setRejectReason(''); }} title={`Reject ${rejectTarget?.shopName || ''}`}>
+      <BottomSheet isOpen={!!rejectTarget} onClose={() => { setRejectTarget(null); setRejectReason(''); }} title={`Reject ${rejectTarget?.customerName || ''}`}>
         {rejectTarget && (
           <div className="space-y-4">
             <div>

@@ -3,7 +3,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { customersApi } from '../../services/api/customersApi';
 import { regionsApi } from '../../services/api/regionsApi';
 import { adminGetAllCoordinators } from '../../services/api/coordinatorApi';
-import { repsApi } from '../../services/api/repsApi';
 import { useParams, useNavigate } from 'react-router-dom';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import {
@@ -12,6 +11,7 @@ import {
   UserCheck, Building2, Phone, Mail, Package, FileText as FileTextIcon,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useAuth } from '../../hooks/useAuth';
 
 // ── Shared small components (same as RegistrationRequestDetail) ──────────────
 function InfoRow({ label, value }: { label: string; value?: string | null }) {
@@ -40,17 +40,19 @@ export default function AdminCustomerDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const isCoordinatorView = user?.role === 'SalesCoordinator';
+  const customersBasePath = isCoordinatorView ? '/coordinator/customers' : '/admin/customers';
 
   // Assignment edit state
   const [editingAssignment, setEditingAssignment] = useState(false);
   const [selectedRegionId, setSelectedRegionId] = useState('');
   const [selectedSubRegionId, setSelectedSubRegionId] = useState('');
   const [selectedCoordinatorId, setSelectedCoordinatorId] = useState('');
-  const [selectedRepId, setSelectedRepId] = useState('');
 
   const { data: summary, isLoading } = useQuery({
-    queryKey: ['admin-customer-summary', id],
-    queryFn: () => customersApi.adminGetSummary(id!).then(r => r.data.data),
+    queryKey: [isCoordinatorView ? 'coordinator-customer-summary' : 'admin-customer-summary', id],
+    queryFn: () => (isCoordinatorView ? customersApi.coordinatorGetSummary(id!) : customersApi.adminGetSummary(id!)).then(r => r.data.data),
     enabled: !!id,
   });
 
@@ -62,7 +64,6 @@ export default function AdminCustomerDetail() {
       setSelectedRegionId(customer.regionId || '');
       setSelectedSubRegionId(customer.subRegionId || '');
       setSelectedCoordinatorId(customer.assignedCoordinatorId || '');
-      setSelectedRepId(customer.assignedRepId || '');
     }
   }, [customer]);
 
@@ -79,12 +80,6 @@ export default function AdminCustomerDetail() {
     enabled: editingAssignment,
   });
 
-  const { data: allReps } = useQuery({
-    queryKey: ['admin-all-reps'],
-    queryFn: () => repsApi.adminGetAll({ page: 1, pageSize: 200 }).then(r => r.data.data),
-    enabled: editingAssignment,
-  });
-
   // Cascading filters
   const filteredSubRegions = useMemo(() => {
     if (!regions || !selectedRegionId) return [];
@@ -98,22 +93,10 @@ export default function AdminCustomerDetail() {
     return allCoordinators.items.filter((c: any) => c.regionId === selectedRegionId);
   }, [allCoordinators, selectedRegionId]);
 
-  const filteredReps = useMemo(() => {
-    if (!allReps?.items) return [];
-    if (!selectedCoordinatorId) return selectedRegionId ? allReps.items.filter((r: any) => r.regionId === selectedRegionId) : allReps.items;
-    return allReps.items.filter((r: any) => r.coordinatorId === selectedCoordinatorId);
-  }, [allReps, selectedCoordinatorId, selectedRegionId]);
-
   const handleRegionChange = (regionId: string) => {
     setSelectedRegionId(regionId);
     setSelectedSubRegionId('');
     setSelectedCoordinatorId('');
-    setSelectedRepId('');
-  };
-
-  const handleCoordinatorChange = (coordinatorId: string) => {
-    setSelectedCoordinatorId(coordinatorId);
-    setSelectedRepId('');
   };
 
   const toggleStatusMut = useMutation({
@@ -142,7 +125,6 @@ export default function AdminCustomerDetail() {
       regionId: selectedRegionId || null,
       subRegionId: selectedSubRegionId || null,
       assignedCoordinatorId: selectedCoordinatorId || null,
-      assignedRepId: selectedRepId || null,
     });
   };
 
@@ -175,7 +157,7 @@ export default function AdminCustomerDetail() {
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <div className="flex items-start gap-4">
         <button
-          onClick={() => navigate('/admin/customers')}
+          onClick={() => navigate(customersBasePath)}
           className="p-2 hover:bg-slate-100 rounded-lg transition mt-0.5"
         >
           <ArrowLeft className="w-5 h-5 text-slate-600" />
@@ -195,18 +177,30 @@ export default function AdminCustomerDetail() {
             Joined {customer.createdAt ? formatDate(customer.createdAt) : '—'} &nbsp;·&nbsp; Customer Details
           </p>
         </div>
-        <button
-          onClick={() => toggleStatusMut.mutate(!customer.isActive)}
-          disabled={toggleStatusMut.isPending}
-          className={`hidden lg:inline-flex items-center gap-2 px-4 py-2 rounded-xl font-medium text-sm transition ${
-            customer.isActive
-              ? 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200'
-              : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
-          }`}
-        >
-          {customer.isActive ? <ToggleRight className="w-5 h-5" /> : <ToggleLeft className="w-5 h-5" />}
-          {customer.isActive ? 'Deactivate' : 'Activate'}
-        </button>
+        {!isCoordinatorView && (
+          <>
+            <button
+              onClick={() => navigate(`/admin/customers/${id}/special-prices`)}
+              className="hidden lg:inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition"
+            >
+              <DollarSign className="w-5 h-5" />
+              Special Prices
+            </button>
+
+            <button
+              onClick={() => toggleStatusMut.mutate(!customer.isActive)}
+              disabled={toggleStatusMut.isPending}
+              className={`hidden lg:inline-flex items-center gap-2 px-4 py-2 rounded-xl font-medium text-sm transition ${
+                customer.isActive
+                  ? 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200'
+                  : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
+              }`}
+            >
+              {customer.isActive ? <ToggleRight className="w-5 h-5" /> : <ToggleLeft className="w-5 h-5" />}
+              {customer.isActive ? 'Deactivate' : 'Activate'}
+            </button>
+          </>
+        )}
       </div>
 
       {/* ── Content grid ─────────────────────────────────────────────────── */}
@@ -230,22 +224,74 @@ export default function AdminCustomerDetail() {
             <InfoRow label="Region" value={customer.regionName || '—'} />
             <InfoRow label="Sub-Region" value={customer.subRegionName || '—'} />
             <InfoRow label="Coordinator" value={customer.assignedCoordinatorName || '—'} />
-            <InfoRow label="Sales Rep" value={customer.assignedRepName || '—'} />
           </Section>
 
-          {/* Registration Form Details — only fields not already in General Info */}
+          {/* Registration and professional details from submitted customer form */}
           {summary.registrationRequest && (
-            <Section title="Registration Details" icon={<FileTextIcon className="w-4 h-4" />}>
+            <Section title="Registration & Professional Details" icon={<FileTextIcon className="w-4 h-4" />}>
               <InfoRow label="Customer Type" value={summary.registrationRequest.customerType} />
               <InfoRow label="Owner Name" value={summary.registrationRequest.customerName} />
               <InfoRow label="Incorporate Date" value={summary.registrationRequest.incorporateDate ? formatDate(summary.registrationRequest.incorporateDate) : undefined} />
               <InfoRow label="Registered Address" value={summary.registrationRequest.registeredAddress} />
+              <InfoRow label="Business Name" value={summary.registrationRequest.businessName} />
+              <InfoRow label="Business Location" value={summary.registrationRequest.businessLocation} />
+              <InfoRow label="Telephone" value={summary.registrationRequest.telephone} />
+              <InfoRow label="Email" value={summary.registrationRequest.email} />
               <InfoRow label="Bank Branch" value={summary.registrationRequest.bankBranch} />
-              {summary.registrationRequest.proprietorName && (
-                <InfoRow label="Proprietor" value={`${summary.registrationRequest.proprietorName}${summary.registrationRequest.proprietorTp ? ` — ${summary.registrationRequest.proprietorTp}` : ''}`} />
+              <InfoRow label="Province" value={summary.registrationRequest.province} />
+              <InfoRow label="Town" value={summary.registrationRequest.town} />
+              <div className="pt-2 mt-1 border-t border-slate-100">
+                <p className="text-xs text-slate-400 uppercase tracking-wider mb-2">Professional Contacts</p>
+              </div>
+              {(summary.registrationRequest.proprietorName || summary.registrationRequest.proprietorTp || summary.registrationRequest.proprietorEmail) && (
+                <InfoRow
+                  label="Proprietor"
+                  value={[
+                    summary.registrationRequest.proprietorName,
+                    summary.registrationRequest.proprietorTp,
+                    summary.registrationRequest.proprietorEmail,
+                  ].filter(Boolean).join(' — ')}
+                />
               )}
-              {summary.registrationRequest.managerName && (
-                <InfoRow label="Manager" value={`${summary.registrationRequest.managerName}${summary.registrationRequest.managerTp ? ` — ${summary.registrationRequest.managerTp}` : ''}`} />
+              {(summary.registrationRequest.managerName || summary.registrationRequest.managerTp || summary.registrationRequest.managerEmail) && (
+                <InfoRow
+                  label="Manager"
+                  value={[
+                    summary.registrationRequest.managerName,
+                    summary.registrationRequest.managerTp,
+                    summary.registrationRequest.managerEmail,
+                  ].filter(Boolean).join(' — ')}
+                />
+              )}
+              {(summary.registrationRequest.chefName || summary.registrationRequest.chefTp || summary.registrationRequest.chefEmail) && (
+                <InfoRow
+                  label="Chef"
+                  value={[
+                    summary.registrationRequest.chefName,
+                    summary.registrationRequest.chefTp,
+                    summary.registrationRequest.chefEmail,
+                  ].filter(Boolean).join(' — ')}
+                />
+              )}
+              {(summary.registrationRequest.purchasingName || summary.registrationRequest.purchasingTp || summary.registrationRequest.purchasingEmail) && (
+                <InfoRow
+                  label="Purchasing Officer"
+                  value={[
+                    summary.registrationRequest.purchasingName,
+                    summary.registrationRequest.purchasingTp,
+                    summary.registrationRequest.purchasingEmail,
+                  ].filter(Boolean).join(' — ')}
+                />
+              )}
+              {(summary.registrationRequest.accountantName || summary.registrationRequest.accountantTp || summary.registrationRequest.accountantEmail) && (
+                <InfoRow
+                  label="Accountant"
+                  value={[
+                    summary.registrationRequest.accountantName,
+                    summary.registrationRequest.accountantTp,
+                    summary.registrationRequest.accountantEmail,
+                  ].filter(Boolean).join(' — ')}
+                />
               )}
               {/* Documents */}
               {(summary.registrationRequest.businessRegDocPath || summary.registrationRequest.businessAddressDocPath || summary.registrationRequest.vatDocPath) && (
@@ -332,30 +378,43 @@ export default function AdminCustomerDetail() {
             </p>
 
             {/* Mobile toggle */}
-            <button
-              onClick={() => toggleStatusMut.mutate(!customer.isActive)}
-              disabled={toggleStatusMut.isPending}
-              className={`lg:hidden w-full mt-1 py-2.5 rounded-xl text-sm font-semibold transition ${
-                customer.isActive
-                  ? 'bg-red-600 hover:bg-red-700 text-white'
-                  : 'bg-emerald-600 hover:bg-emerald-700 text-white'
-              }`}
-            >
-              {customer.isActive ? 'Deactivate' : 'Activate'}
-            </button>
+            {!isCoordinatorView && (
+              <>
+                <button
+                  onClick={() => toggleStatusMut.mutate(!customer.isActive)}
+                  disabled={toggleStatusMut.isPending}
+                  className={`lg:hidden w-full mt-1 py-2.5 rounded-xl text-sm font-semibold transition ${
+                    customer.isActive
+                      ? 'bg-red-600 hover:bg-red-700 text-white'
+                      : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                  }`}
+                >
+                  {customer.isActive ? 'Deactivate' : 'Activate'}
+                </button>
+
+                <button
+                  onClick={() => navigate(`/admin/customers/${id}/special-prices`)}
+                  className="lg:hidden w-full mt-2 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold"
+                >
+                  <DollarSign className="w-4 h-4 inline mr-2" />
+                  Special Prices
+                </button>
+              </>
+            )}
           </div>
 
           {/* Change Assignment Panel */}
-          <Section title="Change Assignment" icon={<UserCheck className="w-4 h-4" />}>
-            {!editingAssignment ? (
-              <button
-                onClick={() => setEditingAssignment(true)}
-                className="w-full py-3 rounded-xl border-2 border-slate-200 text-sm font-semibold text-slate-600 hover:border-indigo-300 hover:bg-indigo-50/50 transition-all"
-              >
-                Edit Region / Coordinator / Rep
-              </button>
-            ) : (
-              <div className="space-y-3">
+          {!isCoordinatorView && (
+            <Section title="Change Assignment" icon={<UserCheck className="w-4 h-4" />}>
+              {!editingAssignment ? (
+                <button
+                  onClick={() => setEditingAssignment(true)}
+                  className="w-full py-3 rounded-xl border-2 border-slate-200 text-sm font-semibold text-slate-600 hover:border-indigo-300 hover:bg-indigo-50/50 transition-all"
+                >
+                  Edit Region / Coordinator
+                </button>
+              ) : (
+                <div className="space-y-3">
                 {/* Region */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
@@ -397,7 +456,7 @@ export default function AdminCustomerDetail() {
                   </label>
                   <select
                     value={selectedCoordinatorId}
-                    onChange={e => handleCoordinatorChange(e.target.value)}
+                    onChange={e => setSelectedCoordinatorId(e.target.value)}
                     className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white outline-none focus:ring-2 focus:ring-indigo-500/15 focus:border-indigo-300 transition"
                   >
                     <option value="">Select coordinator…</option>
@@ -407,26 +466,6 @@ export default function AdminCustomerDetail() {
                   </select>
                   {selectedRegionId && filteredCoordinators.length === 0 && (
                     <p className="text-xs text-amber-600 mt-1">No coordinators in this region</p>
-                  )}
-                </div>
-
-                {/* Sales Rep */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
-                    <User className="w-3.5 h-3.5 inline mr-1" /> Sales Rep
-                  </label>
-                  <select
-                    value={selectedRepId}
-                    onChange={e => setSelectedRepId(e.target.value)}
-                    className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white outline-none focus:ring-2 focus:ring-indigo-500/15 focus:border-indigo-300 transition"
-                  >
-                    <option value="">Select sales rep…</option>
-                    {filteredReps.map((rep: any) => (
-                      <option key={rep.id} value={rep.id}>{rep.fullName}</option>
-                    ))}
-                  </select>
-                  {(selectedCoordinatorId || selectedRegionId) && filteredReps.length === 0 && (
-                    <p className="text-xs text-amber-600 mt-1">No reps available</p>
                   )}
                 </div>
 
@@ -446,9 +485,10 @@ export default function AdminCustomerDetail() {
                     {updateAssignmentMut.isPending ? 'Saving…' : 'Save Changes'}
                   </button>
                 </div>
-              </div>
-            )}
-          </Section>
+                </div>
+              )}
+            </Section>
+          )}
         </div>
       </div>
     </div>

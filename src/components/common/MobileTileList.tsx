@@ -57,7 +57,7 @@ export default function MobileTileList<T>({
 
   if (isLoading) {
     return (
-      <div className="space-y-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {Array.from({ length: 6 }).map((_, i) => (
           <SkeletonTile key={i} />
         ))}
@@ -79,26 +79,29 @@ export default function MobileTileList<T>({
   }
 
   return (
-    <div className="space-y-3">
-      {data.map((row, index) => (
-        <div
-          key={getKey(row)}
-          onClick={() => onTileClick?.(row)}
-          className={onTileClick ? 'cursor-pointer' : ''}
-        >
-          {renderTile(row, index)}
-        </div>
-      ))}
+    <div className="space-y-3 md:space-y-0 md:grid md:grid-cols-2 md:gap-3">
+      {data.map((row, index) => {
+        const key = getKey(row);
+        return (
+          <div
+            key={key}
+            onClick={() => onTileClick?.(row)}
+            className={onTileClick ? 'cursor-pointer' : ''}
+          >
+            {renderTile(row, index)}
+          </div>
+        );
+      })}
 
       {page !== undefined && totalPages !== undefined && totalPages > 1 && onPageChange && (
-        <div className="flex items-center justify-center gap-2 pt-4">
-          <button onClick={() => onPageChange(page - 1)} disabled={page <= 1} className="p-2 rounded-lg bg-white border border-slate-200 disabled:opacity-40 transition-colors">
+        <div className="flex items-center justify-center gap-2 pt-4 md:col-span-2">
+          <button onClick={() => onPageChange(page - 1)} disabled={page <= 1} className="p-2.5 rounded-lg bg-white border border-slate-200 disabled:opacity-40 transition-colors">
             <ChevronLeft className="w-4 h-4" />
           </button>
           <span className="text-sm text-slate-600 font-medium px-3">
             {page} / {totalPages}
           </span>
-          <button onClick={() => onPageChange(page + 1)} disabled={page >= totalPages} className="p-2 rounded-lg bg-white border border-slate-200 disabled:opacity-40 transition-colors">
+          <button onClick={() => onPageChange(page + 1)} disabled={page >= totalPages} className="p-2.5 rounded-lg bg-white border border-slate-200 disabled:opacity-40 transition-colors">
             <ChevronRight className="w-4 h-4" />
           </button>
         </div>

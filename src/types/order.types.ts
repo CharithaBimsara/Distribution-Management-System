@@ -31,6 +31,8 @@ export interface Order {
   deliveryAddress?: string;
   deliveryNotes?: string;
   rating?: number;
+  isFromApprovedQuotation?: boolean;
+  sourceQuotationNumber?: string;
   items: OrderItem[];
   createdAt: string;
 }

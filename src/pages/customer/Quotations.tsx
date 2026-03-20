@@ -1,20 +1,18 @@
-import { useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useSelector } from 'react-redux';
-import type { RootState } from '../../store/store';
-import { customerGetQuotations, customerCreateQuotation, customerConvertQuotation } from '../../services/api/quotationApi';
-import { productsApi } from '../../services/api/productsApi';
+import { useNavigate } from 'react-router-dom';
+import { customerGetQuotations, customerConvertQuotation, customerCancelQuotation } from '../../services/api/quotationApi';
 import { formatCurrency, formatRelative } from '../../utils/formatters';
+import { downloadQuotationPdf } from '../../utils/quotationPdf';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
 import PageHeader from '../../components/common/PageHeader';
-import DataTable, { type Column } from '../../components/common/DataTable';
 import MobileTileList from '../../components/common/MobileTileList';
 import StatusBadge from '../../components/common/StatusBadge';
 import EmptyState from '../../components/common/EmptyState';
 import BottomSheet from '../../components/common/BottomSheet';
-import { FileText, Plus, Search, X, Loader2, ShoppingCart, ArrowRight } from 'lucide-react';
+import { FileText, Plus, Loader2, ShoppingCart, ArrowRight, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
-import type { Quotation, QuotationStatus, CreateQuotationItemRequest } from '../../types/quotation.types';
+import type { Quotation, QuotationStatus } from '../../types/quotation.types';
 
 const STATUS_FILTERS: { label: string; value: string }[] = [
   { label: 'All', value: '' },
@@ -26,53 +24,19 @@ const STATUS_FILTERS: { label: string; value: string }[] = [
 ];
 
 export default function CustomerQuotations() {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const desktop = useIsDesktop();
-  const { user } = useSelector((state: RootState) => state.auth);
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState('');
-  const [showCreate, setShowCreate] = useState(false);
   const [convertQuotation, setConvertQuotation] = useState<Quotation | null>(null);
   const [selectedQuotation, setSelectedQuotation] = useState<Quotation | null>(null);
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [deliveryNotes, setDeliveryNotes] = useState('');
 
-  // Create form state
-  const [notes, setNotes] = useState('');
-  const [productSearch, setProductSearch] = useState('');
-  const [selectedItems, setSelectedItems] = useState<(CreateQuotationItemRequest & { productName: string; unitPrice: number })[]>([]);
-
   const { data, isLoading } = useQuery({
     queryKey: ['customer-quotations', page, statusFilter],
     queryFn: () => customerGetQuotations(page, 20, statusFilter || undefined),
-  });
-
-  const { data: products } = useQuery({
-    queryKey: ['customer-products-for-quotation', productSearch],
-    queryFn: () => productsApi.getAll({ page: 1, pageSize: 50, search: productSearch || undefined }).then((r) => r.data.data.items),
-    enabled: showCreate,
-  });
-
-  const createMut = useMutation({
-    mutationFn: () =>
-      customerCreateQuotation({
-        customerId: user?.id || '',
-        notes: notes || undefined,
-        items: selectedItems.map((i) => ({
-          productId: i.productId,
-          quantity: i.quantity,
-          expectedPrice: i.expectedPrice,
-          discountPercent: i.discountPercent,
-        })),
-      }),
-    onSuccess: () => {
-      toast.success('Quotation request submitted!');
-      setShowCreate(false);
-      setSelectedItems([]);
-      setNotes('');
-      queryClient.invalidateQueries({ queryKey: ['customer-quotations'] });
-    },
-    onError: () => toast.error('Failed to submit quotation'),
   });
 
   const convertMut = useMutation({
@@ -90,63 +54,41 @@ export default function CustomerQuotations() {
     onError: () => toast.error('Failed to convert quotation'),
   });
 
-  const addProduct = (product: any) => {
-    if (selectedItems.find((i) => i.productId === product.id)) return;
-    setSelectedItems((prev) => [
-      ...prev,
-      { productId: product.id, productName: product.name, unitPrice: product.price, quantity: 1, expectedPrice: product.price, discountPercent: 0 },
-    ]);
-  };
-
-  const updateItem = (productId: string, field: string, value: number) => {
-    setSelectedItems((prev) => prev.map((i) => (i.productId === productId ? { ...i, [field]: value } : i)));
-  };
-
-  const removeItem = (productId: string) => {
-    setSelectedItems((prev) => prev.filter((i) => i.productId !== productId));
-  };
+  const cancelMut = useMutation({
+    mutationFn: ({ id }: { id: string }) => customerCancelQuotation(id, 'Cancelled by customer'),
+    onSuccess: () => {
+      toast.success('Quotation cancelled');
+      queryClient.invalidateQueries({ queryKey: ['customer-quotations'] });
+      setSelectedQuotation(null);
+    },
+    onError: () => toast.error('Failed to cancel quotation'),
+  });
 
   const quotations = data?.items || [];
   const totalPages = data ? Math.ceil(data.totalCount / data.pageSize) : 0;
 
-  const handleRowClick = (q: Quotation) => {
-    if (!desktop) setSelectedQuotation(q);
-  };
+  useEffect(() => {
+    if (!selectedQuotation) return;
+    const updated = quotations.find((item) => item.id === selectedQuotation.id) || null;
+    setSelectedQuotation(updated);
+  }, [quotations, selectedQuotation?.id]);
 
-  /* ─── Desktop Columns ─── */
-  const columns: Column<Quotation>[] = [
-    { key: 'quotationNumber', header: 'Quotation #', render: (q) => <span className="font-semibold text-slate-900">{q.quotationNumber}</span> },
-    { key: 'items', header: 'Items', align: 'center', render: (q) => <span className="text-slate-500">{q.items?.length || 0}</span> },
-    { key: 'totalAmount', header: 'Total', align: 'right', render: (q) => <span className="font-semibold text-slate-900">{formatCurrency(q.totalAmount)}</span> },
-    { key: 'status', header: 'Status', render: (q) => <StatusBadge status={q.status} /> },
-    { key: 'createdAt', header: 'Created', render: (q) => <span className="text-slate-400 text-xs">{formatRelative(q.createdAt)}</span> },
-    {
-      key: 'actions',
-      header: '',
-      align: 'right',
-      render: (q) =>
-        q.status === 'Approved' && !q.convertedOrderId ? (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setConvertQuotation(q);
-            }}
-            className="text-xs text-emerald-600 font-semibold hover:underline flex items-center gap-1"
-          >
-            <ShoppingCart className="w-3.5 h-3.5" /> Convert
-          </button>
-        ) : q.convertedOrderId ? (
-          <span className="text-xs text-indigo-500 font-medium">Converted</span>
-        ) : null,
-    },
-  ];
+  useEffect(() => {
+    if (!convertQuotation) return;
+    const updated = quotations.find((item) => item.id === convertQuotation.id) || null;
+    setConvertQuotation(updated);
+  }, [quotations, convertQuotation?.id]);
+
+  const handleRowClick = (q: Quotation) => {
+    setSelectedQuotation((prev) => (prev?.id === q.id ? null : q));
+  };
 
   return (
     <div className="animate-fade-in">
       <PageHeader
         title="My Quotations"
         subtitle={`${data?.totalCount || 0} quotations`}
-        actions={[{ label: 'Request Quote', icon: Plus, onClick: () => setShowCreate(true) }]}
+        actions={[{ label: 'Request Quote', icon: Plus, onClick: () => navigate('/shop/quotations/new') }]}
       />
 
       <div className="px-4 lg:px-6 pb-6 space-y-4">
@@ -161,7 +103,7 @@ export default function CustomerQuotations() {
               }}
               className={`px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
                 statusFilter === f.value
-                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/20'
+                  ? 'bg-orange-600 text-white shadow-md shadow-orange-500/20'
                   : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'
               }`}
             >
@@ -172,24 +114,191 @@ export default function CustomerQuotations() {
 
         {/* Data */}
         {desktop ? (
-          <DataTable
-            data={quotations}
-            columns={columns}
-            keyField="id"
-            isLoading={isLoading}
-            page={page}
-            totalPages={totalPages}
-            onPageChange={setPage}
-            onRowClick={handleRowClick}
-            emptyState={
-              <EmptyState
-                icon={FileText}
-                title="No quotations yet"
-                description="Request a quote to get started"
-                action={{ label: 'Request Quote', onClick: () => setShowCreate(true) }}
-              />
-            }
-          />
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            {isLoading ? (
+              <div className="p-10 text-center text-slate-400 text-sm">Loading quotations</div>
+            ) : quotations.length === 0 ? (
+              <div className="p-12">
+                <EmptyState
+                  icon={FileText}
+                  title="No quotations yet"
+                  description="Request a quote to get started"
+                  action={{ label: 'Request Quote', onClick: () => navigate('/shop/quotations/new') }}
+                />
+              </div>
+            ) : (
+              <table className="w-full table-fixed">
+                <colgroup>
+                  <col className="w-[36%]" />
+                  <col className="w-[12%]" />
+                  <col className="w-[20%]" />
+                  <col className="w-[16%]" />
+                  <col className="w-[16%]" />
+                </colgroup>
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50">
+                    <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Quotation #</th>
+                    <th className="px-3 py-3 text-center text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Items</th>
+                    <th className="px-4 py-3 text-right text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Total</th>
+                    <th className="px-4 py-3 text-center text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Status</th>
+                    <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Created</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {quotations.map((q) => (
+                    <Fragment key={q.id}>
+                      <tr
+                        onClick={() => handleRowClick(q)}
+                        className={`border-b border-slate-50 cursor-pointer transition-colors ${
+                          selectedQuotation?.id === q.id ? 'bg-orange-50/60 border-orange-100' : 'hover:bg-slate-50/70'
+                        }`}
+                      >
+                        <td className="px-4 py-3.5 font-semibold text-slate-900 truncate" title={q.quotationNumber}>{q.quotationNumber}</td>
+                        <td className="px-3 py-3.5 text-center text-slate-600 font-medium">{q.items?.length || 0}</td>
+                        <td className="px-4 py-3.5 text-right font-semibold text-slate-900 tabular-nums">{formatCurrency(q.totalAmount)}</td>
+                        <td className="px-4 py-3.5 text-center"><StatusBadge status={q.status} /></td>
+                        <td className="px-4 py-3.5 text-xs text-slate-500 whitespace-nowrap">{formatRelative(q.createdAt)}</td>
+                      </tr>
+
+                      {selectedQuotation?.id === q.id && (
+                        <tr className="border-b border-orange-100">
+                          <td colSpan={5} className="p-0">
+                            <div className="bg-gradient-to-b from-orange-50/80 to-slate-50/20 px-6 py-4" style={{ animation: 'fadeIn 0.18s ease-out both' }}>
+                              {q.items?.length > 0 && (
+                                <div className="rounded-xl border border-slate-200 overflow-x-auto mb-4">
+                                  {(() => {
+                                    const withTax = (q.items || []).some((item: any) => (item.taxAmount || 0) > 0 || !!item.taxCode);
+                                    return (
+                                  <table className="w-full text-[11px] min-w-[980px]">
+                                    <thead>
+                                      <tr className="bg-slate-50">
+                                        <th className="px-3 py-2 text-left font-semibold text-slate-500 uppercase">Description</th>
+                                        <th className="px-3 py-2 text-left font-semibold text-slate-500 uppercase">Item</th>
+                                        <th className="px-3 py-2 text-center font-semibold text-slate-500 uppercase">Qty</th>
+                                        <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Rate</th>
+                                        <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">MRP</th>
+                                        <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Disc %</th>
+                                        <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Disc Amt</th>
+                                        {withTax && <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Tax</th>}
+                                        {withTax && <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Tax Amt</th>}
+                                        <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Amount</th>
+                                        <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Request Price</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                      {q.items.map((item: any) => {
+                                        const rate = item.unitPrice || 0;
+                                        const qty = item.quantity || 0;
+                                        const discPct = item.discountPercent || 0;
+                                        const discAmt = (rate * qty * discPct) / 100;
+                                        const taxAmt = item.taxAmount || 0;
+                                        const amount = item.lineTotal ?? ((rate * qty) - discAmt + taxAmt);
+                                        return (
+                                          <tr key={item.id || item.productId}>
+                                            <td className="px-3 py-2.5 text-slate-800 max-w-[220px] truncate" title={item.productName || '-'}>{item.productName || '-'}</td>
+                                            <td className="px-3 py-2.5 text-slate-600">{item.productSKU || '-'}</td>
+                                            <td className="px-3 py-2.5 text-center text-slate-600">{qty}</td>
+                                            <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(rate)}</td>
+                                            <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(item.mrp ?? rate)}</td>
+                                            <td className="px-3 py-2.5 text-right text-slate-700">{discPct}</td>
+                                            <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(discAmt)}</td>
+                                            {withTax && <td className="px-3 py-2.5 text-right text-slate-700">{item.taxCode || '-'}</td>}
+                                            {withTax && <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(taxAmt)}</td>}
+                                            <td className="px-3 py-2.5 text-right font-semibold text-slate-900">{formatCurrency(amount)}</td>
+                                            <td className="px-3 py-2.5 text-right text-slate-700">{item.expectedPrice != null ? formatCurrency(item.expectedPrice) : '-'}</td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                    );
+                                  })()}
+                                </div>
+                              )}
+
+                              {q.notes && (
+                                <div className="bg-slate-50 rounded-xl p-3 mb-3">
+                                  <p className="text-xs text-slate-400 font-medium mb-1">Notes</p>
+                                  <p className="text-sm text-slate-700">{q.notes}</p>
+                                </div>
+                              )}
+
+                              {q.rejectionReason && (
+                                <div className="bg-red-50 rounded-xl p-3 mb-3">
+                                  <p className="text-xs text-red-400 font-medium mb-1">Rejection Reason</p>
+                                  <p className="text-sm text-red-600">{q.rejectionReason}</p>
+                                </div>
+                              )}
+
+                              {q.status === 'Approved' && !q.convertedOrderId && (
+                                <div className="flex justify-end">
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      onClick={() => downloadQuotationPdf(q)}
+                                      className="px-4 py-2.5 border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-50 transition flex items-center gap-2"
+                                    >
+                                      <Download className="w-4 h-4" /> Download PDF
+                                    </button>
+                                    <button
+                                      onClick={() => setConvertQuotation(q)}
+                                      className="px-4 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 transition flex items-center gap-2"
+                                    >
+                                      <ShoppingCart className="w-4 h-4" /> Convert to Order
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
+                              {(q.status === 'Submitted' || q.status === 'UnderReview') && (
+                                <div className="flex justify-end">
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      onClick={() => downloadQuotationPdf(q)}
+                                      className="px-4 py-2.5 border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-50 transition flex items-center gap-2"
+                                    >
+                                      <Download className="w-4 h-4" /> Download PDF
+                                    </button>
+                                    <button
+                                      onClick={() => cancelMut.mutate({ id: q.id })}
+                                      disabled={cancelMut.isPending}
+                                      className="px-4 py-2.5 border border-red-200 text-red-600 rounded-xl text-sm font-semibold hover:bg-red-50 transition disabled:opacity-50"
+                                    >
+                                      Cancel Quotation
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
+                              {q.status !== 'Approved' && q.status !== 'Submitted' && q.status !== 'UnderReview' && (
+                                <div className="flex justify-end">
+                                  <button
+                                    onClick={() => downloadQuotationPdf(q)}
+                                    className="px-4 py-2.5 border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-50 transition flex items-center gap-2"
+                                  >
+                                    <Download className="w-4 h-4" /> Download PDF
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            {data && totalPages > 1 && (
+              <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-between">
+                <span className="text-xs text-slate-500">{data.totalCount} total • page {data.page} of {totalPages}</span>
+                <div className="flex gap-1">
+                  <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1} className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none transition">Prev</button>
+                  <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none transition">Next</button>
+                </div>
+              </div>
+            )}
+          </div>
         ) : (
           <MobileTileList
             data={quotations}
@@ -204,15 +313,15 @@ export default function CustomerQuotations() {
                 icon={FileText}
                 title="No quotations yet"
                 description="Request a quote to get started"
-                action={{ label: 'Request Quote', onClick: () => setShowCreate(true) }}
+                action={{ label: 'Request Quote', onClick: () => navigate('/shop/quotations/new') }}
               />
             }
             renderTile={(q) => (
               <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3 flex-1 min-w-0">
-                    <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center flex-shrink-0">
-                      <FileText className="w-5 h-5 text-indigo-600" />
+                    <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center flex-shrink-0">
+                      <FileText className="w-5 h-5 text-orange-600" />
                     </div>
                     <div className="min-w-0">
                       <p className="font-semibold text-slate-800 text-sm">{q.quotationNumber}</p>
@@ -243,11 +352,6 @@ export default function CustomerQuotations() {
                     <ShoppingCart className="w-3.5 h-3.5" /> Convert to Order <ArrowRight className="w-3 h-3" />
                   </button>
                 )}
-                {q.convertedOrderId && (
-                  <div className="mt-2 bg-indigo-50 rounded-lg px-3 py-2">
-                    <p className="text-xs text-indigo-600 font-medium">Converted to order</p>
-                  </div>
-                )}
               </div>
             )}
           />
@@ -260,21 +364,54 @@ export default function CustomerQuotations() {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <StatusBadge status={selectedQuotation.status} />
-              <span className="text-lg font-bold text-indigo-600">{formatCurrency(selectedQuotation.totalAmount)}</span>
+              <span className="text-lg font-bold text-orange-600">{formatCurrency(selectedQuotation.totalAmount)}</span>
             </div>
 
             <div>
               <h3 className="font-semibold text-slate-900 text-sm mb-2">Items</h3>
-              <div className="bg-slate-50 rounded-xl divide-y divide-slate-100">
-                {selectedQuotation.items?.map((item: any) => (
-                  <div key={item.id || item.productId} className="flex items-center justify-between p-3">
-                    <div>
-                      <p className="text-sm text-slate-700">{item.productName}</p>
-                      <p className="text-xs text-slate-400">x{item.quantity}</p>
-                    </div>
-                    <span className="text-sm font-semibold text-slate-900">{formatCurrency(item.lineTotal || item.expectedPrice * item.quantity)}</span>
-                  </div>
-                ))}
+              <div className="rounded-xl border border-slate-200 overflow-x-auto">
+                <table className="w-full text-[11px] min-w-[980px]">
+                  <thead>
+                    <tr className="bg-slate-50">
+                      <th className="px-3 py-2 text-left font-semibold text-slate-500 uppercase">Description</th>
+                      <th className="px-3 py-2 text-left font-semibold text-slate-500 uppercase">Item</th>
+                      <th className="px-3 py-2 text-center font-semibold text-slate-500 uppercase">Qty</th>
+                      <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Rate</th>
+                      <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">MRP</th>
+                      <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Disc %</th>
+                      <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Disc Amt</th>
+                      <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Tax</th>
+                      <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Tax Amt</th>
+                      <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Amount</th>
+                      <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Request Price</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {selectedQuotation.items?.map((item: any) => {
+                      const rate = item.unitPrice || 0;
+                      const qty = item.quantity || 0;
+                      const discPct = item.discountPercent || 0;
+                      const discAmt = (rate * qty * discPct) / 100;
+                      const taxAmt = item.taxAmount || 0;
+                      const amount = item.lineTotal ?? ((rate * qty) - discAmt + taxAmt);
+                      return (
+                        <tr key={item.id || item.productId}>
+                          <td className="px-3 py-2.5 text-slate-800 max-w-[220px] truncate" title={item.productName || '-'}>{item.productName || '-'}</td>
+                          <td className="px-3 py-2.5 text-slate-600">{item.productSKU || '-'}</td>
+                          <td className="px-3 py-2.5 text-center text-slate-600">{qty}</td>
+                          <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(rate)}</td>
+                          <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(item.mrp ?? rate)}</td>
+                          <td className="px-3 py-2.5 text-right text-slate-700">{discPct}</td>
+                          <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(discAmt)}</td>
+                          <td className="px-3 py-2.5 text-right text-slate-700">{item.taxCode || '-'}</td>
+                          <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(taxAmt)}</td>
+                          <td className="px-3 py-2.5 text-right font-semibold text-slate-900">{formatCurrency(amount)}</td>
+                          <td className="px-3 py-2.5 text-right text-slate-700">{item.expectedPrice != null ? formatCurrency(item.expectedPrice) : '-'}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             </div>
 
@@ -293,127 +430,53 @@ export default function CustomerQuotations() {
             )}
 
             {selectedQuotation.status === 'Approved' && !selectedQuotation.convertedOrderId && (
+              <div className="flex gap-2">
+                <button
+                  onClick={() => downloadQuotationPdf(selectedQuotation)}
+                  className="flex-1 py-3 border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-50 flex items-center justify-center gap-2 transition"
+                >
+                  <Download className="w-4 h-4" /> Download PDF
+                </button>
+                <button
+                  onClick={() => {
+                    setConvertQuotation(selectedQuotation);
+                    setSelectedQuotation(null);
+                  }}
+                  className="flex-1 py-3 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 flex items-center justify-center gap-2 transition"
+                >
+                  <ShoppingCart className="w-4 h-4" /> Convert to Order
+                </button>
+              </div>
+            )}
+
+            {(selectedQuotation.status === 'Submitted' || selectedQuotation.status === 'UnderReview') && (
+              <div className="flex gap-2">
+                <button
+                  onClick={() => downloadQuotationPdf(selectedQuotation)}
+                  className="flex-1 py-3 border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-50 flex items-center justify-center gap-2 transition"
+                >
+                  <Download className="w-4 h-4" /> Download PDF
+                </button>
+                <button
+                  onClick={() => cancelMut.mutate({ id: selectedQuotation.id })}
+                  disabled={cancelMut.isPending}
+                  className="flex-1 py-3 border border-red-200 text-red-600 rounded-xl text-sm font-semibold hover:bg-red-50 disabled:opacity-50 transition"
+                >
+                  Cancel Quotation
+                </button>
+              </div>
+            )}
+
+            {selectedQuotation.status !== 'Approved' && selectedQuotation.status !== 'Submitted' && selectedQuotation.status !== 'UnderReview' && (
               <button
-                onClick={() => {
-                  setConvertQuotation(selectedQuotation);
-                  setSelectedQuotation(null);
-                }}
-                className="w-full py-3 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 flex items-center justify-center gap-2 transition"
+                onClick={() => downloadQuotationPdf(selectedQuotation)}
+                className="w-full py-3 border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-50 flex items-center justify-center gap-2 transition"
               >
-                <ShoppingCart className="w-4 h-4" /> Convert to Order
+                <Download className="w-4 h-4" /> Download PDF
               </button>
             )}
           </div>
         )}
-      </BottomSheet>
-
-      {/* Create Quotation Bottom Sheet / Modal */}
-      <BottomSheet open={showCreate} onClose={() => setShowCreate(false)} title="Request Quotation">
-        <div className="space-y-4">
-          {/* Product Search */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search products..."
-              value={productSearch}
-              onChange={(e) => setProductSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 outline-none"
-            />
-          </div>
-
-          {/* Product Grid */}
-          {products && products.length > 0 && (
-            <div className="max-h-40 overflow-y-auto border border-slate-100 rounded-xl divide-y divide-slate-50">
-              {products
-                .filter((p: any) => !selectedItems.find((s) => s.productId === p.id))
-                .slice(0, 10)
-                .map((p: any) => (
-                  <button key={p.id} onClick={() => addProduct(p)} className="w-full flex items-center justify-between px-3 py-2 hover:bg-slate-50 transition text-left">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-slate-700 truncate">{p.name}</p>
-                      <p className="text-[11px] text-slate-400">{p.sku}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-slate-800">{formatCurrency(p.price)}</span>
-                      <Plus className="w-4 h-4 text-indigo-500" />
-                    </div>
-                  </button>
-                ))}
-            </div>
-          )}
-
-          {/* Selected Items */}
-          {selectedItems.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-xs font-semibold text-slate-500">{selectedItems.length} item(s) selected</p>
-              {selectedItems.map((item) => (
-                <div key={item.productId} className="bg-slate-50 rounded-xl p-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-sm font-medium text-slate-700">{item.productName}</p>
-                    <button onClick={() => removeItem(item.productId)} className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    <div>
-                      <label className="text-[10px] text-slate-400">Qty</label>
-                      <input
-                        type="number"
-                        min={1}
-                        value={item.quantity}
-                        onChange={(e) => updateItem(item.productId, 'quantity', +e.target.value)}
-                        className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] text-slate-400">Expected Price</label>
-                      <input
-                        type="number"
-                        min={0}
-                        step={0.01}
-                        value={item.expectedPrice}
-                        onChange={(e) => updateItem(item.productId, 'expectedPrice', +e.target.value)}
-                        className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] text-slate-400">Discount %</label>
-                      <input
-                        type="number"
-                        min={0}
-                        max={100}
-                        value={item.discountPercent}
-                        onChange={(e) => updateItem(item.productId, 'discountPercent', +e.target.value)}
-                        className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs"
-                      />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Notes */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1">Notes (optional)</label>
-            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Add notes..." className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm outline-none resize-none" />
-          </div>
-
-          {/* Actions */}
-          <div className="flex gap-2">
-            <button onClick={() => setShowCreate(false)} className="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 transition">
-              Cancel
-            </button>
-            <button
-              onClick={() => createMut.mutate()}
-              disabled={createMut.isPending || selectedItems.length === 0}
-              className="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2 hover:bg-indigo-700 transition"
-            >
-              {createMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />} Submit
-            </button>
-          </div>
-        </div>
       </BottomSheet>
 
       {/* Convert to Order Bottom Sheet / Modal */}
@@ -429,7 +492,7 @@ export default function CustomerQuotations() {
                 type="text"
                 value={deliveryAddress}
                 onChange={(e) => setDeliveryAddress(e.target.value)}
-                className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
+                className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400"
               />
             </div>
             <div>
@@ -438,7 +501,7 @@ export default function CustomerQuotations() {
                 value={deliveryNotes}
                 onChange={(e) => setDeliveryNotes(e.target.value)}
                 rows={2}
-                className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm outline-none resize-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
+                className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm outline-none resize-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400"
               />
             </div>
             <div className="flex gap-2">

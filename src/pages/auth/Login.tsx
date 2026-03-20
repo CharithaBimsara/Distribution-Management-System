@@ -1,18 +1,26 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
-import { Eye, EyeOff, Loader2, LogIn, Sparkles, Shield, Truck, UserCheck } from 'lucide-react';
+import { Eye, EyeOff, Loader2, LogIn } from 'lucide-react';
+import { useSystemBranding } from '../../hooks/useSystemBranding';
 
 export default function Login() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const { login, isLoading, error, isAuthenticated, user, clearError } = useAuth();
+  const { config } = useSystemBranding();
   const navigate = useNavigate();
 
   useEffect(() => {
     if (isAuthenticated && user) {
-      const routes: Record<string, string> = { Admin: '/admin', SalesRep: '/rep', Customer: '/shop', SalesCoordinator: '/coordinator' };
+      const routes: Record<string, string> = {
+        SuperAdmin: '/admin',
+        Admin: '/admin',
+        SalesRep: '/rep',
+        Customer: '/shop',
+        SalesCoordinator: '/coordinator',
+      };
       navigate(routes[user.role] || '/login');
     }
   }, [isAuthenticated, user, navigate]);
@@ -22,13 +30,6 @@ export default function Login() {
     clearError();
     await login(username, password);
   };
-
-  const demoAccounts = [
-    { label: 'Admin', desc: 'Full access', user: 'admin', pass: 'Admin@123', icon: Shield, color: '#818cf8', bg: 'rgba(99, 102, 241, 0.15)', border: 'rgba(99, 102, 241, 0.25)' },
-    { label: 'Coordinator', desc: 'Region manager', user: 'coord.nimal', pass: 'Coord@123', icon: UserCheck, color: '#22d3ee', bg: 'rgba(6, 182, 212, 0.15)', border: 'rgba(6, 182, 212, 0.25)' },
-    { label: 'Sales Rep', desc: 'Field sales', user: 'rep.kamal', pass: 'Rep@123', icon: Truck, color: '#34d399', bg: 'rgba(16, 185, 129, 0.15)', border: 'rgba(16, 185, 129, 0.25)' },
-    { label: 'Customer', desc: 'Shop owner', user: 'shop.laksiri', pass: 'Cust@123', icon: Sparkles, color: '#fb923c', bg: 'rgba(249, 115, 22, 0.15)', border: 'rgba(249, 115, 22, 0.25)' },
-  ];
 
   return (
     <div
@@ -64,16 +65,16 @@ export default function Login() {
         {/* Logo */}
         <div className="text-center mb-10">
           <div
-            className="inline-flex items-center justify-center w-[72px] h-[72px] rounded-[20px] mb-6 animate-float"
-            style={{
-              background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-              boxShadow: '0 8px 32px rgba(99, 102, 241, 0.35), 0 0 0 1px rgba(255,255,255,0.1) inset',
-            }}
+            className="inline-flex items-center justify-center w-[92px] h-[92px] mb-6 animate-float overflow-hidden"
           >
-            <span className="text-white font-black text-[28px]">D</span>
+            {config?.companyLogo ? (
+              <img src={config.companyLogo} alt={config.companyName || 'Company logo'} className="h-full w-full object-contain" />
+            ) : (
+              <span className="text-white font-black text-[28px]">D</span>
+            )}
           </div>
           <h1 className="text-[22px] font-extrabold text-white tracking-tight leading-tight">
-            Janasiri <span style={{ color: '#818cf8' }}>Distribution</span>
+            {config?.companyName || 'Janasiri'} <span style={{ color: 'var(--brand-primary)' }}>Distribution</span>
           </h1>
           <p className="text-[13px] font-semibold text-white/70 -mt-0.5">Pvt Ltd</p>
           <p className="text-[13px] mt-1.5" style={{ color: '#64748b' }}>
@@ -222,74 +223,8 @@ export default function Login() {
           </form>
         </div>
 
-        {/* Demo Accounts */}
-        <div className="mt-8">
-          <div className="flex items-center gap-4 mb-5">
-            <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.08)' }} />
-            <span className="text-[11px] font-semibold uppercase tracking-[0.1em]" style={{ color: '#475569' }}>
-              Quick Demo Access
-            </span>
-            <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.08)' }} />
-          </div>
-
-          <div className="grid grid-cols-3 gap-3">
-            {demoAccounts.map((demo) => (
-              <button
-                key={demo.user}
-                onClick={() => { setUsername(demo.user); setPassword(demo.pass); }}
-                className="text-center transition-all duration-200 cursor-pointer"
-                style={{
-                  padding: '16px 8px',
-                  background: demo.bg,
-                  border: `1px solid ${demo.border}`,
-                  borderRadius: '16px',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                  e.currentTarget.style.boxShadow = `0 8px 24px rgba(0,0,0,0.2)`;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = 'none';
-                }}
-                onMouseDown={(e) => { e.currentTarget.style.transform = 'scale(0.95)'; }}
-                onMouseUp={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; }}
-              >
-                <div
-                  className="w-10 h-10 rounded-[12px] flex items-center justify-center mx-auto mb-2.5"
-                  style={{
-                    background: `linear-gradient(135deg, ${demo.color}, ${demo.color}dd)`,
-                    boxShadow: `0 4px 12px ${demo.color}40`,
-                  }}
-                >
-                  <demo.icon className="w-[18px] h-[18px] text-white" />
-                </div>
-                <p className="text-[13px] font-semibold text-white">{demo.label}</p>
-                <p className="text-[11px] mt-0.5" style={{ color: '#64748b' }}>{demo.desc}</p>
-              </button>
-            ))}
-          </div>
-        </div>
-
         {/* Register Link */}
         <div className="text-center mt-6 space-y-3">
-          <p className="text-[14px]" style={{ color: '#64748b' }}>
-            New to Janasiri Distribution?{' '}
-            <Link
-              to="/register"
-              className="font-semibold transition-all duration-200 hover:underline"
-              style={{ color: '#818cf8' }}
-              onMouseEnter={(e) => { e.currentTarget.style.color = '#a5b4fc'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.color = '#818cf8'; }}
-            >
-              Create your account
-            </Link>
-          </p>
-          <div className="flex items-center gap-3">
-            <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
-            <span className="text-[11px]" style={{ color: '#374151' }}>or</span>
-            <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
-          </div>
           <p className="text-[14px]" style={{ color: '#64748b' }}>
             Want to become a customer?{' '}
             <Link

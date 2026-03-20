@@ -141,7 +141,7 @@ export default function AdminCustomerForm({ onSuccess, onCancel }) {
     accountantName: '', accountantTp: '', accountantEmail: '',
   });
   const [files, setFiles] = useState({});
-  const [assign, setAssign] = useState({ regionId: '', subRegionId: '', coordinatorId: '', repId: '' });
+  const [assign, setAssign] = useState({ regionId: '', subRegionId: '', coordinatorId: '' });
 
   const upd = (e) => setForm(f => ({ ...f, [e.target.name]: e.target.value }));
   const updAssign = (e) => {
@@ -203,12 +203,11 @@ export default function AdminCustomerForm({ onSuccess, onCancel }) {
     if (assign.regionId) fd.append('regionId', assign.regionId);
     if (assign.subRegionId) fd.append('subRegionId', assign.subRegionId);
     if (assign.coordinatorId) fd.append('assignedCoordinatorId', assign.coordinatorId);
-    if (assign.repId) fd.append('assignedRepId', assign.repId);
+    
     createMut.mutate(fd);
   };
 
   const coordName = (id) => filterOptions?.coordinators?.find(c => c.id === id)?.name || id;
-  const repName = (id) => filterOptions?.assignedReps?.find(r => r.id === id)?.name || id;
   const regionName = (id) => (regionsData || []).find(r => r.id === id)?.name || id;
   const subRegionName = (id) => subRegions.find(s => s.id === id)?.name || id;
 
@@ -301,7 +300,7 @@ export default function AdminCustomerForm({ onSuccess, onCancel }) {
       {step === 3 && (
         <div>
           <SectionTitle>Assignment</SectionTitle>
-          <p className="text-xs text-slate-500 mb-5">Assign the customer to a region and sales team. All fields are optional.</p>
+          <p className="text-xs text-slate-500 mb-5">Assign the customer to a region and coordinator. Sales rep linkage is managed through routes.</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <SelectField label="Region" name="regionId" value={assign.regionId} onChange={updAssign}>
               <option value="">Select Region</option>
@@ -319,12 +318,6 @@ export default function AdminCustomerForm({ onSuccess, onCancel }) {
               <option value="">Select Coordinator</option>
               {(filterOptions?.coordinators || []).map(c => (
                 <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </SelectField>
-            <SelectField label="Sales Rep" name="repId" value={assign.repId} onChange={updAssign}>
-              <option value="">Select Sales Rep</option>
-              {(filterOptions?.assignedReps || []).map(r => (
-                <option key={r.id} value={r.id}>{r.name}</option>
               ))}
             </SelectField>
           </div>
@@ -386,7 +379,6 @@ export default function AdminCustomerForm({ onSuccess, onCancel }) {
                 ['Region', assign.regionId ? regionName(assign.regionId) : '—'],
                 ['Sub-Region', assign.subRegionId ? subRegionName(assign.subRegionId) : '—'],
                 ['Coordinator', assign.coordinatorId ? coordName(assign.coordinatorId) : '—'],
-                ['Sales Rep', assign.repId ? repName(assign.repId) : '—'],
               ]} />
             </div>
             <button type="button" onClick={() => setConfirmed(c => !c)}

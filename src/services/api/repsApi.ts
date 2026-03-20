@@ -14,6 +14,7 @@ export interface Rep {
   subRegionName?: string;
   coordinatorId?: string;
   coordinatorName?: string;
+  coordinatorRegionName?: string;
   assignedCustomersCount?: number;
   email?: string;
   phoneNumber?: string;
@@ -29,11 +30,14 @@ export const repsApi = {
   adminGetById: (id: string) =>
     api.get<ApiResponse<Rep>>(`/admin/reps/${id}`),
 
-  adminCreate: (data: { username: string; email: string; password: string; fullName: string; phoneNumber?: string; employeeCode?: string; hireDate?: string; regionId?: string; subRegionId?: string; coordinatorId?: string }) =>
+  adminCreate: (data: { username?: string; email: string; password?: string; fullName: string; phoneNumber?: string; employeeCode?: string; hireDate?: string; regionId?: string; subRegionId?: string; coordinatorId?: string }) =>
     api.post<ApiResponse<Rep>>('/admin/reps', data),
 
   adminUpdate: (id: string, data: { fullName?: string; phoneNumber?: string; regionId?: string; subRegionId?: string; coordinatorId?: string; isActive?: boolean }) =>
     api.put<ApiResponse<Rep>>(`/admin/reps/${id}`, data),
+
+  adminUnassignCoordinator: (id: string) =>
+    api.delete<ApiResponse<string>>(`/admin/reps/${id}/coordinator`),
 
   adminGetPerformance: (id: string, params?: Record<string, unknown>) =>
     api.get<ApiResponse<RepPerformance>>(`/admin/reps/${id}/performance`, { params }),
@@ -50,12 +54,27 @@ export const repsApi = {
   adminCreateRoute: (data: { name: string; description?: string; repId?: string; daysOfWeek?: string; estimatedDurationMinutes?: number }) =>
     api.post<ApiResponse<Route>>('/admin/routes', data),
 
+  adminGetRoutes: () =>
+    api.get<ApiResponse<Route[]>>('/admin/routes'),
+
+  adminAddCustomerToRoute: (routeId: string, data: { customerId: string; visitOrder: number; visitFrequency?: string }) =>
+    api.post<ApiResponse<string>>(`/admin/routes/${routeId}/customers`, data),
+
+  adminAssignRoute: (routeId: string, repId: string) =>
+    api.post<ApiResponse<string>>(`/admin/routes/${routeId}/assign`, { repId }),
+
+  adminDeleteRoute: (routeId: string) =>
+    api.delete<ApiResponse<string>>(`/admin/routes/${routeId}`),
+
   adminGetRouteProgress: () =>
     api.get<ApiResponse<RouteProgress[]>>('/admin/routes/progress/today'),
 
   // Rep self
   repGetProfile: () =>
-    api.get<ApiResponse<unknown>>('/rep/profile'),
+    api.get<ApiResponse<Rep>>('/rep/profile'),
+
+  repUpdateProfile: (data: { fullName?: string; phoneNumber?: string; hireDate?: string }) =>
+    api.put<ApiResponse<Rep>>('/rep/profile', data),
 
   repGetRoutes: () =>
     api.get<ApiResponse<Route[]>>('/rep/routes'),

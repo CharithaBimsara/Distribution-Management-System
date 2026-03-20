@@ -37,10 +37,12 @@ export interface QuotationItem {
   productId: string;
   productName: string;
   productSKU?: string;
+  mrp?: number;
   quantity: number;
   unitPrice: number;
   expectedPrice?: number;
   discountPercent: number;
+  taxCode?: string;
   taxAmount: number;
   lineTotal: number;
 }

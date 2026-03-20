@@ -39,6 +39,24 @@ export const ordersApi = {
       headers: { 'Content-Type': 'application/json' },
     }),
 
+  // Coordinator
+  coordinatorGetAll: (params?: OrderFilterRequest) =>
+    api.get<ApiResponse<PagedResult<Order>>>('/coordinator/orders', { params }),
+
+  coordinatorGetById: (id: string) =>
+    api.get<ApiResponse<Order>>(`/coordinator/orders/${id}`),
+
+  coordinatorApprove: (id: string) =>
+    api.post<ApiResponse<Order>>(`/coordinator/orders/${id}/approve`),
+
+  coordinatorReject: (id: string, reason?: string) =>
+    api.post<ApiResponse<Order>>(`/coordinator/orders/${id}/reject`, reason || '', {
+      headers: { 'Content-Type': 'application/json' },
+    }),
+
+  coordinatorUpdateStatus: (id: string, data: UpdateOrderStatusRequest) =>
+    api.put<ApiResponse<Order>>(`/coordinator/orders/${id}/status`, data),
+
   // Customer
   customerCreate: (data: CreateOrderRequest) =>
     api.post<ApiResponse<Order>>('/customer/orders', data),

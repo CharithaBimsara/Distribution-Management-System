@@ -13,8 +13,8 @@ export default function CustomerCreateSupport() {
             <ArrowLeft className="w-4 h-4" />
           </button>
           <div>
-            <h1 className="text-xl font-bold text-slate-900">New Complaint</h1>
-            <p className="text-sm text-slate-500 mt-0.5">Create a new complaint and submit to support</p>
+            <h1 className="text-xl font-bold text-slate-900">Get Ticket</h1>
+            <p className="text-sm text-slate-500 mt-0.5">Create a support ticket or complaint and chat with the team</p>
           </div>
         </div>
 

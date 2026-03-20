@@ -14,6 +14,34 @@ export interface RegisterRequest {
   location?: string;
 }
 
+export interface CreateAdminAccountRequest {
+  email: string;
+  phoneNumber: string;
+  fullName?: string;
+  department?: string;
+}
+
+export interface AdminAccountInfo {
+  id: string;
+  userId: string;
+  username: string;
+  email: string;
+  phoneNumber: string;
+  fullName: string;
+  department?: string;
+  isActive: boolean;
+  mustChangePassword: boolean;
+  createdAt: string;
+}
+
+export interface UpdateAdminAccountRequest {
+  email: string;
+  phoneNumber: string;
+  fullName?: string;
+  department?: string;
+  isActive?: boolean;
+}
+
 export interface AuthResponse {
   accessToken: string;
   refreshToken: string;
@@ -26,7 +54,7 @@ export interface UserInfo {
   username: string;
   email: string;
   phoneNumber: string;
-  role: 'Admin' | 'SalesRep' | 'Customer' | 'SalesCoordinator';
+  role: 'SuperAdmin' | 'Admin' | 'SalesRep' | 'Customer' | 'SalesCoordinator';
   isActive: boolean;
   mustChangePassword: boolean;
   lastLoginAt?: string;

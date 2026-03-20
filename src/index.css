@@ -1,6 +1,11 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 @import "tailwindcss";
 
+:root {
+  --brand-primary: #4f46e5;
+  --brand-secondary: #0ea5e9;
+}
+
 /* ===== Register Custom Animations with Tailwind v4 ===== */
 @theme {
   --animate-fade-in: fade-in 0.5s ease-out both;
@@ -71,6 +76,53 @@
   to { transform: rotate(360deg); }
 }
 
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+.animate-marquee {
+  animation: marquee 24s linear infinite;
+}
+
+.offer-flip-card {
+  perspective: 1200px;
+}
+
+.offer-flip-inner {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 0.6s cubic-bezier(0.2, 1, 0.3, 1);
+}
+
+.offer-flip-inner.is-flipped {
+  transform: rotateY(180deg);
+}
+
+.offer-flip-face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.35rem;
+  border-radius: 1rem;
+  padding: 0.75rem;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.offer-flip-front {
+  transform: rotateY(0deg);
+}
+
+.offer-flip-back {
+  transform: rotateY(180deg);
+}
+
 /* ===== Card Component ===== */
 .card {
   background: white;
@@ -110,13 +162,13 @@ body {
 
 /* ===== Focus ===== */
 :focus-visible {
-  outline: 2px solid #4f46e5;
+  outline: 2px solid var(--brand-primary);
   outline-offset: 2px;
   border-radius: 4px;
 }
 
 ::selection {
-  background-color: rgb(79 70 229 / 0.15);
+  background-color: color-mix(in srgb, var(--brand-primary) 15%, transparent);
   color: #0f172a;
 }
 
@@ -156,6 +208,18 @@ body {
 /* ===== Hide scrollbar ===== */
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Hide spinner arrows for number inputs while still allowing manual typing */
+.no-number-spin::-webkit-outer-spin-button,
+.no-number-spin::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.no-number-spin {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
 
 /* ===== Mobile Touch ===== */
 @media (hover: none) and (pointer: coarse) {

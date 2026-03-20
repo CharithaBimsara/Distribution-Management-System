@@ -1,6 +1,6 @@
 import api from './axiosConfig';
 import type { ApiResponse, PagedResult } from '../../types/api.types';
-import type { Customer, CustomerFilterOptions, CustomerSummary } from '../../types/customer.types';
+import type { Customer, CustomerFilterOptions, CustomerSummary, PriceDetail, PriceSpecialRequest } from '../../types/customer.types';
 import type { CustomerLedger } from '../../types/payment.types';
 
 export const customersApi = {
@@ -17,6 +17,19 @@ export const customersApi = {
   adminGetSummary: (id: string) =>
     api.get<ApiResponse<CustomerSummary>>(`/admin/customers/${id}/summary`),
 
+  // Coordinator (dedicated endpoints)
+  coordinatorGetAll: (params?: Record<string, unknown>) =>
+    api.get<ApiResponse<PagedResult<Customer>>>('/coordinator/customer-management', { params }),
+
+  coordinatorGetFilterOptions: () =>
+    api.get<ApiResponse<CustomerFilterOptions>>('/coordinator/customer-management/filters'),
+
+  coordinatorGetById: (id: string) =>
+    api.get<ApiResponse<Customer>>(`/coordinator/customer-management/${id}`),
+
+  coordinatorGetSummary: (id: string) =>
+    api.get<ApiResponse<CustomerSummary>>(`/coordinator/customer-management/${id}/summary`),
+
   adminCreate: (data: Record<string, unknown>) =>
     api.post<ApiResponse<Customer>>('/admin/customers', data),
 
@@ -27,6 +40,12 @@ export const customersApi = {
     api.put<ApiResponse<string>>(`/admin/customers/${id}/status`, isActive, {
       headers: { 'Content-Type': 'application/json' },
     }),
+
+  adminGetSpecialPrices: (customerId: string) =>
+    api.get<ApiResponse<PriceDetail[]>>(`/admin/customers/${customerId}/special-prices`),
+
+  adminSaveSpecialPrices: (customerId: string, prices: PriceSpecialRequest[]) =>
+    api.post<ApiResponse<string>>(`/admin/customers/${customerId}/special-prices`, prices),
 
   // Rep
   repGetCustomers: (params?: Record<string, unknown>) =>

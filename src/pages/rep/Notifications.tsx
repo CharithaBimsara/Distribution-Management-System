@@ -99,9 +99,9 @@ export default function RepNotifications() {
         <div className="bg-white rounded-2xl border border-slate-200 divide-y divide-slate-50 overflow-hidden">
           {notifications.map((n: Notification) => (
             <div key={n.id} onClick={() => handleClick(n)}
-              className={`flex items-start gap-3 px-5 py-4 transition cursor-pointer ${n.isRead ? 'bg-white hover:bg-slate-50' : 'bg-indigo-50/30 hover:bg-indigo-50/50'}`}>
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${n.isRead ? 'bg-slate-50' : 'bg-gradient-to-br from-indigo-100 to-blue-100'}`}>
-                <Bell className={`w-5 h-5 ${n.isRead ? 'text-slate-300' : 'text-indigo-500'}`} />
+              className={`flex items-start gap-3 px-5 py-4 transition cursor-pointer ${n.isRead ? 'bg-white hover:bg-slate-50' : 'bg-emerald-50/40 hover:bg-emerald-50/60'}`}>
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${n.isRead ? 'bg-slate-50' : 'bg-gradient-to-br from-emerald-100 to-green-100'}`}>
+                <Bell className={`w-5 h-5 ${n.isRead ? 'text-slate-300' : 'text-emerald-600'}`} />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-2">
@@ -110,7 +110,7 @@ export default function RepNotifications() {
                     {n.metadata?.customerName && <span className="text-xs text-slate-500 ml-1">({n.metadata.customerName})</span>}
                     {n.metadata?.actorName && <span className="text-xs text-slate-500 ml-1">by {n.metadata.actorName}</span>}
                   </p>
-                  {!n.isRead && <Circle className="w-2 h-2 fill-indigo-500 text-indigo-500 flex-shrink-0 mt-1.5" />}
+                  {!n.isRead && <Circle className="w-2 h-2 fill-emerald-500 text-emerald-500 flex-shrink-0 mt-1.5" />}
                 </div>
                 <p className="text-xs text-slate-400 mt-0.5 line-clamp-2">{n.message}</p>
                 <p className="text-[10px] text-slate-300 mt-1 font-medium">{formatTime(n.createdAt)}</p>
@@ -127,7 +127,7 @@ export default function RepNotifications() {
             <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
               className="px-4 py-2 text-xs font-medium bg-white border border-slate-200 rounded-xl disabled:opacity-40 shadow-sm">Previous</button>
             <button onClick={() => setPage(p => p + 1)} disabled={page >= data.totalPages}
-              className="px-4 py-2 text-xs font-medium bg-indigo-600 text-white rounded-xl disabled:opacity-40 shadow-sm">Next</button>
+              className="px-4 py-2 text-xs font-medium bg-emerald-600 text-white rounded-xl disabled:opacity-40 shadow-sm">Next</button>
           </div>
         </div>
       )}

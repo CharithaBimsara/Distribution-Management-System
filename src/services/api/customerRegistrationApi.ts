@@ -1,5 +1,6 @@
 import api from './axiosConfig';
 import type { ApiResponse, PagedResult } from '../../types/api.types';
+import type { Region, SubRegion } from '../../types/region.types';
 
 export interface RegistrationRequest {
   id: string;
@@ -59,6 +60,14 @@ export const customerRegistrationApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
 
+  /** Public: registration form region options */
+  getPublicRegions: () =>
+    api.get<ApiResponse<Region[]>>('/customer-registrations/regions'),
+
+  /** Public: registration form sub-region options by region */
+  getPublicSubRegions: (regionId: string) =>
+    api.get<ApiResponse<SubRegion[]>>(`/customer-registrations/regions/${regionId}/sub-regions`),
+
   /** Admin: list all registration requests */
   adminGetAll: (params?: { page?: number; pageSize?: number; status?: string }) =>
     api.get<ApiResponse<PagedResult<RegistrationRequest>>>('/admin/customer-registrations', { params }),
@@ -75,7 +84,6 @@ export const customerRegistrationApi = {
     assignedCoordinatorId?: string;
     regionId?: string;
     subRegionId?: string;
-    assignedRepId?: string;
   }) =>
     api.put<ApiResponse<RegistrationRequest>>(`/admin/customer-registrations/${id}/review`, data),
 
@@ -88,4 +96,17 @@ export const customerRegistrationApi = {
   /** Admin: get coordinator options for assigning */
   adminGetCoordinators: () =>
     api.get<ApiResponse<CoordinatorOption[]>>('/admin/customer-registrations/coordinators'),
+
+  /** Coordinator: list region-scoped registration requests */
+  coordinatorGetAll: (params?: { page?: number; pageSize?: number; status?: string }) =>
+    api.get<ApiResponse<PagedResult<RegistrationRequest>>>('/coordinator/customer-registrations', { params }),
+
+  /** Coordinator: approve or reject a request */
+  coordinatorReview: (id: string, data: {
+    action: 'Approve' | 'Reject';
+    rejectionReason?: string;
+    reviewNotes?: string;
+    subRegionId?: string;
+  }) =>
+    api.put<ApiResponse<RegistrationRequest>>(`/coordinator/customer-registrations/${id}/review`, data),
 };

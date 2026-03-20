@@ -6,7 +6,7 @@ import { ordersApi } from '../../services/api/ordersApi';
 import { formatCurrency } from '../../utils/formatters';
 import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
-import { Loader2, CheckCircle, ShoppingCart, ShoppingBag, MapPin, MessageSquare, Package } from 'lucide-react';
+import { Loader2, CheckCircle, ShoppingCart, ShoppingBag, Package, Receipt, ShieldCheck } from 'lucide-react';
 import type { Order } from '../../types/order.types';
 import toast from 'react-hot-toast';
 import { calculateLine } from '../../utils/calculations';
@@ -16,8 +16,6 @@ export default function CustomerCheckout() {
   const { user } = useSelector((state: RootState) => state.auth);
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const [address, setAddress] = useState('');
-  const [notes, setNotes] = useState('');
   const [success, setSuccess] = useState(false);
   const [lastOrder, setLastOrder] = useState<Order | null>(null);
   const [lastOrderId, setLastOrderId] = useState<string | null>(null);
@@ -38,8 +36,6 @@ export default function CustomerCheckout() {
   const placeOrderMut = useMutation({
     mutationFn: () => ordersApi.customerCreate({
       customerId: user?.id || '',
-      deliveryAddress: address || undefined,
-      deliveryNotes: notes || undefined,
       items: items.map(item => ({
         productId: item.productId,
         quantity: item.quantity,
@@ -49,8 +45,8 @@ export default function CustomerCheckout() {
     onSuccess: (resp) => {
       const order = resp.data.data as Order;
       setLastOrder(order);
-      setLastOrderNotes(notes);
-      setLastOrderAddress(address);
+      setLastOrderNotes(order.deliveryNotes || '');
+      setLastOrderAddress(order.deliveryAddress || '');
       if (order) {
         setLastOrderId(order.orderNumber || order.id);
         setLastOrderDate(order.orderDate ? new Date(order.orderDate).toLocaleDateString() : new Date().toLocaleDateString());
@@ -329,31 +325,47 @@ export default function CustomerCheckout() {
 
   if (success) {
     return (
-      <div className="animate-fade-in flex flex-col items-center justify-center min-h-[70vh] px-6">
-        <div className="w-20 h-20 bg-gradient-to-br from-emerald-100 to-teal-100 rounded-3xl flex items-center justify-center mb-5 animate-scale-in">
-          <CheckCircle className="w-10 h-10 text-emerald-600" />
-        </div>
-        <h2 className="text-xl font-bold text-slate-900 mb-1">Order Placed!</h2>
-        <p className="text-sm text-slate-400 mb-8 text-center max-w-xs">Your order has been submitted successfully and is pending approval.</p>
-        <div className="flex gap-3 w-full max-w-xs">
-          <button
-            onClick={() => navigate('/shop/orders')}
-            className="flex-1 px-4 py-3 bg-gradient-to-r from-orange-500 to-rose-500 text-white rounded-xl text-sm font-semibold shadow-lg shadow-orange-500/25 active:scale-95 transition-all"
-          >
-            View Orders
-          </button>
-          <button
-            onClick={() => navigate('/shop/products')}
-            className="flex-1 px-4 py-3 bg-white border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold shadow-sm active:scale-95 transition-all"
-          >
-            Continue Shopping
-          </button>
-          <button
-            onClick={downloadReceipt}
-            className="flex-1 px-4 py-3 bg-slate-100 border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold shadow-sm active:scale-95 transition-all"
-          >
-            Download Receipt
-          </button>
+      <div className="animate-fade-in min-h-[80vh] bg-[radial-gradient(circle_at_top_right,_#fff4ed_0%,_#f8fafc_42%,_#f8fafc_100%)] px-4 py-10 lg:py-16">
+        <div className="max-w-2xl mx-auto">
+          <div className="relative overflow-hidden rounded-3xl border border-emerald-100 bg-white shadow-xl shadow-emerald-100/50 p-6 lg:p-8">
+            <div className="absolute top-0 right-0 w-40 h-40 bg-emerald-100/40 rounded-full -translate-y-1/2 translate-x-1/3 blur-2xl" />
+
+            <div className="relative z-10 text-center">
+              <div className="mx-auto w-20 h-20 bg-gradient-to-br from-emerald-100 to-teal-100 rounded-3xl flex items-center justify-center mb-5 animate-scale-in shadow-sm shadow-emerald-200/60">
+                <CheckCircle className="w-10 h-10 text-emerald-600" />
+              </div>
+
+              <p className="inline-flex items-center px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold border border-emerald-100 mb-3">
+                Order Confirmed
+              </p>
+
+              <h2 className="text-2xl lg:text-3xl font-black text-slate-900 mb-2 tracking-tight">Order Placed!</h2>
+              <p className="text-sm lg:text-base text-slate-500 max-w-lg mx-auto">
+                Your order has been submitted successfully and is pending approval.
+              </p>
+            </div>
+
+            <div className="relative z-10 mt-7 grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <button
+                onClick={() => navigate('/shop/orders')}
+                className="w-full px-4 py-3 bg-gradient-to-r from-orange-500 to-rose-500 text-white rounded-xl text-sm font-semibold shadow-lg shadow-orange-500/25 hover:shadow-xl active:scale-95 transition-all"
+              >
+                View Orders
+              </button>
+              <button
+                onClick={() => navigate('/shop/products')}
+                className="w-full px-4 py-3 bg-white border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold shadow-sm hover:bg-slate-50 active:scale-95 transition-all"
+              >
+                Continue Shopping
+              </button>
+              <button
+                onClick={downloadReceipt}
+                className="w-full px-4 py-3 bg-slate-100 border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold shadow-sm hover:bg-slate-200/70 active:scale-95 transition-all"
+              >
+                Download Receipt
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -377,75 +389,94 @@ export default function CustomerCheckout() {
   }
 
   return (
-    <div className="animate-fade-in pb-32">
-      <div className="bg-gradient-to-br from-orange-500 to-rose-500 text-white px-5 pt-5 pb-10">
-        <h1 className="text-xl font-bold">Checkout</h1>
-        <p className="text-orange-100 text-sm mt-0.5">{items.length} item{items.length > 1 ? 's' : ''} in your order</p>
+    <div className="animate-fade-in pb-32 bg-[radial-gradient(circle_at_top_right,_#fff4ed_0%,_#f8fafc_45%,_#f8fafc_100%)] min-h-screen">
+      <div className="relative bg-gradient-to-br from-orange-500 via-rose-500 to-red-500 text-white px-5 pt-6 pb-14 overflow-hidden shadow-[0_20px_45px_rgba(249,115,22,0.35)]">
+        <div className="absolute top-0 right-0 w-48 h-48 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/4 blur-3xl" />
+        <div className="absolute bottom-0 left-0 w-36 h-36 bg-rose-300/20 rounded-full translate-y-1/3 -translate-x-1/4 blur-2xl" />
+        <div className="relative z-10 max-w-6xl mx-auto">
+          <div className="inline-flex items-center gap-2 text-orange-100 text-sm font-medium mb-2">
+            <Receipt className="w-4 h-4" /> Checkout
+          </div>
+          <h1 className="text-2xl lg:text-3xl font-black tracking-tight">Review and Confirm Order</h1>
+          <p className="text-orange-100 mt-1 text-sm">{items.length} item{items.length > 1 ? 's' : ''} ready for submission</p>
+        </div>
       </div>
 
-      <div className="px-4 -mt-5 space-y-4 relative z-10">
-        <div className="bg-white rounded-2xl shadow-sm shadow-slate-200/60 border border-slate-100 p-5">
-          <h2 className="font-bold text-slate-900 mb-3 text-sm">Order Summary</h2>
-          <div className="space-y-2.5">
-            {items.map(item => {
-              const calc = calculateLine({
-                rate: item.unitPrice,
-                qty: item.quantity,
-                discountPercent: item.discountPercent,
-                taxAmount: item.taxRate != null ? item.taxRate * item.unitPrice * (1 - (item.discountPercent ?? 0) / 100) : undefined,
-              });
-              return (
-                <div key={item.productId} className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 bg-orange-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <Package className="w-4 h-4 text-orange-400" />
+      <div className="max-w-6xl mx-auto px-4 -mt-8 relative z-10">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
+          <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-orange-50/50">
+              <h2 className="font-bold text-slate-900">Order Summary</h2>
+              <p className="text-xs text-slate-500 mt-1">Quantity and pricing details for this order</p>
+            </div>
+
+            <div className="divide-y divide-slate-100">
+              {items.map(item => {
+                const calc = calculateLine({
+                  rate: item.unitPrice,
+                  qty: item.quantity,
+                  discountPercent: item.discountPercent,
+                  taxAmount: item.taxRate != null ? item.taxRate * item.unitPrice * (1 - (item.discountPercent ?? 0) / 100) : undefined,
+                });
+
+                return (
+                  <div key={item.productId} className="px-5 py-4 flex items-center justify-between gap-3 hover:bg-slate-50/70 transition">
+                    <div className="flex items-start gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-orange-50 border border-orange-100 flex items-center justify-center flex-shrink-0">
+                        <Package className="w-5 h-5 text-orange-500" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-slate-900 truncate">{item.productName}</p>
+                        <p className="text-xs text-slate-500 mt-0.5">Qty {item.quantity} x {formatCurrency(item.unitPrice)}</p>
+                      </div>
                     </div>
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-sm text-slate-700">{item.productName}</span>
-                    <span className="text-sm font-semibold text-orange-600 ml-2">x{item.quantity}</span>
-                    </div>
+                    <p className="text-sm font-bold text-slate-900 whitespace-nowrap">{formatCurrency(calc.total)}</p>
                   </div>
-                  <span className="text-sm font-semibold text-slate-900">{formatCurrency(calc.total)}</span>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
-          <div className="border-t border-slate-100 mt-3 pt-3 space-y-2">
-            <div className="flex justify-between font-bold text-base"><span className="text-slate-900">Subtotal</span><span className="text-orange-600">{formatCurrency(total)}</span></div>
-          </div>
-        </div>
 
-        <div className="bg-white rounded-2xl shadow-sm shadow-slate-200/60 border border-slate-100 p-5 space-y-4">
-          <h2 className="font-bold text-slate-900 text-sm">Delivery Details</h2>
-          <div>
-            <label className="flex items-center gap-1.5 text-sm font-medium text-slate-600 mb-2">
-              <MapPin className="w-3.5 h-3.5 text-slate-400" /> Delivery Address
-              <span className="text-xs text-slate-400 font-normal">(optional)</span>
-            </label>
-            <input
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400 outline-none transition"
-              placeholder="Enter delivery address"
-            />
-          </div>
-          <div>
-            <label className="flex items-center gap-1.5 text-sm font-medium text-slate-600 mb-2">
-              <MessageSquare className="w-3.5 h-3.5 text-slate-400" /> Notes
-              <span className="text-xs text-slate-400 font-normal">(optional)</span>
-            </label>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={2}
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400 outline-none resize-none transition"
-              placeholder="Special instructions..."
-            />
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 h-fit lg:sticky lg:top-20">
+            <h3 className="text-sm font-bold text-slate-900 mb-4">Payment Summary</h3>
+
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between text-slate-600">
+                <span>Items</span>
+                <span className="font-semibold">{items.length}</span>
+              </div>
+              <div className="flex justify-between text-slate-600">
+                <span>Shipping</span>
+                <span className="font-semibold">-</span>
+              </div>
+              <div className="h-px bg-slate-100 my-2" />
+              <div className="flex justify-between text-base font-black text-slate-900">
+                <span>Total</span>
+                <span className="text-orange-600">{formatCurrency(total)}</span>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50/70 p-3 text-xs text-emerald-700 flex items-start gap-2">
+              <ShieldCheck className="w-4 h-4 mt-0.5 flex-shrink-0" />
+              <p>Your order will be sent securely and then reviewed for approval.</p>
+            </div>
+
+            <button
+              onClick={() => placeOrderMut.mutate()}
+              disabled={placeOrderMut.isPending}
+              className="mt-4 w-full bg-gradient-to-r from-orange-500 to-rose-500 text-white py-3.5 rounded-xl font-semibold flex items-center justify-center gap-2 shadow-lg shadow-orange-500/25 hover:shadow-xl active:scale-[0.98] transition-all disabled:opacity-60 disabled:shadow-none"
+            >
+              {placeOrderMut.isPending ? (
+                <><Loader2 className="w-4 h-4 animate-spin" /> Placing Order...</>
+              ) : (
+                <>Place Order • {formatCurrency(total)}</>
+              )}
+            </button>
           </div>
         </div>
       </div>
 
-      <div className="fixed bottom-14 left-0 right-0 bg-white/90 backdrop-blur-xl border-t border-slate-200/60 p-4 z-40 pb-safe">
+      <div className="fixed bottom-14 left-0 right-0 bg-white/90 backdrop-blur-xl border-t border-slate-200/60 p-4 z-40 pb-safe lg:hidden">
         <button
           onClick={() => placeOrderMut.mutate()}
           disabled={placeOrderMut.isPending}
@@ -454,7 +485,7 @@ export default function CustomerCheckout() {
           {placeOrderMut.isPending ? (
             <><Loader2 className="w-4 h-4 animate-spin" /> Placing Order...</>
           ) : (
-            <>Place Order &bull; {formatCurrency(total)}</>
+            <>Place Order • {formatCurrency(total)}</>
           )}
         </button>
       </div>

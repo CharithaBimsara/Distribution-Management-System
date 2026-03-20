@@ -20,7 +20,11 @@ function isActionObject(v: any): v is ActionObject {
 }
 
 function isLucideIcon(v: any): v is LucideIcon {
-  return typeof v === 'function' && !React.isValidElement(v);
+  if (React.isValidElement(v)) return false;
+  // Lucide icons can come as function components or forwardRef component objects.
+  const isFnComponent = typeof v === 'function';
+  const isForwardRefComponent = !!(v && typeof v === 'object' && '$$typeof' in v && typeof (v as any).render === 'function');
+  return isFnComponent || isForwardRefComponent;
 }
 
 export default function EmptyState({ icon, title, description, action }: EmptyStateProps) {
