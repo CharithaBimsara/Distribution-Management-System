@@ -11,8 +11,45 @@ interface AuthState {
   error: string | null;
 }
 
+const roleMap: Record<string, UserInfo['role']> = {
+  '0': 'SuperAdmin',
+  '1': 'Admin',
+  '2': 'SalesRep',
+  '3': 'Customer',
+  '4': 'SalesCoordinator',
+  SuperAdmin: 'SuperAdmin',
+  Admin: 'Admin',
+  SalesRep: 'SalesRep',
+  Customer: 'Customer',
+  SalesCoordinator: 'SalesCoordinator',
+};
+
+const normalizeUser = (user: any): UserInfo | null => {
+  if (!user) return null;
+  const normalizedRole = roleMap[String(user.role)] ?? 'Customer';
+  return {
+    ...user,
+    role: normalizedRole,
+  } as UserInfo;
+};
+
+const normalizeAuthPayload = (payload: AuthResponse): AuthResponse => ({
+  ...payload,
+  user: normalizeUser(payload.user) as UserInfo,
+});
+
+const loadStoredUser = (): UserInfo | null => {
+  try {
+    const raw = localStorage.getItem('user');
+    const parsed = raw ? JSON.parse(raw) : null;
+    return normalizeUser(parsed);
+  } catch {
+    return null;
+  }
+};
+
 const initialState: AuthState = {
-  user: JSON.parse(localStorage.getItem('user') || 'null'),
+  user: loadStoredUser(),
   accessToken: localStorage.getItem('accessToken'),
   refreshToken: localStorage.getItem('refreshToken'),
   isAuthenticated: !!localStorage.getItem('accessToken'),
@@ -26,10 +63,11 @@ export const login = createAsyncThunk(
     try {
       const { data } = await authApi.login(credentials);
       if (data.success) {
-        localStorage.setItem('accessToken', data.data.accessToken);
-        localStorage.setItem('refreshToken', data.data.refreshToken);
-        localStorage.setItem('user', JSON.stringify(data.data.user));
-        return data.data;
+        const normalized = normalizeAuthPayload(data.data);
+        localStorage.setItem('accessToken', normalized.accessToken);
+        localStorage.setItem('refreshToken', normalized.refreshToken);
+        localStorage.setItem('user', JSON.stringify(normalized.user));
+        return normalized;
       }
       return rejectWithValue(data.message || 'Login failed');
     } catch (err: any) {
@@ -44,10 +82,11 @@ export const register = createAsyncThunk(
     try {
       const { data } = await authApi.register(userData);
       if (data.success) {
-        localStorage.setItem('accessToken', data.data.accessToken);
-        localStorage.setItem('refreshToken', data.data.refreshToken);
-        localStorage.setItem('user', JSON.stringify(data.data.user));
-        return data.data;
+        const normalized = normalizeAuthPayload(data.data);
+        localStorage.setItem('accessToken', normalized.accessToken);
+        localStorage.setItem('refreshToken', normalized.refreshToken);
+        localStorage.setItem('user', JSON.stringify(normalized.user));
+        return normalized;
       }
       return rejectWithValue(data.message || 'Registration failed');
     } catch (err: any) {
@@ -69,13 +108,15 @@ const authSlice = createSlice({
   reducers: {
     clearError(state) { state.error = null; },
     updateUser(state, action: PayloadAction<UserInfo>) {
-      state.user = action.payload;
-      localStorage.setItem('user', JSON.stringify(action.payload));
+      const normalizedUser = normalizeUser(action.payload);
+      state.user = normalizedUser;
+      localStorage.setItem('user', JSON.stringify(normalizedUser));
     },
     setCredentials(state, action: PayloadAction<AuthResponse>) {
-      state.user = action.payload.user;
-      state.accessToken = action.payload.accessToken;
-      state.refreshToken = action.payload.refreshToken;
+      const normalized = normalizeAuthPayload(action.payload);
+      state.user = normalized.user;
+      state.accessToken = normalized.accessToken;
+      state.refreshToken = normalized.refreshToken;
       state.isAuthenticated = true;
     },
   },
