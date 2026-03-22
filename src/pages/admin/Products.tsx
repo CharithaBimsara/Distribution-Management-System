@@ -197,23 +197,48 @@ export default function AdminProducts() {
       return;
     }
 
-    const chunkSize = 200;
+    const chunkSize = 100;
+    const totalChunks = Math.ceil(items.length / chunkSize);
     let processed = 0;
     setImportProgress({ active: true, total: items.length, processed: 0 });
+    toast(`Parsed ${items.length} products. Uploading in ${totalChunks} chunk(s).`);
+
+    const postChunkWithRetry = async (chunk: CreateProductRequest[], retries = 2) => {
+      let lastError: unknown;
+      for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+          await productsApi.importMultiple({ requests: chunk });
+          return;
+        } catch (err) {
+          lastError = err;
+          if (attempt < retries) {
+            await new Promise(resolve => setTimeout(resolve, 700 * (attempt + 1)));
+          }
+        }
+      }
+      throw lastError;
+    };
 
     try {
       for (let i = 0; i < items.length; i += chunkSize) {
         const chunk = items.slice(i, i + chunkSize);
-        await productsApi.importMultiple({ requests: chunk });
+        await postChunkWithRetry(chunk);
         processed += chunk.length;
         setImportProgress({ active: true, total: items.length, processed });
       }
 
-      await queryClient.invalidateQueries({ queryKey: ['admin-products'] });
-      await queryClient.refetchQueries({ queryKey: ['categories'] });
-      setMainFilter('');
-      setSubFilter('');
       toast.success(`Products imported (${processed}/${items.length})`);
+
+      // refresh UI after successful import; failures here should not mark import as failed
+      try {
+        await queryClient.invalidateQueries({ queryKey: ['admin-products'] });
+        await queryClient.refetchQueries({ queryKey: ['categories'] });
+        setMainFilter('');
+        setSubFilter('');
+      } catch (refreshErr) {
+        console.warn('Post-import refresh failed', refreshErr);
+        toast('Imported successfully, but list refresh failed. Please reload the page.');
+      }
     } catch (err) {
       console.error('import failed', err);
       toast.error(`Import failed after ${processed}/${items.length} products`);
@@ -230,8 +255,10 @@ export default function AdminProducts() {
       const data = evt.target?.result;
       if (!data) return;
       const workbook = XLSX.read(data, { type: 'binary' });
-      const ws = workbook.Sheets[workbook.SheetNames[0]];
-        const rows: any[] = XLSX.utils.sheet_to_json(ws, { defval: '' });
+      const rows: any[] = workbook.SheetNames.flatMap(sheetName => {
+        const ws = workbook.Sheets[sheetName];
+        return XLSX.utils.sheet_to_json(ws, { defval: '' }) as any[];
+      });
       const items: CreateProductRequest[] = rows.map(r => {
         // import now supports two columns: Main Category and Subcategory
         const mainName: string = r['Main Category'] || r['MainCategory'] || '';
@@ -263,7 +290,7 @@ export default function AdminProducts() {
           taxAmount: (r['Tax Amt'] !== null && r['Tax Amt'] !== undefined && r['Tax Amt'] !== '') ? parseFloat(r['Tax Amt']) : undefined,
           totalAmount: (r['Amount'] !== null && r['Amount'] !== undefined && r['Amount'] !== '') ? parseFloat(r['Amount']) : undefined,
         } as CreateProductRequest;
-      });
+      }).filter(item => !!item.sku && !!item.name);
       importInChunks(items);
     };
     reader.readAsBinaryString(file);

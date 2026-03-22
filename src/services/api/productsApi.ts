@@ -15,7 +15,7 @@ export const productsApi = {
 
   // bulk import - wrapper object containing requests array
   importMultiple: (data: { requests: CreateProductRequest[] }) =>
-    api.post<ApiResponse<Product[]>>('/admin/products/import', data),
+    api.post<ApiResponse<Product[]>>('/admin/products/import', data, { timeout: 120000 }),
 
   update: (id: string, data: Partial<CreateProductRequest>) =>
     api.put<ApiResponse<Product>>(`/admin/products/${id}`, data),
