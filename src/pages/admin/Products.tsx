@@ -52,8 +52,8 @@ export default function AdminProducts() {
   const { data, isLoading } = useQuery({
     queryKey: ['admin-products', page, search, mainFilter, subFilter, brandFilter, minPriceFilter, maxPriceFilter],
     queryFn: () => productsApi.getAll({
-      page,
-      pageSize: 20,
+      page: 1,
+      pageSize: 100000,
       search: search || undefined,
       categoryId: subFilter || mainFilter || undefined,
       brand: brandFilter || undefined,
@@ -798,8 +798,6 @@ export default function AdminProducts() {
             </tbody></table></div>
           </>)}
         </div>
-
-
 
       {showForm && <ProductFormModal product={editProduct} onClose={() => { setShowForm(false); setEditProduct(null); }} onSubmit={d => editProduct ? updateMut.mutate({ id: editProduct.id, data: d }) : createMut.mutate(d as CreateProductRequest)} isPending={createMut.isPending || updateMut.isPending} />}
       {showDeleteModal && <DeleteModal product={showDeleteModal} onClose={() => setShowDeleteModal(null)} onSubmit={() => deleteMut.mutate((showDeleteModal as any).id ?? (showDeleteModal as any).productId)} isPending={deleteMut.isPending} />}
