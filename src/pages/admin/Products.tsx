@@ -15,7 +15,6 @@ export default function AdminProducts() {
   const [page, setPage] = useState(1);
   const [showForm, setShowForm] = useState(false);
   const [editProduct, setEditProduct] = useState<Product | null>(null);
-  const [showDeleteModal, setShowDeleteModal] = useState<Product | null>(null);
   const [showCategoryForm, setShowCategoryForm] = useState(false);
   // new two‑level filters
   const [mainFilter, setMainFilter] = useState<string>('');
@@ -37,6 +36,8 @@ export default function AdminProducts() {
   // selection mode always enabled so checkboxes are visible
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [importProgress, setImportProgress] = useState({ active: false, total: 0, processed: 0 });
   // single-product delete confirmation
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
@@ -75,33 +76,44 @@ export default function AdminProducts() {
   // delete multiple helper (will run in parallel)
   const deleteMultiple = async (ids: string[]) => {
     if (!ids.length) return;
+    setIsBulkDeleting(true);
     try {
       await Promise.all(ids.map(id => productsApi.delete(id)));
       toast.success(`${ids.length} products deleted`);
-      queryClient.invalidateQueries({ queryKey: ['admin-products'] });
+      await queryClient.invalidateQueries({ queryKey: ['admin-products'] });
+      return true;
     } catch (err) {
       console.error('bulk delete failed', err);
       toast.error('Failed to delete selected products');
+      return false;
+    } finally {
+      setIsBulkDeleting(false);
     }
   };
 
   const handleDeleteSelected = () => {
     // open confirmation modal instead of deleting immediately
-    if (selectedIds.size === 0) return;
+    if (selectedIds.size === 0 || isBulkDeleting || deleteMut.isPending) return;
     setShowBulkDeleteConfirm(true);
   };
 
-  const confirmBulkDelete = () => {
+  const confirmBulkDelete = async () => {
+    if (isBulkDeleting || deleteMut.isPending) return;
     const ids = Array.from(selectedIds);
-    deleteMultiple(ids);
-    setSelectedIds(new Set());
+    // close confirm immediately so user sees only one modal step
     setShowBulkDeleteConfirm(false);
+    const ok = await deleteMultiple(ids);
+    if (ok) setSelectedIds(new Set());
   };
 
-  const confirmSingleDelete = () => {
-    if (!pendingDeleteId) return;
-    deleteMut.mutate(pendingDeleteId);
-    setPendingDeleteId(null);
+  const confirmSingleDelete = async () => {
+    if (!pendingDeleteId || deleteMut.isPending || isBulkDeleting) return;
+    try {
+      await deleteMut.mutateAsync(pendingDeleteId);
+      setPendingDeleteId(null);
+    } catch {
+      // keep the confirmation modal open so user can retry/cancel
+    }
   };
   const updateMut = useMutation({ mutationFn: ({ id, data }: { id: string; data: Partial<CreateProductRequest> }) => productsApi.update(id, data), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admin-products'] }); setEditProduct(null); setShowForm(false); toast.success('Product updated'); }, onError: () => toast.error('Failed to update product') });
   const deleteMut = useMutation({ mutationFn: (id: string) => productsApi.delete(id), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admin-products'] }); toast.success('Product deleted'); } });
@@ -157,19 +169,9 @@ export default function AdminProducts() {
 
   // import helpers (must be defined before JSX uses them)
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const importMut = useMutation({
-    mutationFn: (payload: { requests: CreateProductRequest[] }) => productsApi.importMultiple(payload),
-    onSuccess: async () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-products'] });
-      // immediately refresh categories and set first main filter now that new list exists
-      await queryClient.refetchQueries({ queryKey: ['categories'] });
-      // leave mainFilter empty so 'All main categories' is selected
-      setMainFilter('');
-      setSubFilter('');
-      toast.success('Products imported');
-    },
-    onError: () => toast.error('Import failed'),
-  });
+  const isBusy = importProgress.active || deleteMut.isPending || isBulkDeleting;
+  const busyTitle = importProgress.active ? 'Importing products...' : 'Deleting products...';
+  const busySubtitle = importProgress.active ? 'Please wait while we process your file.' : 'Please wait while we remove selected products.';
 
   // helper that handles percentage values coming from Excel
   const parsePercentValue = (v: any): number | undefined => {
@@ -187,6 +189,37 @@ export default function AdminProducts() {
       return v;
     }
     return undefined;
+  };
+
+  const importInChunks = async (items: CreateProductRequest[]) => {
+    if (!items.length) {
+      toast.error('No products found in file');
+      return;
+    }
+
+    const chunkSize = 200;
+    let processed = 0;
+    setImportProgress({ active: true, total: items.length, processed: 0 });
+
+    try {
+      for (let i = 0; i < items.length; i += chunkSize) {
+        const chunk = items.slice(i, i + chunkSize);
+        await productsApi.importMultiple({ requests: chunk });
+        processed += chunk.length;
+        setImportProgress({ active: true, total: items.length, processed });
+      }
+
+      await queryClient.invalidateQueries({ queryKey: ['admin-products'] });
+      await queryClient.refetchQueries({ queryKey: ['categories'] });
+      setMainFilter('');
+      setSubFilter('');
+      toast.success(`Products imported (${processed}/${items.length})`);
+    } catch (err) {
+      console.error('import failed', err);
+      toast.error(`Import failed after ${processed}/${items.length} products`);
+    } finally {
+      setImportProgress(p => ({ ...p, active: false }));
+    }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -231,7 +264,7 @@ export default function AdminProducts() {
           totalAmount: (r['Amount'] !== null && r['Amount'] !== undefined && r['Amount'] !== '') ? parseFloat(r['Amount']) : undefined,
         } as CreateProductRequest;
       });
-      importMut.mutate({ requests: items });
+      importInChunks(items);
     };
     reader.readAsBinaryString(file);
     e.target.value = '';
@@ -361,7 +394,7 @@ export default function AdminProducts() {
                 {/* Import */}
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  disabled={importMut.isPending}
+                  disabled={importProgress.active}
                   title="Import from Excel"
                   className="group/btn relative flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-600 hover:text-white hover:border-emerald-600 text-sm font-medium transition-all disabled:opacity-50"
                 >
@@ -486,6 +519,14 @@ export default function AdminProducts() {
                     <div className="mt-3 border-t border-slate-100" />
 
                     {/* Mobile: primary actions */}
+                    <div className="mt-2 flex justify-end">
+                      <button
+                        onClick={() => setPendingDeleteId(product.id)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-50 text-red-600 border border-red-200 text-xs font-medium hover:bg-red-100 transition"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" /> Delete
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -509,6 +550,7 @@ export default function AdminProducts() {
               <th className="text-right px-5 py-3.5 font-semibold text-slate-600 text-xs uppercase tracking-wider">Tax</th>
               <th className="text-right px-5 py-3.5 font-semibold text-slate-600 text-xs uppercase tracking-wider">Tax Amt</th>
               <th className="text-right px-5 py-3.5 font-semibold text-slate-600 text-xs uppercase tracking-wider">Amount</th>
+              <th className="text-center px-5 py-3.5 font-semibold text-slate-600 text-xs uppercase tracking-wider">Actions</th>
             </tr></thead><tbody className="divide-y divide-slate-100">
               {newProduct && (
                 <tr key="new" className="hover:bg-slate-50/60 transition-all group bg-yellow-50">
@@ -793,14 +835,58 @@ export default function AdminProducts() {
                       />
                       : (product.totalAmount != null ? formatCurrency(product.totalAmount) : '-')}
                   </td>
+                  <td className="px-5 py-3.5 text-center">
+                    <button
+                      onClick={() => setPendingDeleteId(product.id)}
+                      className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition"
+                      title="Delete product"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody></table></div>
           </>)}
         </div>
 
+      {isBusy && (
+        <div className="fixed inset-0 z-[70] flex flex-col items-center" style={{ pointerEvents: 'auto' }}>
+          <div className="absolute inset-0 bg-slate-950/45 backdrop-blur-[2px]" />
+          <div
+            className="relative mt-16 w-full max-w-md mx-4 rounded-2xl border border-slate-200 bg-white shadow-2xl p-6"
+            style={{ animation: 'slideDown 0.25s ease-out both' }}
+          >
+            <div className="mx-auto mb-4 h-12 w-12 rounded-full bg-indigo-50 flex items-center justify-center">
+              <Package className="w-6 h-6 text-indigo-600 animate-pulse" />
+            </div>
+            <p className="text-base font-semibold text-slate-900 text-center">{busyTitle}</p>
+            <p className="text-sm text-slate-500 mt-1 text-center">{busySubtitle}</p>
+
+            {importProgress.active && (
+              <>
+                <p className="text-xs text-slate-500 mt-3 text-center">
+                  Total: {importProgress.total} | Imported: {importProgress.processed} | Remaining: {Math.max(importProgress.total - importProgress.processed, 0)}
+                </p>
+                <div className="mt-2 h-2.5 w-full rounded-full bg-slate-200 overflow-hidden">
+                  <div
+                    className="h-full bg-indigo-600 transition-all duration-300"
+                    style={{ width: `${importProgress.total > 0 ? Math.round((importProgress.processed / importProgress.total) * 100) : 0}%` }}
+                  />
+                </div>
+              </>
+            )}
+
+            <div className="mt-4 flex items-center justify-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-full bg-indigo-500 animate-bounce [animation-delay:-0.2s]" />
+              <span className="h-2.5 w-2.5 rounded-full bg-indigo-500 animate-bounce [animation-delay:-0.1s]" />
+              <span className="h-2.5 w-2.5 rounded-full bg-indigo-500 animate-bounce" />
+            </div>
+          </div>
+        </div>
+      )}
+
       {showForm && <ProductFormModal product={editProduct} onClose={() => { setShowForm(false); setEditProduct(null); }} onSubmit={d => editProduct ? updateMut.mutate({ id: editProduct.id, data: d }) : createMut.mutate(d as CreateProductRequest)} isPending={createMut.isPending || updateMut.isPending} />}
-      {showDeleteModal && <DeleteModal product={showDeleteModal} onClose={() => setShowDeleteModal(null)} onSubmit={() => deleteMut.mutate((showDeleteModal as any).id ?? (showDeleteModal as any).productId)} isPending={deleteMut.isPending} />}
 
       {/* single-product delete confirmation */}
       <ConfirmModal
@@ -809,6 +895,7 @@ export default function AdminProducts() {
         message="Are you sure you want to delete this product? This action cannot be undone."
         onConfirm={confirmSingleDelete}
         onCancel={() => setPendingDeleteId(null)}
+        confirmLabel={deleteMut.isPending ? 'Deleting...' : 'Delete'}
       />
 
       {/* bulk delete confirmation */}
@@ -818,6 +905,7 @@ export default function AdminProducts() {
         message={`Are you sure you want to permanently delete ${selectedIds.size} selected product${selectedIds.size === 1 ? '' : 's'}? This action cannot be undone.`}
         onConfirm={confirmBulkDelete}
         onCancel={() => setShowBulkDeleteConfirm(false)}
+        confirmLabel={isBulkDeleting ? 'Deleting...' : 'Delete'}
       />
 
       {/* Sticky selection action bar */}
@@ -836,7 +924,11 @@ export default function AdminProducts() {
               <button onClick={() => exportProducts('pdf', true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-medium transition">
                 <FileText className="w-3.5 h-3.5" /> PDF
               </button>
-              <button onClick={handleDeleteSelected} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-medium transition">
+              <button
+                onClick={handleDeleteSelected}
+                disabled={isBusy}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
                 <Trash2 className="w-3.5 h-3.5" /> Delete
               </button>
               <button onClick={() => { setSelectedIds(new Set()); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-xs font-medium transition">
