@@ -1,6 +1,7 @@
 export interface Customer {
   id: string;
   userId: string;
+  username: string;
   shopName: string;
   customerType?: string;
   businessRegistrationNumber?: string;
@@ -21,6 +22,8 @@ export interface Customer {
   state?: string;
   latitude?: number;
   longitude?: number;
+  mustChangePassword: boolean;
+  temporaryPassword?: string;
   isActive: boolean;
   createdAt: string;
   lastOrderDate?: string;

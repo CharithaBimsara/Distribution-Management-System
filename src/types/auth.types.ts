@@ -31,6 +31,7 @@ export interface AdminAccountInfo {
   department?: string;
   isActive: boolean;
   mustChangePassword: boolean;
+  temporaryPassword?: string;
   createdAt: string;
 }
 
@@ -63,4 +64,12 @@ export interface UserInfo {
 export interface ChangePasswordRequest {
   currentPassword: string;
   newPassword: string;
+}
+
+export interface AdminResetPasswordResult {
+  userId: string;
+  username: string;
+  temporaryPassword: string;
+  mustChangePassword: boolean;
+  generatedAtUtc: string;
 }

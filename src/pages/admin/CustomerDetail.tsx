@@ -3,12 +3,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { customersApi } from '../../services/api/customersApi';
 import { regionsApi } from '../../services/api/regionsApi';
 import { adminGetAllCoordinators } from '../../services/api/coordinatorApi';
+import { authApi } from '../../services/api/authApi';
 import { useParams, useNavigate } from 'react-router-dom';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import {
   ArrowLeft, Store, MapPin, User, Calendar, TrendingUp,
   ShoppingBag, DollarSign, ToggleLeft, ToggleRight,
-  UserCheck, Building2, Phone, Mail, Package, FileText as FileTextIcon,
+  UserCheck, Building2, Phone, Mail, Package, FileText as FileTextIcon, KeyRound, Copy,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../hooks/useAuth';
@@ -49,6 +50,7 @@ export default function AdminCustomerDetail() {
   const [selectedRegionId, setSelectedRegionId] = useState('');
   const [selectedSubRegionId, setSelectedSubRegionId] = useState('');
   const [selectedCoordinatorId, setSelectedCoordinatorId] = useState('');
+  const [generatedTempPassword, setGeneratedTempPassword] = useState('');
 
   const { data: summary, isLoading } = useQuery({
     queryKey: [isCoordinatorView ? 'coordinator-customer-summary' : 'admin-customer-summary', id],
@@ -120,6 +122,32 @@ export default function AdminCustomerDetail() {
     onError: () => toast.error('Failed to update assignment'),
   });
 
+  const resetTempPasswordMut = useMutation({
+    mutationFn: () => {
+      if (!customer?.userId) {
+        throw new Error('Customer user id is missing');
+      }
+      return authApi.adminResetUserTempPassword(customer.userId);
+    },
+    onSuccess: (res: any) => {
+      setGeneratedTempPassword(res.data.data.temporaryPassword);
+      queryClient.invalidateQueries({ queryKey: ['admin-customer-summary', id] });
+      toast.success('New temporary password generated');
+    },
+    onError: () => toast.error('Failed to generate temporary password'),
+  });
+
+  const copyTempPassword = async () => {
+    const value = generatedTempPassword || customer?.temporaryPassword || '';
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success('Temporary password copied');
+    } catch {
+      toast.error('Could not copy password');
+    }
+  };
+
   const handleSaveAssignment = () => {
     updateAssignmentMut.mutate({
       regionId: selectedRegionId || null,
@@ -127,6 +155,7 @@ export default function AdminCustomerDetail() {
       assignedCoordinatorId: selectedCoordinatorId || null,
     });
   };
+  const visibleTempPassword = generatedTempPassword || customer?.temporaryPassword || '';
 
   if (isLoading) {
     return (
@@ -214,10 +243,42 @@ export default function AdminCustomerDetail() {
             <InfoRow label="Business Reg #" value={customer.businessRegistrationNumber} />
             <InfoRow label="Email" value={customer.email} />
             <InfoRow label="Phone" value={customer.phoneNumber} />
+            <InfoRow label="Username" value={customer.username} />
             <InfoRow label="Street" value={customer.street} />
             <InfoRow label="City" value={customer.city} />
             <InfoRow label="State / Province" value={customer.state} />
           </Section>
+
+          {!isCoordinatorView && (
+          <Section title="Credentials" icon={<KeyRound className="w-4 h-4" />}>
+            <InfoRow label="Username" value={customer.username} />
+            <InfoRow label="Password Status" value={customer.mustChangePassword ? 'Temporary password pending' : 'Updated by user'} />
+            <div className="mt-3 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs text-slate-500">Current password cannot be shown for security.</p>
+                <button
+                  onClick={() => resetTempPasswordMut.mutate()}
+                  disabled={resetTempPasswordMut.isPending}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  <KeyRound className="w-3.5 h-3.5" />
+                  {resetTempPasswordMut.isPending ? 'Generating…' : 'Generate New'}
+                </button>
+              </div>
+              {visibleTempPassword && (
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2">
+                  <span className="text-sm font-mono font-semibold text-indigo-700">{visibleTempPassword}</span>
+                  <button
+                    onClick={copyTempPassword}
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-700 hover:text-indigo-900"
+                  >
+                    <Copy className="w-3.5 h-3.5" /> Copy
+                  </button>
+                </div>
+              )}
+            </div>
+          </Section>
+          )}
 
           {/* Current Assignment */}
           <Section title="Current Assignment" icon={<UserCheck className="w-4 h-4" />}>

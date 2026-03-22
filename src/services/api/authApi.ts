@@ -1,6 +1,6 @@
 import api from './axiosConfig';
 import type { ApiResponse } from '../../types/api.types';
-import type { LoginRequest, AuthResponse, RegisterRequest, ChangePasswordRequest, CreateAdminAccountRequest, UserInfo, AdminAccountInfo, UpdateAdminAccountRequest } from '../../types/auth.types';
+import type { LoginRequest, AuthResponse, RegisterRequest, ChangePasswordRequest, CreateAdminAccountRequest, UserInfo, AdminAccountInfo, UpdateAdminAccountRequest, AdminResetPasswordResult } from '../../types/auth.types';
 
 export const authApi = {
   login: (data: LoginRequest) =>
@@ -29,6 +29,9 @@ export const authApi = {
 
   deleteAdminAccount: (userId: string) =>
     api.delete<ApiResponse<string>>(`/auth/admins/${userId}`),
+
+  adminResetUserTempPassword: (userId: string) =>
+    api.post<ApiResponse<AdminResetPasswordResult>>(`/auth/admin/users/${userId}/temp-password`),
 
   logout: () =>
     api.post<ApiResponse<string>>('/auth/logout'),

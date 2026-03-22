@@ -3,13 +3,14 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminGetCoordinator, adminUpdateCoordinator, adminAssignRepToCoordinator } from '../../services/api/coordinatorApi';
+import { authApi } from '../../services/api/authApi';
 import { repsApi } from '../../services/api/repsApi';
 import { customersApi } from '../../services/api/customersApi';
 import { regionsApi } from '../../services/api/regionsApi';
 import { formatDate } from '../../utils/formatters';
 import {
   ArrowLeft, MapPin, Users, Phone, Mail, Calendar,
-  ChevronRight, BarChart2, TrendingUp, Power, UserPlus, User, UserMinus, Trash2,
+  ChevronRight, BarChart2, TrendingUp, Power, UserPlus, User, UserMinus, Trash2, KeyRound, Copy,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import StatusBadge from '../../components/common/StatusBadge';
@@ -106,6 +107,7 @@ export default function AdminCoordinatorDetail() {
   const [selectedRepId, setSelectedRepId] = useState('');
   const [showCreateCustomer, setShowCreateCustomer] = useState(false);
   const [newCustomerForm, setNewCustomerForm] = useState({ shopName: '', email: '', phoneNumber: '' });
+  const [generatedTempPassword, setGeneratedTempPassword] = useState('');
 
   // ── Queries ───────────────────────────────────────────────────────────────
 
@@ -243,6 +245,27 @@ export default function AdminCoordinatorDetail() {
     onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to unassign'),
   });
 
+  const resetTempPasswordMut = useMutation({
+    mutationFn: () => authApi.adminResetUserTempPassword(coordinator.userId),
+    onSuccess: (res: any) => {
+      setGeneratedTempPassword(res.data.data.temporaryPassword);
+      qc.invalidateQueries({ queryKey: ['admin-coordinator', id] });
+      toast.success('New temporary password generated');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to generate temporary password'),
+  });
+
+  const copyTempPassword = async () => {
+    const value = generatedTempPassword || coordinator?.temporaryPassword || '';
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success('Temporary password copied');
+    } catch {
+      toast.error('Could not copy password');
+    }
+  };
+
   // ── Derived ───────────────────────────────────────────────────────────────
 
   const reps = (repsData as any)?.items || [];
@@ -279,6 +302,7 @@ export default function AdminCoordinatorDetail() {
     { id: 'reps', label: 'Reps', icon: Users, count: coordinator.assignedRepsCount },
     { id: 'customers', label: 'Customers', icon: TrendingUp, count: coordinator.assignedCustomersCount },
   ];
+  const visibleTempPassword = generatedTempPassword || coordinator?.temporaryPassword || '';
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -485,6 +509,50 @@ export default function AdminCoordinatorDetail() {
                       />
                     ) : (
                       <span className="text-sm font-medium text-slate-800 text-right truncate">{coordinator.hireDate ? formatDate(coordinator.hireDate) : '—'}</span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between py-2.5 gap-4">
+                    <span className="text-xs text-slate-400 uppercase tracking-wider w-32 flex-shrink-0">Email</span>
+                    <span className="text-sm font-medium text-slate-800 text-right truncate">{coordinator.email || '—'}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between py-2.5 gap-4">
+                    <span className="text-xs text-slate-400 uppercase tracking-wider w-32 flex-shrink-0">Username</span>
+                    <span className="text-sm font-medium text-slate-800 text-right truncate">{coordinator.username || '—'}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between py-2.5 gap-4">
+                    <span className="text-xs text-slate-400 uppercase tracking-wider w-32 flex-shrink-0">Password</span>
+                    <span className={`text-xs font-semibold px-2 py-1 rounded-full ${coordinator.mustChangePassword ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}`}>
+                      {coordinator.mustChangePassword ? 'Temporary password pending' : 'Updated by user'}
+                    </span>
+                  </div>
+
+                  <div className="py-2.5 space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-xs text-slate-400 uppercase tracking-wider">Temporary Password</span>
+                      <button
+                        onClick={() => resetTempPasswordMut.mutate()}
+                        disabled={resetTempPasswordMut.isPending}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
+                      >
+                        <KeyRound className="w-3.5 h-3.5" />
+                        {resetTempPasswordMut.isPending ? 'Generating…' : 'Generate New'}
+                      </button>
+                    </div>
+                    {visibleTempPassword ? (
+                      <div className="flex items-center justify-between gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2">
+                        <span className="text-sm font-mono font-semibold text-indigo-700">{visibleTempPassword}</span>
+                        <button
+                          onClick={copyTempPassword}
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-700 hover:text-indigo-900"
+                        >
+                          <Copy className="w-3.5 h-3.5" /> Copy
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-500">Current password cannot be shown. Generate a new temporary password when needed.</p>
                     )}
                   </div>
                 </div>

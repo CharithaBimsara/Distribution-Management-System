@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Pencil, Plus, ShieldCheck, Trash2 } from 'lucide-react';
+import { Pencil, Plus, ShieldCheck, Trash2, KeyRound, Copy } from 'lucide-react';
 import toast from 'react-hot-toast';
 import PageHeader from '../../components/common/PageHeader';
 import DataTable, { type Column } from '../../components/common/DataTable';
@@ -33,6 +33,7 @@ export default function AdminAccounts() {
   const [search, setSearch] = useState('');
   const [editTarget, setEditTarget] = useState<AdminAccountInfo | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<AdminAccountInfo | null>(null);
+  const [generatedTempPassword, setGeneratedTempPassword] = useState<{ username: string; password: string } | null>(null);
   const [form, setForm] = useState(initialEditForm);
 
   const { data: admins = [], isLoading } = useQuery({
@@ -77,7 +78,36 @@ export default function AdminAccounts() {
     },
   });
 
+  const resetTempPasswordMut = useMutation({
+    mutationFn: (userId: string) => authApi.adminResetUserTempPassword(userId),
+    onSuccess: (res) => {
+      const payload = res.data.data;
+      setGeneratedTempPassword({ username: payload.username, password: payload.temporaryPassword });
+      queryClient.invalidateQueries({ queryKey: ['superadmin-admin-accounts'] });
+      toast.success('Temporary password generated');
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.message || 'Failed to generate temporary password');
+    },
+  });
+
+  const copyTempPassword = async () => {
+    if (!generatedTempPassword?.password) return;
+    try {
+      await navigator.clipboard.writeText(generatedTempPassword.password);
+      toast.success('Temporary password copied');
+    } catch {
+      toast.error('Could not copy password');
+    }
+  };
+
   const startCreate = () => navigate('/admin/admin-accounts/new');
+
+  const selectedGeneratedPassword = generatedTempPassword?.password
+    || (generatedTempPassword?.username
+      ? admins.find(a => a.username === generatedTempPassword.username)?.temporaryPassword
+      : undefined)
+    || '';
 
   const startEdit = (target: AdminAccountInfo) => {
     setEditTarget(target);
@@ -140,6 +170,17 @@ export default function AdminAccounts() {
           >
             <Pencil className="w-3.5 h-3.5" />
             Edit
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              resetTempPasswordMut.mutate(admin.userId);
+            }}
+            className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 px-2.5 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-50"
+          >
+            <KeyRound className="w-3.5 h-3.5" />
+            Temp Password
           </button>
           <button
             type="button"
@@ -306,6 +347,33 @@ export default function AdminAccounts() {
         onConfirm={() => deleteTarget && deleteMut.mutate(deleteTarget.userId)}
         onCancel={() => setDeleteTarget(null)}
       />
+
+      <BottomSheet
+        open={!!generatedTempPassword}
+        onClose={() => setGeneratedTempPassword(null)}
+        title="Temporary Password"
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-slate-600">Share this once with the user and ask them to change it after login.</p>
+          <div className="rounded-xl border border-slate-200 p-3 bg-slate-50">
+            <p className="text-xs text-slate-500">Username</p>
+            <p className="text-sm font-semibold text-slate-800 break-all">{generatedTempPassword?.username}</p>
+          </div>
+          <div className="rounded-xl border border-indigo-200 p-3 bg-indigo-50">
+            <p className="text-xs text-indigo-700">Temporary Password</p>
+            <div className="mt-1 flex items-center justify-between gap-2">
+              <p className="text-sm font-mono font-semibold text-indigo-800">{selectedGeneratedPassword}</p>
+              <button
+                type="button"
+                onClick={copyTempPassword}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-700 hover:text-indigo-900"
+              >
+                <Copy className="w-3.5 h-3.5" /> Copy
+              </button>
+            </div>
+          </div>
+        </div>
+      </BottomSheet>
     </div>
   );
 }

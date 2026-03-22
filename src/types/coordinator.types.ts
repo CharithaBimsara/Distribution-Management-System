@@ -1,6 +1,7 @@
 export interface Coordinator {
   id: string;
   userId: string;
+  username: string;
   fullName: string;
   employeeCode: string;
   regionId?: string;
@@ -9,6 +10,8 @@ export interface Coordinator {
   email?: string;
   phoneNumber?: string;
   isActive: boolean;
+  mustChangePassword: boolean;
+  temporaryPassword?: string;
   createdAt: string;
   assignedRepsCount: number;
   assignedCustomersCount: number;

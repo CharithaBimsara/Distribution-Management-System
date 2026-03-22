@@ -6,11 +6,12 @@ import { repsApi } from '../../services/api/repsApi';
 import { customersApi } from '../../services/api/customersApi';
 import { regionsApi } from '../../services/api/regionsApi';
 import { adminGetAllCoordinators } from '../../services/api/coordinatorApi';
+import { authApi } from '../../services/api/authApi';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import {
   ArrowLeft, MapPin, Users, User, Target, TrendingUp,
   Calendar, Trash2, Plus, BarChart2, ChevronRight, Power,
-  ShoppingBag, DollarSign, Eye, Package,
+  ShoppingBag, DollarSign, Eye, Package, KeyRound, Copy,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import StatusBadge from '../../components/common/StatusBadge';
@@ -143,6 +144,7 @@ export default function AdminRepDetail() {
     endDate: '',
     targetAmount: '',
   });
+  const [generatedTempPassword, setGeneratedTempPassword] = useState<string>('');
   const [selectedCoordId, setSelectedCoordId] = useState('');
   const [selectedRegionId, setSelectedRegionId] = useState('');
   const [selectedSubRegionId, setSelectedSubRegionId] = useState('');
@@ -267,6 +269,28 @@ export default function AdminRepDetail() {
     onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed'),
   });
 
+  const resetTempPasswordMut = useMutation({
+    mutationFn: () => authApi.adminResetUserTempPassword(rep.userId),
+    onSuccess: (res) => {
+      const temp = res.data.data.temporaryPassword;
+      setGeneratedTempPassword(temp);
+      qc.invalidateQueries({ queryKey: ['admin-rep', id] });
+      toast.success('New temporary password generated');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to generate temporary password'),
+  });
+
+  const copyTempPassword = async () => {
+    const value = generatedTempPassword || rep?.temporaryPassword || '';
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success('Temporary password copied');
+    } catch {
+      toast.error('Could not copy password');
+    }
+  };
+
   // ── Derived ───────────────────────────────────────────────────────────────
 
   const customers = customersData?.items || [];
@@ -303,6 +327,7 @@ export default function AdminRepDetail() {
   const achievementPct = performance
     ? Math.min(Math.round((performance.achievedAmount / (performance.targetAmount || 1)) * 100), 100)
     : 0;
+  const visibleTempPassword = generatedTempPassword || rep?.temporaryPassword || '';
 
   // ── Loading / Not found ───────────────────────────────────────────────────
 
@@ -547,6 +572,45 @@ export default function AdminRepDetail() {
                   <div className="flex items-center justify-between py-2.5 gap-4">
                     <span className="text-xs text-slate-400 uppercase tracking-wider w-32 flex-shrink-0">Email</span>
                     <span className="text-sm font-medium text-slate-800 text-right truncate">{rep.email}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between py-2.5 gap-4">
+                    <span className="text-xs text-slate-400 uppercase tracking-wider w-32 flex-shrink-0">Username</span>
+                    <span className="text-sm font-medium text-slate-800 text-right truncate">{rep.username}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between py-2.5 gap-4">
+                    <span className="text-xs text-slate-400 uppercase tracking-wider w-32 flex-shrink-0">Password</span>
+                    <span className={`text-xs font-semibold px-2 py-1 rounded-full ${rep.mustChangePassword ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}`}>
+                      {rep.mustChangePassword ? 'Temporary password pending' : 'Updated by user'}
+                    </span>
+                  </div>
+
+                  <div className="py-2.5 space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-xs text-slate-400 uppercase tracking-wider">Temporary Password</span>
+                      <button
+                        onClick={() => resetTempPasswordMut.mutate()}
+                        disabled={resetTempPasswordMut.isPending}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
+                      >
+                        <KeyRound className="w-3.5 h-3.5" />
+                        {resetTempPasswordMut.isPending ? 'Generating…' : 'Generate New'}
+                      </button>
+                    </div>
+                    {visibleTempPassword ? (
+                      <div className="flex items-center justify-between gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2">
+                        <span className="text-sm font-mono font-semibold text-indigo-700">{visibleTempPassword}</span>
+                        <button
+                          onClick={copyTempPassword}
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-700 hover:text-indigo-900"
+                        >
+                          <Copy className="w-3.5 h-3.5" /> Copy
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-500">Current password cannot be shown. Generate a new temporary password when needed.</p>
+                    )}
                   </div>
                 </div>
               </div>

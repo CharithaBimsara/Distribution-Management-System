@@ -5,6 +5,7 @@ import type { RepPerformance, SalesTarget, Visit, Route, AdHocVisitRequest, Rout
 export interface Rep {
   id: string;
   userId: string;
+  username: string;
   fullName: string;
   employeeCode: string;
   hireDate: string;
@@ -19,6 +20,8 @@ export interface Rep {
   email?: string;
   phoneNumber?: string;
   isActive: boolean;
+  mustChangePassword: boolean;
+  temporaryPassword?: string;
   createdAt: string;
 }
 
