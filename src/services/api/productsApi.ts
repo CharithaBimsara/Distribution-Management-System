@@ -2,10 +2,42 @@ import api from './axiosConfig';
 import type { ApiResponse, PagedResult } from '../../types/api.types';
 import type { Product, Category, CreateProductRequest } from '../../types/product.types';
 
+// Batch size per request. This is NOT a product cap; we keep requesting pages
+// until the API indicates there are no more pages.
+const SELECTION_BATCH_SIZE = 500;
+
+async function fetchAllPagedProducts(
+  fetchPage: (page: number, pageSize: number) => Promise<{ data: ApiResponse<PagedResult<Product>> }>
+): Promise<Product[]> {
+  const items: Product[] = [];
+  let page = 1;
+
+  while (true) {
+    const response = await fetchPage(page, SELECTION_BATCH_SIZE);
+    const data = response.data.data;
+    const pageItems = data.items || [];
+
+    items.push(...pageItems);
+
+    if (pageItems.length === 0 || page >= data.totalPages) {
+      break;
+    }
+
+    page += 1;
+  }
+
+  return items;
+}
+
 export const productsApi = {
   // Admin
   getAll: (params?: Record<string, unknown>) =>
     api.get<ApiResponse<PagedResult<Product>>>('/admin/products', { params }),
+
+  getAllForSelection: () =>
+    fetchAllPagedProducts((page, pageSize) =>
+      api.get<ApiResponse<PagedResult<Product>>>('/admin/products', { params: { page, pageSize } })
+    ),
 
   getById: (id: string) =>
     api.get<ApiResponse<Product>>(`/admin/products/${id}`),
@@ -37,6 +69,13 @@ export const productsApi = {
   // Customer catalog
   customerCatalog: (params?: Record<string, unknown>) =>
     api.get<ApiResponse<PagedResult<Product>>>('/customer/products', { params }),
+
+  customerCatalogAll: (params?: Record<string, unknown>) =>
+    fetchAllPagedProducts((page, pageSize) =>
+      api.get<ApiResponse<PagedResult<Product>>>('/customer/products', {
+        params: { ...(params || {}), page, pageSize },
+      })
+    ),
 
   customerGetById: (id: string) =>
     api.get<ApiResponse<Product>>(`/customer/products/${id}`),

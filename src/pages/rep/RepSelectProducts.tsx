@@ -67,6 +67,11 @@ export default function RepSelectProducts() {
     }).then(r => r.data.data),
   });
 
+  const { data: allCatalogProducts = [] } = useQuery({
+    queryKey: ['rep-products-catalog-all'],
+    queryFn: () => productsApi.customerCatalogAll(),
+  });
+
   const selectedCustomerId = draft.customerId;
   const { data: selectedCustomerData } = useQuery({
     queryKey: ['rep-selected-customer', selectedCustomerId],
@@ -75,16 +80,16 @@ export default function RepSelectProducts() {
   });
   const isNonTaxCustomer = ((selectedCustomerData?.customerType || '').toLowerCase().replace(/[-\s]/g, '') === 'nontax');
 
-  // whenever catalog data arrives, fill in missing fields (disc/tax) on existing rows
+  // Fill in missing fields (disc/tax) on existing rows using the full catalog.
   useEffect(() => {
-    if (!data) return;
+    if (!allCatalogProducts.length) return;
     setQuickRows(rows => rows.map(r => {
       if (!r.product || r.product.discountPercent != null) return r;
-      const p = data.items.find((p: Product) => p.id === r.product?.id);
+      const p = allCatalogProducts.find((p: Product) => p.id === r.product?.id);
       if (!p) return r;
       return { ...r, product: p };
     }));
-  }, [data]);
+  }, [allCatalogProducts]);
 
   const getCartQty = useCallback((productId: string) => {
     return draft.items.find(i => i.productId === productId)?.quantity ?? 0;
@@ -284,7 +289,7 @@ export default function RepSelectProducts() {
                                   value={prod?.id || ''}
                                   onChange={(e) => {
                                     const selectedId = e.target.value;
-                                    const p = ((data?.items || []) as Product[]).find((item) => item.id === selectedId);
+                                    const p = (allCatalogProducts as Product[]).find((item) => item.id === selectedId);
                                     if (!p) return;
                                     updateQuickRow(row.id, { product: p, qty: 1 });
                                     if (quickRows[quickRows.length - 1].id === row.id) addQuickRow();
@@ -293,7 +298,7 @@ export default function RepSelectProducts() {
                                   className="w-full border border-slate-300 rounded-md px-2 py-1 bg-white text-[11px]"
                                 >
                                   <option value="">Select product</option>
-                                  {((data?.items || []) as Product[]).map((option) => (
+                                  {(allCatalogProducts as Product[]).map((option) => (
                                     <option key={option.id} value={option.id}>
                                       {option.name} ({option.sku})
                                     </option>

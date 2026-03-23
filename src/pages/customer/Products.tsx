@@ -18,7 +18,6 @@ export default function CustomerProducts() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
 
   // quick order rows (desktop only)
   interface QuickRow { id: string; product?: Product; qty: number; }
@@ -207,19 +206,18 @@ export default function CustomerProducts() {
     }
   };
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['customer-products', page, search, categoryFilter, brandFilter, minPriceFilter, maxPriceFilter, sortBy, sortDir],
-    queryFn: () => productsApi.customerCatalog({
-      page,
-      pageSize: 30,
-      search: search || undefined,
-      categoryId: categoryFilter || undefined,
-      brand: brandFilter || undefined,
-      minPrice: minPriceFilter || undefined,
-      maxPrice: maxPriceFilter || undefined,
-      sortBy,
-      sortDir,
-    }).then(r => r.data.data),
+  const { data: allProducts = [], isLoading } = useQuery({
+    queryKey: ['customer-products-all-for-order', search, categoryFilter, brandFilter, minPriceFilter, maxPriceFilter, sortBy, sortDir],
+    queryFn: () =>
+      productsApi.customerCatalogAll({
+        search: search || undefined,
+        categoryId: categoryFilter || undefined,
+        brand: brandFilter || undefined,
+        minPrice: minPriceFilter || undefined,
+        maxPrice: maxPriceFilter || undefined,
+        sortBy,
+        sortDir,
+      }),
   });
 
   // whenever quickRows change, if last row has product selected create a new blank
@@ -230,9 +228,9 @@ export default function CustomerProducts() {
   }, [quickRows]);
 
   const suggestedBrands = useMemo(() => {
-    const items = data?.items || [];
+    const items = allProducts || [];
     return Array.from(new Set(items.map((i: Product) => i.brand).filter(Boolean))).slice(0, 10) as string[];
-  }, [data]);
+  }, [allProducts]);
 
   const handleIncrement = (product: Product) => {
     const qty = getCartQty(product.id);
@@ -462,7 +460,7 @@ export default function CustomerProducts() {
                           value={prod?.id || ''}
                           onChange={(e) => {
                             const selectedId = e.target.value;
-                            const selectedProduct = ((data?.items || []) as Product[]).find((p) => p.id === selectedId);
+                            const selectedProduct = (allProducts as Product[]).find((p) => p.id === selectedId);
                             if (!selectedProduct) return;
                             updateQuickRow(row.id, { product: selectedProduct, qty: 1 });
                             if (quickRows[quickRows.length - 1].id === row.id) addQuickRow();
@@ -470,7 +468,7 @@ export default function CustomerProducts() {
                           className="w-full border border-slate-300 rounded-md px-2 py-1 bg-white text-[11px]"
                         >
                           <option value="">Select product</option>
-                          {((data?.items || []) as Product[]).map((option) => (
+                          {(allProducts as Product[]).map((option) => (
                             <option
                               key={option.id}
                               value={option.id}
@@ -550,7 +548,7 @@ export default function CustomerProducts() {
               </div>
             ))}
           </div>
-        ) : !data?.items?.length ? (
+        ) : !allProducts.length ? (
           <div className="text-center py-20 mt-3 max-w-screen-xl mx-auto bg-white rounded-2xl border border-slate-200 shadow-sm">
             <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
               <Package className="w-8 h-8 text-slate-300" />
@@ -558,33 +556,7 @@ export default function CustomerProducts() {
             <p className="font-bold text-slate-700 text-base">No products found</p>
             <p className="text-xs text-slate-400 mt-1">Try adjusting your search or filters</p>
           </div>
-        ) : (
-          data.totalPages > 1 && (
-            <div className="max-w-screen-xl mx-auto flex items-center justify-between px-4 pt-5">
-              <span className="text-xs text-slate-400 font-medium tabular-nums">
-                Page {page} of {data.totalPages}
-              </span>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
-                  disabled={page === 1}
-                  className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-white border border-slate-200 text-slate-600 rounded-xl disabled:opacity-40 hover:bg-slate-50 active:scale-95 transition-all shadow-sm"
-                >
-                  <ChevronLeft className="w-3.5 h-3.5" />
-                  Prev
-                </button>
-                <button
-                  onClick={() => setPage(p => p + 1)}
-                  disabled={page >= data.totalPages}
-                  className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-orange-500 text-white rounded-xl disabled:opacity-40 hover:bg-orange-600 active:scale-95 transition-all shadow-lg shadow-orange-500/20"
-                >
-                  Next
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-          )
-        )}
+        ) : null}
       </div>
 
     </div>
