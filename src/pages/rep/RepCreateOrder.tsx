@@ -310,7 +310,7 @@ export default function RepCreateOrder() {
 
   const { data: productCatalog } = useQuery({
     queryKey: ['rep-products-for-order-create'],
-    queryFn: () => productsApi.getAll({ page: 1, pageSize: 500 }).then(r => r.data.data),
+    queryFn: () => productsApi.getAllForSelection(),
     enabled: isDesktop,
   });
 
@@ -340,7 +340,7 @@ export default function RepCreateOrder() {
   const total = draft.items.reduce((s, i) => s + (i.lineTotal ?? calculateLine({ rate: i.price, qty: i.quantity, discountPercent: i.discountPercent, taxAmount: i.taxAmount }).total), 0);
   const itemCount = draft.items.length;
   const exceedsCredit = false;
-  const desktopProducts: Product[] = productCatalog?.items || [];
+  const desktopProducts: Product[] = productCatalog || [];
   const selectedDesktopCustomer = (customerList?.items || []).find((c: any) => c.id === desktopCustomerId);
   const isNonTaxCustomer = ((selectedDesktopCustomer?.customerType || '').toLowerCase().replace(/[-\s]/g, '') === 'nontax');
   const desktopRowsWithProduct = desktopRows.filter(r => !!r.product);

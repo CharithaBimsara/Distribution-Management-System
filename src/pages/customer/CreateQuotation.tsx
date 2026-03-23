@@ -28,7 +28,7 @@ export default function CustomerCreateQuotation() {
 
   const { data: products } = useQuery({
     queryKey: ['customer-products-for-quotation-create'],
-    queryFn: () => productsApi.getAll({ page: 1, pageSize: 500 }).then((r) => r.data.data.items),
+    queryFn: () => productsApi.getAllForSelection(),
   });
 
   const { data: customerProfile } = useQuery({
