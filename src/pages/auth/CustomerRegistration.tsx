@@ -2,38 +2,19 @@
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { customerRegistrationApi } from '../../services/api/customerRegistrationApi';
+import { MapPin, Phone, Building2, UserCircle, Mail, AlertTriangle, FileUp, Check, ChevronLeft, ChevronRight, Building } from 'lucide-react';
 
-// ── Shared input/label styles (matching system Login theme) ───────────────────
-const INPUT_STYLE = {
-  padding: '12px 14px',
-  fontSize: '14px',
-  background: 'rgba(255, 255, 255, 0.06)',
-  border: '1.5px solid rgba(255, 255, 255, 0.1)',
-  borderRadius: '12px',
-  color: '#f1f5f9',
-  width: '100%',
-  outline: 'none',
-  transition: 'all 0.2s',
-} as const;
-
-const LABEL_STYLE = {
-  display: 'block',
-  fontSize: '13px',
-  fontWeight: 600,
-  color: '#94a3b8',
-  marginBottom: '8px',
-} as const;
-
-const SECTION_CARD_STYLE = {
-  background: 'rgba(255, 255, 255, 0.03)',
-  border: '1px solid rgba(255, 255, 255, 0.08)',
-  borderRadius: '16px',
-  padding: '20px',
-} as const;
+// Brand Primary Color from the logo
+const brandPrimary = '#C15B3E';
 
 const STEPS = ['General', 'Professional', 'Documents', 'Review'];
 
-// ── Input component ────────────────────────────────────────────────────────────
+// ── Shared Tailwind Classes for consistency (Matching Login Theme) ───────────
+const inputCls = "w-full px-4 py-3 text-sm border border-slate-200 rounded-xl bg-white text-slate-900 placeholder:text-slate-400 outline-none transition duration-150 focus:border-slate-400 focus:ring-2 focus:ring-slate-100";
+const labelCls = "block text-sm font-semibold text-slate-700 mb-1.5";
+const cardCls = "bg-white border border-slate-100 rounded-2xl p-6 shadow-sm";
+
+// ── Helper Components (Styling Updated to Light Theme) ───────────────────────────
 function Field({
   label, name, value, onChange, type = 'text', required = false, placeholder, error,
 }: {
@@ -43,31 +24,17 @@ function Field({
 }) {
   return (
     <div>
-      <label style={LABEL_STYLE}>
+      <label className={labelCls}>
         {label}
-        {required && <span style={{ color: '#f87171', marginLeft: 4 }}>*</span>}
+        {required && <span className="text-red-500 ml-1.5">*</span>}
       </label>
       <input
         type={type} name={name} value={value} onChange={onChange}
         placeholder={placeholder || `Enter ${label.toLowerCase()}`}
         required={required}
-        style={{
-          ...INPUT_STYLE,
-          border: error ? '1.5px solid rgba(248, 113, 113, 0.7)' : INPUT_STYLE.border,
-          boxShadow: error ? '0 0 0 3px rgba(248, 113, 113, 0.18)' : 'none',
-        }}
-        onFocus={(e) => {
-          e.target.style.borderColor = 'rgba(99, 102, 241, 0.5)';
-          e.target.style.boxShadow = '0 0 0 3px rgba(99, 102, 241, 0.15)';
-          e.target.style.background = 'rgba(255, 255, 255, 0.08)';
-        }}
-        onBlur={(e) => {
-          e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)';
-          e.target.style.boxShadow = 'none';
-          e.target.style.background = 'rgba(255, 255, 255, 0.06)';
-        }}
+        className={`${inputCls} ${error ? 'border-red-300 focus:border-red-400 focus:ring-red-100' : ''}`}
       />
-      {error && <p style={{ fontSize: 12, color: '#fca5a5', marginTop: 6 }}>{error}</p>}
+      {error && <p className="text-xs text-red-600 mt-1.5 font-medium flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> {error}</p>}
     </div>
   );
 }
@@ -84,33 +51,18 @@ function SelectField({
 }) {
   return (
     <div>
-      <label style={LABEL_STYLE}>
+      <label className={labelCls}>
         {label}
-        {required && <span style={{ color: '#f87171', marginLeft: 4 }}>*</span>}
+        {required && <span className="text-red-500 ml-1.5">*</span>}
       </label>
       <select
         name={name} value={value} onChange={onChange}
         disabled={disabled}
-        style={{
-          ...INPUT_STYLE,
-          colorScheme: 'dark',
-          border: error ? '1.5px solid rgba(248, 113, 113, 0.7)' : INPUT_STYLE.border,
-          boxShadow: error ? '0 0 0 3px rgba(248, 113, 113, 0.18)' : 'none',
-        } as React.CSSProperties}
-        onFocus={(e) => {
-          e.target.style.borderColor = 'rgba(99, 102, 241, 0.5)';
-          e.target.style.boxShadow = '0 0 0 3px rgba(99, 102, 241, 0.15)';
-          e.target.style.background = 'rgba(255, 255, 255, 0.08)';
-        }}
-        onBlur={(e) => {
-          e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)';
-          e.target.style.boxShadow = 'none';
-          e.target.style.background = 'rgba(255, 255, 255, 0.06)';
-        }}
+        className={`${inputCls} appearance-none ${error ? 'border-red-300 focus:border-red-400 focus:ring-red-100' : ''}`}
       >
         {children}
       </select>
-      {error && <p style={{ fontSize: 12, color: '#fca5a5', marginTop: 6 }}>{error}</p>}
+      {error && <p className="text-xs text-red-600 mt-1.5 font-medium flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> {error}</p>}
     </div>
   );
 }
@@ -131,92 +83,73 @@ function FileUpload({
 
   return (
     <div>
-      <label style={LABEL_STYLE}>
+      <label className={labelCls}>
         {label}
-        {required && <span style={{ color: '#f87171', marginLeft: 4 }}>*</span>}
+        {required && <span className="text-red-500 ml-1.5">*</span>}
       </label>
       <div
         onClick={() => ref.current?.click()}
         onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
         onDragLeave={() => setDrag(false)}
         onDrop={(e) => { e.preventDefault(); setDrag(false); const f = e.dataTransfer.files[0]; if (f) handle(f); }}
-        style={{
-          border: `2px dashed ${error ? 'rgba(248,113,113,0.8)' : drag ? 'rgba(99,102,241,0.7)' : file ? 'rgba(99,102,241,0.45)' : 'rgba(255,255,255,0.12)'}`,
-          borderRadius: '14px',
-          padding: '28px 20px',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: '10px',
-          cursor: 'pointer',
-          background: drag ? 'rgba(99,102,241,0.08)' : file ? 'rgba(99,102,241,0.05)' : 'rgba(255,255,255,0.03)',
-          transition: 'all 0.2s',
-        }}
+        className={`border-2 dashed rounded-xl px-5 py-4 flex items-center gap-4 cursor-pointer transition-all duration-150 group ${
+          error ? 'border-red-300 bg-red-50/50' 
+          : drag ? `border-[#C15B3E]/60 bg-[#C15B3E]/5` 
+          : file ? `border-[#C15B3E]/40 bg-white shadow-inner` 
+          : 'border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-slate-100/50'
+        }`}
       >
-        <svg
-          style={{ width: 36, height: 36, color: file ? '#818cf8' : 'rgba(255,255,255,0.2)' }}
-          fill="none" viewBox="0 0 24 24" stroke="currentColor"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-            d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-        </svg>
-        <div style={{ textAlign: 'center' }}>
+        <div className={`p-2.5 rounded-lg ${file ? 'bg-[#C15B3E]/10' : 'bg-white border border-slate-200 shadow-sm'}`}>
+          <FileUp className={`w-5 h-5 transition ${file ? 'text-[#C15B3E]' : 'text-slate-400'}`} strokeWidth={1.5}/>
+        </div>
+        <div className="flex-1 min-w-0">
           {file ? (
-            <p style={{ fontSize: 13, color: '#a5b4fc', fontWeight: 500, wordBreak: 'break-all' }}>{file.name}</p>
+            <p className="text-sm text-[#C15B3E] font-medium truncate">{file.name}</p>
           ) : (
             <>
-              <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)' }}>
-                <span style={{ color: '#818cf8', fontWeight: 600 }}>Click to upload</span> or drag &amp; drop
+              <p className="text-sm text-slate-600 truncate">
+                <span className="font-semibold" style={{ color: brandPrimary }}>Click to upload</span> or drag &amp; drop
               </p>
-              <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)', marginTop: 3 }}>PDF, JPG, PNG — max 10 MB</p>
+              <p className="text-xs text-slate-400 mt-0.5">PDF, JPG, PNG — max 10 MB</p>
             </>
           )}
         </div>
         <input
-          ref={ref} type="file" accept=".pdf,.jpg,.jpeg,.png" style={{ display: 'none' }}
+          ref={ref} type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden"
           onChange={(e) => { const f = e.target.files?.[0]; if (f) handle(f); }}
         />
       </div>
-      {error && <p style={{ fontSize: 12, color: '#fca5a5', marginTop: 6 }}>{error}</p>}
+      {error && <p className="text-xs text-red-600 mt-1.5 font-medium flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> {error}</p>}
     </div>
   );
 }
 
 function StepIndicator({ current }: { current: number }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 28 }}>
+    <div className="flex items-center justify-center mb-8">
       {STEPS.map((label, i) => (
-        <div key={i} style={{ display: 'flex', alignItems: 'center' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <div style={{
-              width: 32, height: 32, borderRadius: '50%',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 12, fontWeight: 700, transition: 'all 0.3s',
-              background: i <= current ? 'linear-gradient(135deg, #6366f1, #8b5cf6)' : 'rgba(255,255,255,0.07)',
-              color: i <= current ? '#fff' : 'rgba(255,255,255,0.3)',
-              boxShadow: i === current ? '0 0 0 3px rgba(99,102,241,0.2), 0 4px 12px rgba(99,102,241,0.3)' : 'none',
-              flexShrink: 0,
-            }}>
-              {i < current ? (
-                <svg style={{ width: 14, height: 14 }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                </svg>
-              ) : i + 1}
+        <div key={i} className="flex items-center">
+          <div className="flex flex-col items-center">
+            <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold transition-all duration-300 border-2 ${
+              i <= current 
+              ? 'text-white border-none' 
+              : 'text-slate-300 border-slate-200 bg-white'
+            }`}
+             style={{ 
+               background: i < current ? `linear-gradient(135deg, ${brandPrimary}, #e77656)` : i === current ? brandPrimary : '',
+               boxShadow: i === current ? `0 0 0 4px ${brandPrimary}20, 0 4px 10px ${brandPrimary}30` : 'none',
+             }}
+            >
+              {i < current ? <Check className="w-4 h-4" strokeWidth={3}/> : i + 1}
             </div>
-            <span style={{
-              fontSize: 10, marginTop: 4, fontWeight: 500, textAlign: 'center',
-              color: i === current ? '#a5b4fc' : i < current ? 'rgba(165,180,252,0.5)' : 'rgba(255,255,255,0.2)',
-              transition: 'all 0.3s',
-              whiteSpace: 'nowrap',
-            }}>{label}</span>
+            <span className={`text-[10px] mt-2 font-semibold text-center transition-all duration-300 uppercase tracking-widest ${
+              i === current ? 'text-slate-900' : i < current ? 'text-slate-500' : 'text-slate-300'
+            }`}>{label}</span>
           </div>
           {i < STEPS.length - 1 && (
-            <div style={{
-              width: 24, height: 1, margin: '0 4px', marginBottom: 18,
-              background: i < current ? 'linear-gradient(90deg,#6366f1,#8b5cf6)' : 'rgba(255,255,255,0.08)',
-              transition: 'all 0.5s',
-              flexShrink: 0,
-            }} />
+            <div className={`w-10 md:w-14 h-0.5 mx-2 -mt-6 transition-all duration-500 ${
+              i < current ? 'bg-[#C15B3E]' : 'bg-slate-100'
+            }`}/>
           )}
         </div>
       ))}
@@ -443,59 +376,41 @@ export default function CustomerRegistration() {
     setFiles({});
   };
 
-  // ── Success screen ─────────────────────────────────────────────────────────
+  // ── Success screen (Branded, Smaller & Neater) ─────────────────────────────────
   if (submitted) {
     return (
-      <div
-        className="min-h-screen flex items-center justify-center p-5 relative overflow-hidden"
-        style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%)' }}
-      >
-        <div className="absolute w-[500px] h-[500px] rounded-full animate-pulse-glow"
-          style={{ top: '-15%', left: '-10%', background: 'radial-gradient(circle, rgba(99,102,241,0.15) 0%, transparent 70%)' }} />
-        <div className="absolute w-[400px] h-[400px] rounded-full animate-pulse-glow"
-          style={{ bottom: '-10%', right: '-10%', background: 'radial-gradient(circle, rgba(139,92,246,0.12) 0%, transparent 70%)', animationDelay: '1.5s' }} />
-        <div className="absolute inset-0"
-          style={{ backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-5 text-slate-900 font-sans relative overflow-hidden">
+         <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 1px)', backgroundSize: '24px 24px' }}></div>
 
-        <div className="relative z-10 text-center px-4 w-full max-w-sm animate-fade-in-scale">
-          <div style={{
-            width: 88, height: 88, borderRadius: '50%',
-            background: 'rgba(99,102,241,0.12)',
-            border: '1.5px solid rgba(99,102,241,0.3)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            margin: '0 auto 24px',
-            boxShadow: '0 0 40px rgba(99,102,241,0.2)',
-          }}>
-            <svg style={{ width: 44, height: 44, color: '#818cf8' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
+        <div className="relative z-10 text-center px-6 py-8 w-full max-w-md bg-white rounded-2xl border border-slate-100 shadow-xl animate-fade-in-scale">
+          
+
+          <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6 border-4 border-white shadow-md"
+            style={{ 
+              background: `linear-gradient(135deg, ${brandPrimary}, #e77656)`,
+              boxShadow: `0 4px 16px ${brandPrimary}30`,
+            }}>
+            <Check className="w-8 h-8 text-white" strokeWidth={3} />
           </div>
-          <h2 style={{ fontSize: 26, fontWeight: 800, color: '#f1f5f9', marginBottom: 10, letterSpacing: '-0.5px' }}>
+
+          <h2 className="text-2xl font-bold text-slate-900 mb-3">
             Registration Submitted!
           </h2>
-          <p style={{ fontSize: 14, color: '#64748b', lineHeight: 1.6, marginBottom: 28 }}>
-            Your application has been received. Our team will review your details and documents and contact you shortly.
+          <p className="text-sm text-slate-600 mb-8 leading-relaxed px-4">
+            Thank you for applying. Our team will review your details and contact you shortly.
           </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          
+          <div className="flex flex-col sm:flex-row gap-3 justify-center max-w-xs mx-auto sm:max-w-none">
             <button
               onClick={reset}
-              style={{
-                padding: '13px 24px', fontSize: 14, fontWeight: 600,
-                background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                color: 'white', border: 'none', borderRadius: 12, cursor: 'pointer',
-                boxShadow: '0 4px 20px rgba(99,102,241,0.35)',
-              }}
+              className="flex-1 px-5 py-2.5 rounded-lg text-sm font-semibold text-white transition hover:-translate-y-0.5 shadow-sm active:scale-95"
+              style={{ backgroundColor: brandPrimary }}
             >
-              Submit Another Application
+              New Application
             </button>
             <button
               onClick={() => navigate('/login')}
-              style={{
-                padding: '13px 24px', fontSize: 14, fontWeight: 500,
-                background: 'rgba(255,255,255,0.05)',
-                border: '1px solid rgba(255,255,255,0.1)',
-                color: '#94a3b8', borderRadius: 12, cursor: 'pointer',
-              }}
+              className="flex-1 px-5 py-2.5 rounded-lg text-sm font-semibold transition bg-slate-100 text-slate-700 hover:bg-slate-200 active:bg-slate-300"
             >
               Back to Login
             </button>
@@ -505,89 +420,44 @@ export default function CustomerRegistration() {
     );
   }
 
-  // ── Main form ──────────────────────────────────────────────────────────────
+  // ── Main form (Branded Light Theme) ──────────────────────────────────────────────
   return (
-    <div
-      className="min-h-screen relative overflow-hidden"
-      style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%)' }}
-    >
-      {/* Background orbs */}
-      <div className="absolute w-[600px] h-[600px] rounded-full animate-pulse-glow pointer-events-none"
-        style={{ top: '-20%', left: '-15%', background: 'radial-gradient(circle, rgba(99,102,241,0.13) 0%, transparent 70%)' }} />
-      <div className="absolute w-[500px] h-[500px] rounded-full animate-pulse-glow pointer-events-none"
-        style={{ bottom: '-15%', right: '-10%', background: 'radial-gradient(circle, rgba(139,92,246,0.1) 0%, transparent 70%)', animationDelay: '1.5s' }} />
-      <div className="absolute w-[350px] h-[350px] rounded-full animate-pulse-glow pointer-events-none"
-        style={{ top: '35%', right: '15%', background: 'radial-gradient(circle, rgba(6,182,212,0.07) 0%, transparent 70%)', animationDelay: '3s' }} />
-      {/* Dot grid */}
-      <div className="absolute inset-0 pointer-events-none"
-        style={{ backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans relative overflow-hidden" ref={topRef}>
+      <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 1px)', backgroundSize: '32px 32px' }}></div>
 
-      <div className="relative z-10 max-w-3xl mx-auto px-4 py-10 md:py-14" ref={topRef}>
+      <div className="relative z-10 max-w-3xl mx-auto px-4 py-10 md:py-12">
 
-        {/* Page header */}
-        <div className="text-center mb-10 animate-fade-in-scale">
-          <div className="flex justify-center mb-5">
-            <div
-              className="inline-flex items-center justify-center w-[68px] h-[68px] rounded-[18px] animate-float"
-              style={{
-                background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                boxShadow: '0 8px 32px rgba(99,102,241,0.35), 0 0 0 1px rgba(255,255,255,0.1) inset',
-              }}
-            >
-              <span style={{ color: 'white', fontWeight: 900, fontSize: 26 }}>D</span>
-            </div>
+        <div className="text-center mb-10 animate-fade-in-scale flex flex-col items-center">
+          <img src="/logo.png" alt="Janasiri Logo" className="w-16 h-16 object-contain rounded-full shadow-sm mb-4" />
+          <div className="flex flex-col">
+            <h1 className="text-2xl font-extrabold tracking-tighter text-slate-950">
+              JANASIRI <span style={{ color: brandPrimary }}>DISTRIBUTORS</span>
+            </h1>
+            <p className="text-[11px] font-semibold text-slate-600 uppercase tracking-widest mt-0.5">(PVT) LTD</p>
           </div>
-          <h1 style={{ fontSize: 26, fontWeight: 800, color: '#f1f5f9', letterSpacing: '-0.5px', marginBottom: 2 }}>
-            Janasiri <span style={{ color: '#818cf8' }}>Distribution</span>
-          </h1>
-          <p style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.6)', marginBottom: 6 }}>Pvt Ltd</p>
-          <p style={{ fontSize: 12, color: '#64748b', marginBottom: 10 }}>Customer Registration Application</p>
-          <div
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 7,
-              background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)',
-              borderRadius: 999, padding: '5px 14px',
-            }}
-          >
-            <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#818cf8' }} className="animate-pulse" />
-            <span style={{ fontSize: 11, fontWeight: 600, color: '#a5b4fc', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-              Janasiri Distributors
-            </span>
-          </div>
+          <p className="text-sm text-slate-500 mt-3 max-w-sm">New Wholesale Customer Account Registration Application</p>
         </div>
 
-        {/* Form card */}
-        <div
-          style={{
-            background: 'rgba(15, 23, 42, 0.65)',
-            backdropFilter: 'blur(24px)',
-            WebkitBackdropFilter: 'blur(24px)',
-            border: '1px solid rgba(255, 255, 255, 0.08)',
-            borderRadius: 24,
-            boxShadow: '0 24px 64px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.05) inset',
-          }}
-          className="p-5 sm:p-8 md:p-10"
-        >
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-xl p-6 md:p-10 animate-fade-in-scale">
+          
           <style>{`
-            select option { background: #1e293b; }
-            input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.5); }
+            input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.2); cursor: pointer; }
+            select { background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%2364748b' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e"); background-position: right 1rem center; background-repeat: no-repeat; background-size: 1.2em 1.2em; padding-right: 2.5rem; cursor: pointer; }
           `}</style>
 
           <StepIndicator current={step} />
 
           {/* ── Step 0: General ─────────────────────────────────────────── */}
           {step === 0 && (
-            <div className="animate-fade-in">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
-                <div style={{ width: 3, height: 20, borderRadius: 2, background: 'linear-gradient(#6366f1,#8b5cf6)', flexShrink: 0 }} />
-                <h2 style={{ fontSize: 17, fontWeight: 700, color: '#f1f5f9' }}>General Details</h2>
+            <div className="animate-fade-in space-y-7">
+              <div className="flex items-center gap-3 pt-2 border-t border-slate-100 pt-5">
+                <Building className="w-6 h-6 text-slate-400" strokeWidth={1.5} />
+                <h2 className="text-xl font-bold tracking-tight text-slate-900">Company Details</h2>
               </div>
 
-              <div style={{ marginBottom: 20 }}>
-                <label style={LABEL_STYLE}>
-                  Customer Type <span style={{ color: '#f87171' }}>*</span>
-                </label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div className="space-y-2">
+                <label className={labelCls}>Customer Type <span className="text-red-500 ml-1.5">*</span></label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                   {[
                     { val: 'non-tax', label: 'Non-Tax Customer', icon: '🏪' },
                     { val: 'tax', label: 'Tax Customer', icon: '🧾' },
@@ -595,139 +465,95 @@ export default function CustomerRegistration() {
                     <button
                       key={val} type="button" onClick={() => {
                         setCustomerType(val);
-                        setFieldErrors((prev) => {
-                          if (!prev.customerType) return prev;
-                          const next = { ...prev };
-                          delete next.customerType;
-                          return next;
-                        });
+                        setFieldErrors(prev => { const n = { ...prev }; delete n.customerType; return n; });
                       }}
-                      style={{
-                        padding: '14px 16px', borderRadius: 14, border: '1.5px solid',
-                        borderColor: customerType === val ? 'rgba(99,102,241,0.6)' : 'rgba(255,255,255,0.1)',
-                        background: customerType === val ? 'rgba(99,102,241,0.12)' : 'rgba(255,255,255,0.04)',
-                        color: customerType === val ? '#a5b4fc' : 'rgba(255,255,255,0.45)',
-                        fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                        boxShadow: customerType === val ? '0 0 0 3px rgba(99,102,241,0.12)' : 'none',
+                      className={`relative px-4 py-3.5 rounded-xl border-2 transition-all duration-150 text-left flex items-center gap-3 ${
+                        customerType === val 
+                        ? 'bg-slate-50 border-[#C15B3E]' 
+                        : 'bg-white border-slate-200 hover:border-slate-300'
+                      }`}
+                      style={{ 
+                        borderColor: customerType === val ? brandPrimary : '',
+                        boxShadow: customerType === val ? `0 4px 12px ${brandPrimary}15` : 'none',
                       }}
                     >
-                      <span>{icon}</span>
-                      <span>{label}</span>
+                      <span className="text-2xl">{icon}</span>
+                      <div className="flex flex-col">
+                         <span className={`text-sm font-bold ${customerType === val ? 'text-slate-900' : 'text-slate-700'}`}>{label}</span>
+                         <span className="text-[11px] text-slate-500 mt-0.5">{val === 'tax' ? 'VAT registered business' : 'General wholesale buyer'}</span>
+                      </div>
+                      <div className={`absolute top-1/2 -translate-y-1/2 right-4 w-5 h-5 rounded-full flex items-center justify-center border-2 transition ${
+                        customerType === val ? 'text-white border-none' : 'border-slate-200 bg-white'
+                      }`} style={{ background: customerType === val ? brandPrimary : '' }}>
+                        {customerType === val && <Check className="w-3 h-3" strokeWidth={3}/>}
+                      </div>
                     </button>
                   ))}
                 </div>
-                {fieldErrors.customerType && <p style={{ fontSize: 12, color: '#fca5a5', marginTop: 6 }}>{fieldErrors.customerType}</p>}
-                {customerType === 'tax' && (
-                  <div style={{
-                    marginTop: 10, display: 'flex', alignItems: 'flex-start', gap: 8,
-                    background: 'rgba(251,191,36,0.07)', border: '1px solid rgba(251,191,36,0.2)',
-                    borderRadius: 12, padding: '10px 14px',
-                  }}>
-                    <svg style={{ width: 15, height: 15, color: '#fbbf24', flexShrink: 0, marginTop: 1 }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <span style={{ fontSize: 12, color: '#fcd34d' }}>
-                      VAT registration document will be required in Step 3 (Documents).
-                    </span>
-                  </div>
-                )}
+                {fieldErrors.customerType && <p className="text-xs text-red-600 mt-1.5 font-medium flex items-center gap-1.5 pt-1"><AlertTriangle className="w-3.5 h-3.5" /> {fieldErrors.customerType}</p>}
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2" style={{ gap: 14 }}>
-                <Field label="Customer Name in BR" name="customerName" value={form.customerName} onChange={upd} required error={fieldErrors.customerName} />
-                <Field label="Incorporate Date" name="incorporateDate" value={form.incorporateDate} onChange={upd} type="date" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-5">
+                <Field label="Customer / Company Name (as in BR)" name="customerName" value={form.customerName} onChange={upd} required error={fieldErrors.customerName} placeholder="Enter full legal name" />
+                <Field label="Incorporate / Registration Date" name="incorporateDate" value={form.incorporateDate} onChange={upd} type="date" />
                 <div className="sm:col-span-2">
-                  <Field label="Registered Address in BR" name="registeredAddress" value={form.registeredAddress} onChange={upd} />
+                  <Field label="Registered Address (as in BR)" name="registeredAddress" value={form.registeredAddress} onChange={upd} placeholder="Enter full registered office address" />
                 </div>
-                <Field label="General Business Name" name="businessName" value={form.businessName} onChange={upd} />
-                <Field label="Telephone" name="telephone" value={form.telephone} onChange={upd} type="tel" required error={fieldErrors.telephone} />
+                <Field label="Operating Business / Shop Name" name="businessName" value={form.businessName} onChange={upd} placeholder="Enter name your business operates under" />
+                <Field label="Hotline / Land Telephone" name="telephone" value={form.telephone} onChange={upd} type="tel" required error={fieldErrors.telephone} placeholder="+94 ... (Primary contact)" />
                 <div className="sm:col-span-2">
-                  <Field label="Business Location Address" name="businessLocation" value={form.businessLocation} onChange={upd} />
+                  <Field label="Operating / Delivery Address" name="businessLocation" value={form.businessLocation} onChange={upd} placeholder="Where do you want goods delivered?" />
                 </div>
-                <Field label="Email" name="email" value={form.email} onChange={upd} type="email" required error={fieldErrors.email} />
-                <Field label="Operating Bank &amp; Branch" name="bankBranch" value={form.bankBranch} onChange={upd} />
+                <Field label="Operating Email Address" name="email" value={form.email} onChange={upd} type="email" required error={fieldErrors.email} placeholder="For receiving invoices & updates" />
+                <Field label="Operating Bank & Branch" name="bankBranch" value={form.bankBranch} onChange={upd} placeholder="Bank name and branch for payments" />
+                
                 <SelectField label="Region" name="regionId" value={form.regionId} onChange={upd} required error={fieldErrors.regionId}>
-                  <option value="">{regionsLoading ? 'Loading regions...' : 'Select Region'}</option>
+                  <option value="">{regionsLoading ? 'Loading regions...' : 'Select your operating Region'}</option>
                   {(regions || []).map((r: any) => (
-                    <option key={r.id} value={r.id}>{r.name}</option>
+                    <option key={r.id} value={r.id} className="text-slate-900 bg-white">{r.name}</option>
                   ))}
                 </SelectField>
                 <SelectField label="Sub Region" name="subRegionId" value={form.subRegionId} onChange={upd} disabled={!form.regionId}>
                   <option value="">{subRegionsLoading ? 'Loading sub regions...' : 'Select Sub Region (optional)'}</option>
                   {(subRegions || []).map((s: any) => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
+                    <option key={s.id} value={s.id} className="text-slate-900 bg-white">{s.name}</option>
                   ))}
                 </SelectField>
-                <div className="sm:col-span-2" style={{ marginTop: -4 }}>
-                  {regionsLoading && <p style={{ fontSize: 12, color: '#94a3b8' }}>Loading regions...</p>}
-                  {regionsError && (
-                    <p style={{ fontSize: 12, color: '#fca5a5' }}>
-                      Unable to load regions right now.
-                      <button type="button" onClick={() => refetchRegions()} style={{ marginLeft: 8, color: '#c7d2fe', textDecoration: 'underline', background: 'transparent', border: 'none', cursor: 'pointer' }}>
-                        Retry
-                      </button>
-                    </p>
-                  )}
-                  {!regionsLoading && !regionsError && (regions?.length || 0) === 0 && (
-                    <p style={{ fontSize: 12, color: '#fca5a5' }}>No regions available. Please contact support.</p>
-                  )}
-                  {!!form.regionId && subRegionsLoading && <p style={{ fontSize: 12, color: '#94a3b8' }}>Loading sub regions...</p>}
-                  {!!form.regionId && subRegionsError && (
-                    <p style={{ fontSize: 12, color: '#fca5a5' }}>
-                      Unable to load sub regions for selected region.
-                      <button type="button" onClick={() => refetchSubRegions()} style={{ marginLeft: 8, color: '#c7d2fe', textDecoration: 'underline', background: 'transparent', border: 'none', cursor: 'pointer' }}>
-                        Retry
-                      </button>
-                    </p>
-                  )}
-                </div>
-                <Field label="Town" name="town" value={form.town} onChange={upd} placeholder="Enter town name" />
+                <Field label="Town" name="town" value={form.town} onChange={upd} placeholder="Enter nearest major town" />
               </div>
             </div>
           )}
 
           {/* ── Step 1: Professional ────────────────────────────────────── */}
           {step === 1 && (
-            <div className="animate-fade-in">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
-                <div style={{ width: 3, height: 20, borderRadius: 2, background: 'linear-gradient(#6366f1,#8b5cf6)', flexShrink: 0 }} />
-                <h2 style={{ fontSize: 17, fontWeight: 700, color: '#f1f5f9' }}>Professional Details</h2>
+            <div className="animate-fade-in space-y-8">
+               <div className="flex items-center gap-3 pt-2 border-t border-slate-100 pt-5">
+                 <UserCircle className="w-6 h-6 text-slate-400" strokeWidth={1.5} />
+                 <h2 className="text-xl font-bold tracking-tight text-slate-900">Key Professional Contacts</h2>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div className="space-y-5">
                 {CONTACTS.map(({ role, prefix }) => (
-                  <div key={prefix} style={SECTION_CARD_STYLE}>
-                    <p style={{ fontSize: 12, fontWeight: 600, color: '#a5b4fc', marginBottom: 14, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                      {role}
-                    </p>
-                    <div className="grid grid-cols-1 sm:grid-cols-3" style={{ gap: 12 }}>
+                  <div key={prefix} className={`${cardCls} hover:border-slate-200 transition p-5`}>
+                    <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-100">
+                       <UserCircle className={`w-4 h-4 transition ${ (form as any)[`${prefix}Name`] ? 'text-[#C15B3E]' : 'text-slate-300'}`}/>
+                       <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider">{role}</h3>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
-                        <label style={LABEL_STYLE}>Name</label>
-                        <input type="text" name={`${prefix}Name`} value={(form as any)[`${prefix}Name`]} onChange={upd} placeholder="Full name" style={INPUT_STYLE}
-                          onFocus={(e) => { e.target.style.borderColor = 'rgba(99,102,241,0.5)'; e.target.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.15)'; e.target.style.background = 'rgba(255,255,255,0.08)'; }}
-                          onBlur={(e) => { e.target.style.borderColor = 'rgba(255,255,255,0.1)'; e.target.style.boxShadow = 'none'; e.target.style.background = 'rgba(255,255,255,0.06)'; }} />
+                        <label className={labelCls}>Name</label>
+                        <input type="text" name={`${prefix}Name`} value={(form as any)[`${prefix}Name`]} onChange={upd} placeholder="Full name" className={inputCls} />
                       </div>
                       <div>
-                        <label style={LABEL_STYLE}>Telephone</label>
-                        <input type="tel" name={`${prefix}Tp`} value={(form as any)[`${prefix}Tp`]} onChange={upd} placeholder="+94..." style={{
-                          ...INPUT_STYLE,
-                          border: fieldErrors[`${prefix}Tp`] ? '1.5px solid rgba(248, 113, 113, 0.7)' : INPUT_STYLE.border,
-                          boxShadow: fieldErrors[`${prefix}Tp`] ? '0 0 0 3px rgba(248, 113, 113, 0.18)' : 'none',
-                        }}
-                          onFocus={(e) => { e.target.style.borderColor = 'rgba(99,102,241,0.5)'; e.target.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.15)'; e.target.style.background = 'rgba(255,255,255,0.08)'; }}
-                          onBlur={(e) => { e.target.style.borderColor = 'rgba(255,255,255,0.1)'; e.target.style.boxShadow = 'none'; e.target.style.background = 'rgba(255,255,255,0.06)'; }} />
-                        {fieldErrors[`${prefix}Tp`] && <p style={{ fontSize: 12, color: '#fca5a5', marginTop: 6 }}>{fieldErrors[`${prefix}Tp`]}</p>}
+                        <label className={labelCls}>Telephone</label>
+                        <input type="tel" name={`${prefix}Tp`} value={(form as any)[`${prefix}Tp`]} onChange={upd} placeholder="+94..." 
+                          className={`${inputCls} ${fieldErrors[`${prefix}Tp`] ? 'border-red-300 focus:border-red-400 focus:ring-red-100' : ''}`} />
+                        {fieldErrors[`${prefix}Tp`] && <p className="text-xs text-red-600 mt-1.5 font-medium flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> {fieldErrors[`${prefix}Tp`]}</p>}
                       </div>
                       <div>
-                        <label style={LABEL_STYLE}>Email</label>
-                        <input type="email" name={`${prefix}Email`} value={(form as any)[`${prefix}Email`]} onChange={upd} placeholder="email@..." style={{
-                          ...INPUT_STYLE,
-                          border: fieldErrors[`${prefix}Email`] ? '1.5px solid rgba(248, 113, 113, 0.7)' : INPUT_STYLE.border,
-                          boxShadow: fieldErrors[`${prefix}Email`] ? '0 0 0 3px rgba(248, 113, 113, 0.18)' : 'none',
-                        }}
-                          onFocus={(e) => { e.target.style.borderColor = 'rgba(99,102,241,0.5)'; e.target.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.15)'; e.target.style.background = 'rgba(255,255,255,0.08)'; }}
-                          onBlur={(e) => { e.target.style.borderColor = 'rgba(255,255,255,0.1)'; e.target.style.boxShadow = 'none'; e.target.style.background = 'rgba(255,255,255,0.06)'; }} />
-                        {fieldErrors[`${prefix}Email`] && <p style={{ fontSize: 12, color: '#fca5a5', marginTop: 6 }}>{fieldErrors[`${prefix}Email`]}</p>}
+                        <label className={labelCls}>Email</label>
+                        <input type="email" name={`${prefix}Email`} value={(form as any)[`${prefix}Email`]} onChange={upd} placeholder="email@..." 
+                          className={`${inputCls} ${fieldErrors[`${prefix}Email`] ? 'border-red-300 focus:border-red-400 focus:ring-red-100' : ''}`} />
+                        {fieldErrors[`${prefix}Email`] && <p className="text-xs text-red-600 mt-1.5 font-medium flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> {fieldErrors[`${prefix}Email`]}</p>}
                       </div>
                     </div>
                   </div>
@@ -736,23 +562,20 @@ export default function CustomerRegistration() {
             </div>
           )}
 
-          {/* ── Step 2: Documents ────────────────────────────────────────── */}
+          {/* ── Step 2: Documents (Compact Layout) ─────────────────────────────────── */}
           {step === 2 && (
-            <div className="animate-fade-in">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
-                <div style={{ width: 3, height: 20, borderRadius: 2, background: 'linear-gradient(#6366f1,#8b5cf6)', flexShrink: 0 }} />
-                <h2 style={{ fontSize: 17, fontWeight: 700, color: '#f1f5f9' }}>Required Documents</h2>
+            <div className="animate-fade-in space-y-7">
+               <div className="flex items-center gap-3 pt-2 border-t border-slate-100 pt-5">
+                 <FileUp className="w-6 h-6 text-slate-400" strokeWidth={1.5} />
+                 <h2 className="text-xl font-bold tracking-tight text-slate-900">Verification Documents</h2>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-                <FileUpload label="Business Registration Document" name="businessReg" onChange={onFileSet} required error={fieldErrors.businessReg} />
-                <FileUpload label="Document to Prove Business Address" name="businessAddress" onChange={onFileSet} />
+              <p className="text-sm text-slate-600">Please upload clear copies of the following documents to verify your business. Max size 10MB per file.</p>
+              
+              <div className="flex flex-col gap-5">
+                <FileUpload label="Business Registration (BR) Document" name="businessReg" onChange={onFileSet} required error={fieldErrors.businessReg} />
+                <FileUpload label="Document to Prove Operating Address" name="businessAddress" onChange={onFileSet} />
                 {customerType === 'tax' && (
-                  <div style={{ position: 'relative' }}>
-                    <div style={{ position: 'absolute', inset: -1, borderRadius: 16, background: 'linear-gradient(135deg, rgba(251,191,36,0.3), rgba(99,102,241,0.3))', filter: 'blur(4px)' }} />
-                    <div style={{ position: 'relative' }}>
-                      <FileUpload label="VAT Registration Document" name="vatDocument" onChange={onFileSet} required error={fieldErrors.vatDocument} />
-                    </div>
-                  </div>
+                  <FileUpload label="VAT Registration Document (Required for Tax Customers)" name="vatDocument" onChange={onFileSet} required error={fieldErrors.vatDocument} />
                 )}
               </div>
             </div>
@@ -760,55 +583,67 @@ export default function CustomerRegistration() {
 
           {/* ── Step 3: Review ───────────────────────────────────────────── */}
           {step === 3 && (
-            <div className="animate-fade-in">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
-                <div style={{ width: 3, height: 20, borderRadius: 2, background: 'linear-gradient(#6366f1,#8b5cf6)', flexShrink: 0 }} />
-                <h2 style={{ fontSize: 17, fontWeight: 700, color: '#f1f5f9' }}>Review &amp; Confirm</h2>
+            <div className="animate-fade-in space-y-8">
+               <div className="flex items-center gap-3 pt-2 border-t border-slate-100 pt-5">
+                 <Check className="w-6 h-6 text-slate-400" strokeWidth={1.5} />
+                 <h2 className="text-xl font-bold tracking-tight text-slate-900">Review & Confirmation</h2>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                <div style={SECTION_CARD_STYLE}>
-                  <p style={{ fontSize: 12, fontWeight: 600, color: '#a5b4fc', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 14 }}>General Information</p>
+
+              <div className="space-y-5">
+                <div className={`${cardCls} p-5`}>
+                   <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-100">
+                     <Building2 className="w-4 h-4 text-[#C15B3E]"/>
+                     <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider">General Information</h3>
+                   </div>
                   {[
-                    ['Customer Type', customerType === 'tax' ? 'Tax Customer' : 'Non-Tax Customer'],
-                    ['Customer Name', form.customerName], ['Registered Address', form.registeredAddress],
-                    ['Business Name', form.businessName], ['Telephone', form.telephone],
-                    ['Email', form.email], ['Bank & Branch', form.bankBranch],
+                    ['Customer Type', customerType === 'tax' ? '🧾 Tax Customer' : '🏪 Non-Tax Customer'],
+                    ['Company/Customer Name', form.customerName], ['Registered Address', form.registeredAddress], ['Incorporate Date', form.incorporateDate],
+                    ['Business/Shop Name', form.businessName], ['Telephone/Hotline', form.telephone], ['Business Location Address', form.businessLocation],
+                    ['operating Email', form.email], ['Bank & Branch', form.bankBranch],
+                    ['Region', regions?.find((r:any)=>r.id===form.regionId)?.name],
+                    ['Sub Region', subRegions?.find((s:any)=>s.id===form.subRegionId)?.name],
+                    ['Town', form.town],
                   ].filter(([, v]) => v).map(([k, v]) => (
-                    <div key={k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                      <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', flexShrink: 0, minWidth: 140 }}>{k}</span>
-                      <span style={{ fontSize: 13, color: '#cbd5e1', textAlign: 'right', wordBreak: 'break-word' }}>{v}</span>
+                    <div key={k} className="flex flex-col sm:flex-row sm:justify-between items-start gap-1 sm:gap-4 py-2.5 border-b border-slate-50 last:border-none">
+                      <span className="text-xs text-slate-500 font-medium">{k}</span>
+                      <span className="text-sm text-slate-900 font-medium sm:text-right break-words">{v}</span>
                     </div>
                   ))}
                 </div>
 
-                <div style={SECTION_CARD_STYLE}>
-                  <p style={{ fontSize: 12, fontWeight: 600, color: '#a5b4fc', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 14 }}>Contact Persons</p>
+                <div className={`${cardCls} p-5`}>
+                   <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-100">
+                     <UserCircle className="w-4 h-4 text-[#C15B3E]"/>
+                     <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider">Contact Persons</h3>
+                   </div>
                   {CONTACTS.filter(({ prefix }) => (form as any)[`${prefix}Name`]).length === 0 ? (
-                    <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.2)' }}>No contacts added</p>
+                    <p className="text-sm text-slate-400 text-center py-2">No key contacts added</p>
                   ) : CONTACTS.filter(({ prefix }) => (form as any)[`${prefix}Name`]).map(({ role, prefix }) => (
-                    <div key={prefix} style={{ paddingBottom: 10, marginBottom: 10, borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                      <p style={{ fontSize: 11, color: 'rgba(165,180,252,0.6)', fontWeight: 600, marginBottom: 4 }}>{role}</p>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 16px' }}>
-                        <span style={{ fontSize: 13, color: '#cbd5e1' }}>{(form as any)[`${prefix}Name`]}</span>
-                        {(form as any)[`${prefix}Tp`] && <span style={{ fontSize: 13, color: '#64748b' }}>{(form as any)[`${prefix}Tp`]}</span>}
-                        {(form as any)[`${prefix}Email`] && <span style={{ fontSize: 13, color: '#64748b', wordBreak: 'break-all' }}>{(form as any)[`${prefix}Email`]}</span>}
+                    <div key={prefix} className="pb-3 mb-3 border-b border-slate-50 last:border-none last:pb-0 last:mb-0">
+                      <p className="text-[11px] text-slate-500 font-bold uppercase tracking-wider mb-1.5">{role}</p>
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm">
+                        <span className="font-semibold text-slate-900">{(form as any)[`${prefix}Name`]}</span>
+                        {(form as any)[`${prefix}Tp`] && <span className="text-slate-600 flex items-center gap-1.5"><Phone className="w-3.5 h-3.5 text-slate-400"/> {(form as any)[`${prefix}Tp`]}</span>}
+                        {(form as any)[`${prefix}Email`] && <span className="text-slate-600 flex items-center gap-1.5 break-all"><Mail className="w-3.5 h-3.5 text-slate-400"/> {(form as any)[`${prefix}Email`]}</span>}
                       </div>
                     </div>
                   ))}
                 </div>
 
-                <div style={SECTION_CARD_STYLE}>
-                  <p style={{ fontSize: 12, fontWeight: 600, color: '#a5b4fc', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 14 }}>Uploaded Documents</p>
+                <div className={`${cardCls} p-5`}>
+                   <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-100">
+                     <FileUp className="w-4 h-4 text-[#C15B3E]"/>
+                     <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider">Verification Documents</h3>
+                   </div>
                   {Object.keys(files).length === 0 ? (
-                    <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.2)' }}>No documents uploaded</p>
+                    <p className="text-sm text-slate-400 text-center py-2">No documents uploaded</p>
                   ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div className="space-y-2.5">
                       {Object.entries(files).map(([key, f]) => f ? (
-                        <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <svg style={{ width: 15, height: 15, color: '#818cf8', flexShrink: 0 }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                          </svg>
-                          <span style={{ fontSize: 13, color: '#94a3b8', wordBreak: 'break-all' }}>{f.name}</span>
+                        <div key={key} className="flex items-center gap-3 bg-slate-50 border border-slate-100 p-2.5 rounded-lg shadow-inner">
+                           <FileUp className="w-4 h-4 text-[#C15B3E] flex-shrink-0" />
+                          <span className="text-sm text-slate-800 font-medium truncate">{f.name}</span>
+                          <Check className="w-4 h-4 text-emerald-500 ml-auto flex-shrink-0" />
                         </div>
                       ) : null)}
                     </div>
@@ -818,131 +653,81 @@ export default function CustomerRegistration() {
                 <div
                   onClick={() => {
                     setConfirmed(c => !c);
-                    setFieldErrors((prev) => {
-                      if (!prev.confirmed) return prev;
-                      const next = { ...prev };
-                      delete next.confirmed;
-                      return next;
-                    });
+                    setFieldErrors(prev => { const n = { ...prev }; delete n.confirmed; return n; });
                   }}
-                  style={{
-                    display: 'flex', alignItems: 'flex-start', gap: 12, cursor: 'pointer',
-                    padding: '14px 16px', borderRadius: 14, border: '1.5px solid',
-                    borderColor: fieldErrors.confirmed ? 'rgba(248,113,113,0.8)' : confirmed ? 'rgba(99,102,241,0.4)' : 'rgba(255,255,255,0.08)',
-                    background: confirmed ? 'rgba(99,102,241,0.08)' : 'rgba(255,255,255,0.03)',
-                    transition: 'all 0.2s',
-                  }}
+                  className={`mt-6 flex items-start gap-3.5 rounded-xl border-2 p-4 cursor-pointer transition ${
+                    fieldErrors.confirmed ? 'border-red-300 bg-red-50' 
+                    : confirmed ? `border-[#C15B3E] bg-[#C15B3E]/5 shadow-inner` 
+                    : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
+                  }`}
+                  style={{ borderColor: confirmed && !fieldErrors.confirmed ? brandPrimary : '' }}
                 >
-                  <div style={{
-                    width: 20, height: 20, borderRadius: 6, flexShrink: 0, marginTop: 1,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    border: '2px solid',
-                    borderColor: confirmed ? '#6366f1' : 'rgba(255,255,255,0.25)',
-                    background: confirmed ? 'linear-gradient(135deg,#6366f1,#8b5cf6)' : 'transparent',
-                    transition: 'all 0.2s',
-                  }}>
-                    {confirmed && (
-                      <svg style={{ width: 11, height: 11, color: 'white' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3.5} d="M5 13l4 4L19 7" />
-                      </svg>
-                    )}
+                  <div className={`w-5 h-5 rounded flex items-center justify-center transition border-2 mt-0.5 flex-shrink-0 ${
+                    confirmed ? 'text-white border-none' : 'border-slate-300 bg-white'
+                  }`} style={{ background: confirmed ? brandPrimary : '' }}>
+                    {confirmed && <Check className="w-3.5 h-3.5" strokeWidth={3}/>}
                   </div>
-                  <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)', lineHeight: 1.6, margin: 0 }}>
-                    I/We confirm the details given above are <strong style={{ color: '#cbd5e1' }}>true and correct</strong>. I authorize Janasiri Distributors (PVT) Ltd to process this registration.
+                  <p className={`text-sm leading-relaxed ${confirmed ? 'text-slate-900 font-medium' : 'text-slate-600'}`}>
+                    I/We confirm that all information and documents provided in this application are <strong className="font-semibold text-slate-900">true and correct</strong>. I authorize <strong className="font-medium text-slate-800">Janasiri Distributors (PVT) Ltd</strong> to verify and process my registration request.
                   </p>
                 </div>
-                {fieldErrors.confirmed && <p style={{ fontSize: 12, color: '#fca5a5', marginTop: -4 }}>{fieldErrors.confirmed}</p>}
-
-                {error && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 12, padding: '12px 16px', color: '#fca5a5', fontSize: 13 }}>
-                    <svg style={{ width: 16, height: 16, flexShrink: 0 }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    {error}
-                  </div>
-                )}
+                {fieldErrors.confirmed && <p className="text-xs text-red-600 mt-1.5 font-medium flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> {fieldErrors.confirmed}</p>}
               </div>
             </div>
           )}
 
           {step !== 3 && error && (
-            <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 12, padding: '12px 16px', color: '#fca5a5', fontSize: 13 }}>
-              <svg style={{ width: 16, height: 16, flexShrink: 0 }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
+            <div className="mt-6 flex items-center gap-3 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-sm font-medium text-red-800 animate-scale-in">
+              <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0" />
               {error}
             </div>
           )}
 
           {/* ── Navigation bar ─────────────────────────────────────────────── */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 28, paddingTop: 20, borderTop: '1px solid rgba(255,255,255,0.08)', gap: 10 }}>
+          <div className="flex items-center justify-between mt-10 pt-6 border-t border-slate-100 gap-3">
             <button
               type="button" onClick={goBack} disabled={step === 0}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6, padding: '11px 20px', borderRadius: 12, fontSize: 14, fontWeight: 500,
-                background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
-                color: step === 0 ? 'rgba(255,255,255,0.2)' : '#94a3b8',
-                cursor: step === 0 ? 'not-allowed' : 'pointer', transition: 'all 0.2s',
-              }}
+              className={`flex items-center gap-1.5 px-5 py-2.5 rounded-lg text-sm font-medium transition active:scale-95 ${
+                step === 0 ? 'bg-white text-slate-300 border border-slate-200 cursor-not-allowed' 
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200 active:bg-slate-300'
+              }`}
             >
-              <svg style={{ width: 16, height: 16 }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
+              <ChevronLeft className="w-4 h-4" />
               Back
             </button>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div className="hidden sm:flex items-center gap-2">
               {STEPS.map((_, i) => (
-                <div key={i} style={{
-                  height: 6, borderRadius: 3, transition: 'all 0.3s',
-                  width: i === step ? 22 : 6,
-                  background: i === step ? 'linear-gradient(90deg,#6366f1,#8b5cf6)' : i < step ? 'rgba(99,102,241,0.45)' : 'rgba(255,255,255,0.12)',
-                }} />
+                <div key={i} className={`h-1.5 rounded-full transition-all duration-300 ${
+                  i === step ? 'w-6' : 'w-2'
+                }`} style={{ backgroundColor: i <= step ? brandPrimary : '#e2e8f0' }} />
               ))}
             </div>
 
             {step < STEPS.length - 1 ? (
               <button
                 type="button" onClick={goNext}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 6, padding: '11px 22px', borderRadius: 12, fontSize: 14, fontWeight: 600,
-                  background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                  color: 'white',
-                  border: 'none', cursor: 'pointer', transition: 'all 0.2s',
-                  boxShadow: '0 4px 20px rgba(99,102,241,0.35)',
-                }}
+                className="flex items-center gap-1.5 px-6 py-2.5 rounded-lg text-sm font-semibold text-white transition hover:shadow-md hover:-translate-y-0.5 active:scale-95"
+                style={{ backgroundColor: brandPrimary }}
               >
                 Next
-                <svg style={{ width: 16, height: 16 }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
-                </svg>
+                <ChevronRight className="w-4 h-4" strokeWidth={2.5}/>
               </button>
             ) : (
               <button
                 type="button" onClick={handleSubmit} disabled={submitting}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 6, padding: '11px 22px', borderRadius: 12, fontSize: 14, fontWeight: 600,
-                  background: submitting ? 'rgba(255,255,255,0.08)' : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                  color: submitting ? 'rgba(255,255,255,0.2)' : 'white',
-                  border: 'none', cursor: submitting ? 'not-allowed' : 'pointer', transition: 'all 0.2s',
-                  boxShadow: submitting ? 'none' : '0 4px 20px rgba(99,102,241,0.35)',
-                  whiteSpace: 'nowrap',
-                }}
+                className="flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold text-white transition hover:shadow-md hover:-translate-y-0.5 disabled:opacity-60 disabled:cursor-not-allowed"
+                style={{ backgroundColor: brandPrimary }}
               >
                 {submitting ? (
                   <>
-                    <svg style={{ width: 16, height: 16 }} className="animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path style={{ opacity: 0.75 }} fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-                    </svg>
+                    <Loader2 className="w-4 h-4 animate-spin" />
                     Submitting…
                   </>
                 ) : (
                   <>
-                    Submit Registration
-                    <svg style={{ width: 16, height: 16 }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                    </svg>
+                    Submit
+                    <Check className="w-4 h-4" strokeWidth={3} />
                   </>
                 )}
               </button>
@@ -950,19 +735,21 @@ export default function CustomerRegistration() {
           </div>
         </div>
 
-        {/* Footer */}
-        <div style={{ textAlign: 'center', marginTop: 24, display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.15)', lineHeight: 1.7 }}>
-            No 205 Wattarantenna Passage, Kandy, Sri Lanka · Hotline: 0777-675322 · janasiridistributors@yahoo.com
-          </p>
-          <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.2)' }}>
-            Already registered?{' '}
-            <button onClick={() => navigate('/login')} style={{ color: '#818cf8', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 500, padding: 0 }}>
-              Sign in here
-            </button>
-          </p>
+        <div className="text-center mt-8 space-y-1.5 text-[11px] text-slate-400">
+           <p>Reg Address: No 205 Wattarantenna Passage, Kandy, Sri Lanka · TP / Hotline: 0777-675322 · VAT: 114608394-7000</p>
+           <p>&copy; {new Date().getFullYear()} Janasiri Distributors (Pvt) Ltd. All rights reserved.</p>
+           <p className="pt-2">Already have an account? <button onClick={() => navigate('/login')} className="font-semibold text-[#C15B3E] hover:underline">Sign in here</button></p>
         </div>
       </div>
     </div>
   );
+}
+
+function Loader2({ className }: { className?: string }) {
+    return (
+        <svg className={className} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+    )
 }

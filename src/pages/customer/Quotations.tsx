@@ -1,16 +1,16 @@
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { customerGetQuotations, customerConvertQuotation, customerCancelQuotation } from '../../services/api/quotationApi';
-import { formatCurrency, formatRelative } from '../../utils/formatters';
+import { customersApi } from '../../services/api/customersApi';
+import { formatCurrency, formatDate, formatRelative } from '../../utils/formatters';
 import { downloadQuotationPdf } from '../../utils/quotationPdf';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
-import PageHeader from '../../components/common/PageHeader';
 import MobileTileList from '../../components/common/MobileTileList';
 import StatusBadge from '../../components/common/StatusBadge';
 import EmptyState from '../../components/common/EmptyState';
 import BottomSheet from '../../components/common/BottomSheet';
-import { FileText, Plus, Loader2, ShoppingCart, ArrowRight, Download } from 'lucide-react';
+import { FileText, Plus, Loader2, ShoppingCart, ArrowRight, Download, Search, X, ChevronRight, ClipboardList, RefreshCcw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import type { Quotation, QuotationStatus } from '../../types/quotation.types';
 
@@ -27,12 +27,25 @@ export default function CustomerQuotations() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const desktop = useIsDesktop();
+  
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState('');
-  const [convertQuotation, setConvertQuotation] = useState<Quotation | null>(null);
+  const [search, setSearch] = useState('');
+  const [expandedQuotationId, setExpandedQuotationId] = useState<string | null>(null);
   const [selectedQuotation, setSelectedQuotation] = useState<Quotation | null>(null);
+  const [convertQuotation, setConvertQuotation] = useState<Quotation | null>(null);
+  
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [deliveryNotes, setDeliveryNotes] = useState('');
+
+  const { data: customerProfile } = useQuery({
+    queryKey: ['customer-profile-for-quotation-tax-mode'],
+    queryFn: () => customersApi.customerGetProfile().then((r): any => r.data.data),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const isTaxCustomer =
+    (customerProfile?.customerType || '').toLowerCase().replace(/[-\s]/g, '') === 'tax';
 
   const { data, isLoading } = useQuery({
     queryKey: ['customer-quotations', page, statusFilter],
@@ -46,8 +59,10 @@ export default function CustomerQuotations() {
         deliveryNotes: deliveryNotes || undefined,
       }),
     onSuccess: () => {
-      toast.success('Quotation converted to order!');
+      toast.success('Quotation converted to order successfully!');
       setConvertQuotation(null);
+      setDeliveryAddress('');
+      setDeliveryNotes('');
       queryClient.invalidateQueries({ queryKey: ['customer-quotations'] });
       queryClient.invalidateQueries({ queryKey: ['customer-orders'] });
     },
@@ -57,15 +72,24 @@ export default function CustomerQuotations() {
   const cancelMut = useMutation({
     mutationFn: ({ id }: { id: string }) => customerCancelQuotation(id, 'Cancelled by customer'),
     onSuccess: () => {
-      toast.success('Quotation cancelled');
+      toast.success('Quotation cancelled successfully');
       queryClient.invalidateQueries({ queryKey: ['customer-quotations'] });
       setSelectedQuotation(null);
+      setExpandedQuotationId(null);
     },
     onError: () => toast.error('Failed to cancel quotation'),
   });
 
   const quotations = data?.items || [];
   const totalPages = data ? Math.ceil(data.totalCount / data.pageSize) : 0;
+
+  const filteredQuotations = useMemo(() => {
+    return quotations.filter((q) => {
+      if (!search.trim()) return true;
+      const term = search.toLowerCase();
+      return q.quotationNumber.toLowerCase().includes(term);
+    });
+  }, [quotations, search]);
 
   useEffect(() => {
     if (!selectedQuotation) return;
@@ -80,205 +104,295 @@ export default function CustomerQuotations() {
   }, [quotations, convertQuotation?.id]);
 
   const handleRowClick = (q: Quotation) => {
-    setSelectedQuotation((prev) => (prev?.id === q.id ? null : q));
+    if (!desktop) {
+      setSelectedQuotation(q);
+      return;
+    }
+    setExpandedQuotationId((prev) => (prev === q.id ? null : q.id));
   };
 
-  return (
-    <div className="animate-fade-in">
-      <PageHeader
-        title="My Quotations"
-        subtitle={`${data?.totalCount || 0} quotations`}
-        actions={[{ label: 'Request Quote', icon: Plus, onClick: () => navigate('/shop/quotations/new') }]}
-      />
+  const handleCancelQuotation = (q: Quotation) => {
+    if(window.confirm('Are you sure you want to cancel this quotation?')) {
+      cancelMut.mutate({ id: q.id });
+    }
+  };
 
-      <div className="px-4 lg:px-6 pb-6 space-y-4">
-        {/* Status Filters */}
-        <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-          {STATUS_FILTERS.map((f) => (
-            <button
-              key={f.value}
-              onClick={() => {
-                setStatusFilter(f.value);
+  const hasActiveFilters = !!(statusFilter || search);
+
+  return (
+    <div className="animate-fade-in flex flex-col gap-6 pb-28 min-h-screen bg-slate-50 lg:bg-transparent lg:px-2">
+      
+      {/* Page Header (Matches Order Page) */}
+      <div className="bg-white lg:bg-transparent px-4 py-6 lg:p-0 border-b border-slate-200 lg:border-none">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">My Quotations</h1>
+            <p className="text-slate-500 text-sm mt-1">Manage, track and convert your quotation requests</p>
+          </div>
+          <button
+            onClick={() => navigate('/shop/quotations/new')}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-orange-600 text-white text-sm font-bold hover:bg-orange-700 active:scale-95 transition-all shadow-sm"
+          >
+            <Plus className="w-4 h-4" />
+            <span className="hidden sm:inline">Request Quote</span>
+            <span className="sm:hidden">New</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Filters Bar (Matches Order Page) */}
+      <div className="sticky top-14 md:top-16 z-20 px-4 lg:px-0">
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm px-4 py-3 flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 min-w-[200px] group">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-orange-500 transition-colors" />
+            <input
+              type="text"
+              placeholder="Search by quotation #..."
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
                 setPage(1);
               }}
-              className={`px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
-                statusFilter === f.value
-                  ? 'bg-orange-600 text-white shadow-md shadow-orange-500/20'
-                  : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
+              className="w-full pl-9 pr-8 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm placeholder-slate-400 focus:bg-white focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none transition-all"
+            />
+            {search && (
+              <button onClick={() => { setSearch(''); setPage(1); }} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
 
-        {/* Data */}
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <select
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setPage(1);
+              }}
+              className="flex-1 sm:flex-none px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 outline-none focus:ring-1 focus:ring-orange-500 focus:border-orange-500 transition cursor-pointer"
+            >
+              {STATUS_FILTERS.map((f) => (
+                <option key={f.label} value={f.value}>{f.label}</option>
+              ))}
+            </select>
+
+            {hasActiveFilters && (
+              <button
+                onClick={() => { setSearch(''); setStatusFilter(''); setPage(1); }}
+                className="flex items-center justify-center w-10 h-10 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700 transition"
+                title="Clear Filters"
+              >
+                <RefreshCcw className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="px-4 lg:px-0">
         {desktop ? (
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             {isLoading ? (
-              <div className="p-10 text-center text-slate-400 text-sm">Loading quotations</div>
-            ) : quotations.length === 0 ? (
-              <div className="p-12">
-                <EmptyState
-                  icon={FileText}
-                  title="No quotations yet"
-                  description="Request a quote to get started"
-                  action={{ label: 'Request Quote', onClick: () => navigate('/shop/quotations/new') }}
-                />
+              <div className="p-12 text-center flex flex-col items-center justify-center">
+                <Loader2 className="w-8 h-8 text-orange-500 animate-spin mb-3" />
+                <div className="text-slate-500 text-sm font-medium">Loading your quotations...</div>
+              </div>
+            ) : filteredQuotations.length === 0 ? (
+              <div className="p-16 text-center">
+                <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <FileText className="w-8 h-8 text-slate-300" />
+                </div>
+                <p className="text-slate-900 font-bold text-lg">No quotations found</p>
+                <p className="text-slate-500 text-sm mt-1">Try adjusting your search or request a new quote</p>
               </div>
             ) : (
-              <table className="w-full table-fixed">
-                <colgroup>
-                  <col className="w-[36%]" />
-                  <col className="w-[12%]" />
-                  <col className="w-[20%]" />
-                  <col className="w-[16%]" />
-                  <col className="w-[16%]" />
-                </colgroup>
+              <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50">
-                    <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Quotation #</th>
-                    <th className="px-3 py-3 text-center text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Items</th>
-                    <th className="px-4 py-3 text-right text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Total</th>
-                    <th className="px-4 py-3 text-center text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Status</th>
-                    <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Created</th>
+                  <tr className="bg-slate-50 border-b border-slate-200">
+                    <th className="px-4 py-4 w-8" />
+                    <th className="px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-widest">Quotation #</th>
+                    <th className="px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-widest">Date</th>
+                    <th className="px-4 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-widest">Total</th>
+                    <th className="px-4 py-4 text-center text-xs font-bold text-slate-500 uppercase tracking-widest">Items</th>
+                    <th className="px-4 py-4 text-center text-xs font-bold text-slate-500 uppercase tracking-widest">Status</th>
                   </tr>
                 </thead>
-                <tbody>
-                  {quotations.map((q) => (
+                <tbody className="divide-y divide-slate-100">
+                  {filteredQuotations.map((q) => (
                     <Fragment key={q.id}>
                       <tr
                         onClick={() => handleRowClick(q)}
-                        className={`border-b border-slate-50 cursor-pointer transition-colors ${
-                          selectedQuotation?.id === q.id ? 'bg-orange-50/60 border-orange-100' : 'hover:bg-slate-50/70'
+                        className={`cursor-pointer transition-colors ${
+                          expandedQuotationId === q.id ? 'bg-slate-50/80' : 'bg-white hover:bg-slate-50/50'
                         }`}
                       >
-                        <td className="px-4 py-3.5 font-semibold text-slate-900 truncate" title={q.quotationNumber}>{q.quotationNumber}</td>
-                        <td className="px-3 py-3.5 text-center text-slate-600 font-medium">{q.items?.length || 0}</td>
-                        <td className="px-4 py-3.5 text-right font-semibold text-slate-900 tabular-nums">{formatCurrency(q.totalAmount)}</td>
-                        <td className="px-4 py-3.5 text-center"><StatusBadge status={q.status} /></td>
-                        <td className="px-4 py-3.5 text-xs text-slate-500 whitespace-nowrap">{formatRelative(q.createdAt)}</td>
+                        <td className="px-3 py-4 w-8 text-center">
+                          <ChevronRight className={`w-4 h-4 text-slate-400 inline-block transition-transform duration-200 ${expandedQuotationId === q.id ? 'rotate-90 text-orange-600' : ''}`} />
+                        </td>
+                        <td className="px-4 py-4">
+                          <span className="font-bold text-slate-900 text-sm">{q.quotationNumber}</span>
+                        </td>
+                        <td className="px-4 py-4 text-sm font-medium text-slate-500 whitespace-nowrap">{formatDate(q.createdAt)}</td>
+                        <td className="px-4 py-4 text-right text-sm font-bold text-slate-900">{formatCurrency(q.totalAmount)}</td>
+                        <td className="px-4 py-4 text-center text-sm font-medium text-slate-500">{q.items?.length || 0}</td>
+                        <td className="px-4 py-4 text-center"><StatusBadge status={q.status} /></td>
                       </tr>
 
-                      {selectedQuotation?.id === q.id && (
-                        <tr className="border-b border-orange-100">
-                          <td colSpan={5} className="p-0">
-                            <div className="bg-gradient-to-b from-orange-50/80 to-slate-50/20 px-6 py-4" style={{ animation: 'fadeIn 0.18s ease-out both' }}>
-                              {q.items?.length > 0 && (
-                                <div className="rounded-xl border border-slate-200 overflow-x-auto mb-4">
-                                  {(() => {
-                                    const withTax = (q.items || []).some((item: any) => (item.taxAmount || 0) > 0 || !!item.taxCode);
-                                    return (
-                                  <table className="w-full text-[11px] min-w-[980px]">
-                                    <thead>
-                                      <tr className="bg-slate-50">
-                                        <th className="px-3 py-2 text-left font-semibold text-slate-500 uppercase">Description</th>
-                                        <th className="px-3 py-2 text-left font-semibold text-slate-500 uppercase">Item</th>
-                                        <th className="px-3 py-2 text-center font-semibold text-slate-500 uppercase">Qty</th>
-                                        <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Rate</th>
-                                        <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">MRP</th>
-                                        <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Disc %</th>
-                                        <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Disc Amt</th>
-                                        {withTax && <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Tax</th>}
-                                        {withTax && <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Tax Amt</th>}
-                                        <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Amount</th>
-                                        <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Request Price</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                      {q.items.map((item: any) => {
-                                        const rate = item.unitPrice || 0;
-                                        const qty = item.quantity || 0;
-                                        const discPct = item.discountPercent || 0;
-                                        const discAmt = (rate * qty * discPct) / 100;
-                                        const taxAmt = item.taxAmount || 0;
-                                        const amount = item.lineTotal ?? ((rate * qty) - discAmt + taxAmt);
-                                        return (
-                                          <tr key={item.id || item.productId}>
-                                            <td className="px-3 py-2.5 text-slate-800 max-w-[220px] truncate" title={item.productName || '-'}>{item.productName || '-'}</td>
-                                            <td className="px-3 py-2.5 text-slate-600">{item.productSKU || '-'}</td>
-                                            <td className="px-3 py-2.5 text-center text-slate-600">{qty}</td>
-                                            <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(rate)}</td>
-                                            <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(item.mrp ?? rate)}</td>
-                                            <td className="px-3 py-2.5 text-right text-slate-700">{discPct}</td>
-                                            <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(discAmt)}</td>
-                                            {withTax && <td className="px-3 py-2.5 text-right text-slate-700">{item.taxCode || '-'}</td>}
-                                            {withTax && <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(taxAmt)}</td>}
-                                            <td className="px-3 py-2.5 text-right font-semibold text-slate-900">{formatCurrency(amount)}</td>
-                                            <td className="px-3 py-2.5 text-right text-slate-700">{item.expectedPrice != null ? formatCurrency(item.expectedPrice) : '-'}</td>
-                                          </tr>
-                                        );
-                                      })}
-                                    </tbody>
-                                  </table>
-                                    );
-                                  })()}
+                      {expandedQuotationId === q.id && (
+                        <tr className="bg-slate-50/50 border-b-2 border-slate-100">
+                          <td colSpan={6} className="p-0">
+                            <div className="px-8 py-6 animate-fade-in">
+                              <div className="flex items-center justify-between mb-5 flex-wrap gap-4">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 bg-white rounded-xl shadow-sm border border-slate-200 flex items-center justify-center">
+                                    <FileText className="w-5 h-5 text-slate-500" />
+                                  </div>
+                                  <div>
+                                    <h3 className="font-bold text-slate-900">{q.quotationNumber} Details</h3>
+                                    <p className="text-xs font-medium text-slate-500">Requested on {formatDate(q.createdAt)}</p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <button
+                                    onClick={() => downloadQuotationPdf(q)}
+                                    className="px-4 py-2 bg-white text-slate-700 border border-slate-200 rounded-xl text-sm font-bold hover:bg-slate-50 active:scale-95 transition-all shadow-sm flex items-center gap-2"
+                                  >
+                                    <Download className="w-4 h-4 text-slate-400" /> Download PDF
+                                  </button>
+                                  
+                                  {q.status === 'Approved' && !q.convertedOrderId && (
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); setConvertQuotation(q); }}
+                                      className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 active:scale-95 transition-all shadow-sm flex items-center gap-2"
+                                    >
+                                      <ShoppingCart className="w-4 h-4" /> Convert to Order
+                                    </button>
+                                  )}
+
+                                  {(q.status === 'Submitted' || q.status === 'UnderReview') && (
+                                    <button
+                                      onClick={() => handleCancelQuotation(q)}
+                                      disabled={cancelMut.isPending}
+                                      className="px-4 py-2 bg-red-50 text-red-600 border border-red-100 rounded-xl text-sm font-bold hover:bg-red-100 active:scale-95 transition-all shadow-sm"
+                                    >
+                                      Cancel Quotation
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+
+                              {q.rejectionReason && (
+                                <div className="mb-4 bg-red-50 border border-red-100 rounded-xl p-4">
+                                  <p className="text-xs text-red-500 font-bold uppercase tracking-wider mb-1">Rejection Reason</p>
+                                  <p className="text-sm text-red-700 font-medium">{q.rejectionReason}</p>
                                 </div>
                               )}
 
                               {q.notes && (
-                                <div className="bg-slate-50 rounded-xl p-3 mb-3">
-                                  <p className="text-xs text-slate-400 font-medium mb-1">Notes</p>
-                                  <p className="text-sm text-slate-700">{q.notes}</p>
+                                <div className="mb-4 bg-white border border-slate-200 shadow-sm rounded-xl p-4">
+                                  <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">Notes</p>
+                                  <p className="text-sm text-slate-700 font-medium">{q.notes}</p>
                                 </div>
                               )}
 
-                              {q.rejectionReason && (
-                                <div className="bg-red-50 rounded-xl p-3 mb-3">
-                                  <p className="text-xs text-red-400 font-medium mb-1">Rejection Reason</p>
-                                  <p className="text-sm text-red-600">{q.rejectionReason}</p>
-                                </div>
-                              )}
+                              {q.items?.length ? (() => {
+                                let totalGross = 0;
+                                let totalDiscount = 0;
+                                let totalTax = 0;
 
-                              {q.status === 'Approved' && !q.convertedOrderId && (
-                                <div className="flex justify-end">
-                                  <div className="flex items-center gap-2">
-                                    <button
-                                      onClick={() => downloadQuotationPdf(q)}
-                                      className="px-4 py-2.5 border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-50 transition flex items-center gap-2"
-                                    >
-                                      <Download className="w-4 h-4" /> Download PDF
-                                    </button>
-                                    <button
-                                      onClick={() => setConvertQuotation(q)}
-                                      className="px-4 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 transition flex items-center gap-2"
-                                    >
-                                      <ShoppingCart className="w-4 h-4" /> Convert to Order
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
+                                const itemRows = q.items.map((item: any, i: number) => {
+                                  const rate = item.unitPrice || 0;
+                                  const qty = item.quantity || 0;
+                                  const discPct = item.discountPercent || 0;
+                                  const rowGrossBase = rate * qty;
+                                  const rowDiscount = item.discountAmount || ((rowGrossBase * discPct) / 100);
+                                  const rowTax = item.taxAmount || 0;
 
-                              {(q.status === 'Submitted' || q.status === 'UnderReview') && (
-                                <div className="flex justify-end">
-                                  <div className="flex items-center gap-2">
-                                    <button
-                                      onClick={() => downloadQuotationPdf(q)}
-                                      className="px-4 py-2.5 border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-50 transition flex items-center gap-2"
-                                    >
-                                      <Download className="w-4 h-4" /> Download PDF
-                                    </button>
-                                    <button
-                                      onClick={() => cancelMut.mutate({ id: q.id })}
-                                      disabled={cancelMut.isPending}
-                                      className="px-4 py-2.5 border border-red-200 text-red-600 rounded-xl text-sm font-semibold hover:bg-red-50 transition disabled:opacity-50"
-                                    >
-                                      Cancel Quotation
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
+                                  const rowGross = isTaxCustomer ? rowGrossBase : rowGrossBase + rowTax;
 
-                              {q.status !== 'Approved' && q.status !== 'Submitted' && q.status !== 'UnderReview' && (
-                                <div className="flex justify-end">
-                                  <button
-                                    onClick={() => downloadQuotationPdf(q)}
-                                    className="px-4 py-2.5 border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-50 transition flex items-center gap-2"
-                                  >
-                                    <Download className="w-4 h-4" /> Download PDF
-                                  </button>
-                                </div>
-                              )}
+                                  totalGross += rowGross;
+                                  totalDiscount += rowDiscount;
+                                  totalTax += isTaxCustomer ? rowTax : 0;
+
+                                  return (
+                                    <tr key={item.id || item.productId} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50 transition-colors">
+                                      <td className="px-4 py-3 text-center text-xs text-slate-400 font-medium">{i + 1}</td>
+                                      <td className="px-4 py-3 font-mono text-xs text-slate-600">{item.productSKU || '-'}</td>
+                                      <td className="px-4 py-3 font-bold text-slate-900 text-sm max-w-[200px] truncate" title={item.productName}>{item.productName}</td>
+                                      <td className="px-4 py-3 text-center font-medium text-slate-700">{qty}</td>
+                                      <td className="px-4 py-3 text-right font-medium text-slate-700">{formatCurrency(rate)}</td>
+                                      <td className="px-4 py-3 text-right font-medium text-slate-700">{discPct ? `${discPct}%` : '0.00'}</td>
+                                      <td className="px-4 py-3 text-right font-medium text-emerald-600">{formatCurrency(rowDiscount)}</td>
+                                      {isTaxCustomer && (
+                                        <>
+                                          <td className="px-4 py-3 text-center font-bold text-[10px] text-slate-500">{item.taxCode || 'V18'}</td>
+                                          <td className="px-4 py-3 text-right font-medium text-slate-600">{formatCurrency(rowTax)}</td>
+                                        </>
+                                      )}
+                                      <td className="px-4 py-3 text-right font-bold text-slate-900">{formatCurrency(rowGross)}</td>
+                                      <td className="px-4 py-3 text-right font-bold text-orange-600">{item.expectedPrice != null ? formatCurrency(item.expectedPrice) : '-'}</td>
+                                    </tr>
+                                  );
+                                });
+
+                                const finalAmount = isTaxCustomer 
+                                  ? totalGross - totalDiscount + totalTax 
+                                  : totalGross - totalDiscount;
+
+                                return (
+                                  <>
+                                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-x-auto mb-5">
+                                      <table className="w-full text-sm min-w-[900px]">
+                                        <thead>
+                                          <tr className="bg-slate-50 border-b border-slate-200">
+                                            <th className="px-4 py-2.5 text-center text-[10px] font-bold text-slate-500 uppercase tracking-widest">No</th>
+                                            <th className="px-4 py-2.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-widest">Item Code</th>
+                                            <th className="px-4 py-2.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-widest">Description</th>
+                                            <th className="px-4 py-2.5 text-center text-[10px] font-bold text-slate-500 uppercase tracking-widest">Qty</th>
+                                            <th className="px-4 py-2.5 text-right text-[10px] font-bold text-slate-500 uppercase tracking-widest">Rate</th>
+                                            <th className="px-4 py-2.5 text-right text-[10px] font-bold text-slate-500 uppercase tracking-widest">Disc %</th>
+                                            <th className="px-4 py-2.5 text-right text-[10px] font-bold text-slate-500 uppercase tracking-widest">Disc Amt</th>
+                                            {isTaxCustomer && (
+                                              <>
+                                                <th className="px-4 py-2.5 text-center text-[10px] font-bold text-slate-500 uppercase tracking-widest">Tax Code</th>
+                                                <th className="px-4 py-2.5 text-right text-[10px] font-bold text-slate-500 uppercase tracking-widest">Tax Amt</th>
+                                              </>
+                                            )}
+                                            <th className="px-4 py-2.5 text-right text-[10px] font-bold text-slate-500 uppercase tracking-widest">Gross Amount</th>
+                                            <th className="px-4 py-2.5 text-right text-[10px] font-bold text-slate-500 uppercase tracking-widest text-orange-600 bg-orange-50/50">Request Price</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {itemRows}
+                                        </tbody>
+                                      </table>
+                                    </div>
+
+                                    <div className="flex justify-end">
+                                      <div className="w-72 space-y-2 bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+                                        <div className="flex justify-between text-sm">
+                                          <span className="font-bold text-slate-500 uppercase tracking-wider text-xs">Total Gross</span>
+                                          <span className="font-bold text-slate-900">{formatCurrency(totalGross)}</span>
+                                        </div>
+                                        {isTaxCustomer && (
+                                          <div className="flex justify-between text-sm">
+                                            <span className="font-bold text-slate-500 uppercase tracking-wider text-xs">Total Tax</span>
+                                            <span className="font-bold text-slate-900">{formatCurrency(totalTax)}</span>
+                                          </div>
+                                        )}
+                                        <div className="flex justify-between text-sm pb-3 border-b border-slate-100">
+                                          <span className="font-bold text-slate-500 uppercase tracking-wider text-xs">Total Discount</span>
+                                          <span className="font-bold text-emerald-600">{formatCurrency(totalDiscount)}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center pt-2">
+                                          <span className="font-bold text-slate-800 uppercase tracking-wider text-sm">Total Value</span>
+                                          <span className="text-lg font-bold text-orange-600">{formatCurrency(finalAmount)}</span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </>
+                                );
+                              })() : null}
                             </div>
                           </td>
                         </tr>
@@ -290,68 +404,71 @@ export default function CustomerQuotations() {
             )}
 
             {data && totalPages > 1 && (
-              <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-between">
-                <span className="text-xs text-slate-500">{data.totalCount} total • page {data.page} of {totalPages}</span>
-                <div className="flex gap-1">
-                  <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1} className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none transition">Prev</button>
-                  <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none transition">Next</button>
+              <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{data.totalCount} Quotations • Page {data.page} of {totalPages}</span>
+                <div className="flex gap-2">
+                  <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1} className="px-4 py-2 bg-white rounded-lg border border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none transition shadow-sm">Prev</button>
+                  <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="px-4 py-2 bg-white rounded-lg border border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none transition shadow-sm">Next</button>
                 </div>
               </div>
             )}
           </div>
         ) : (
           <MobileTileList
-            data={quotations}
+            data={filteredQuotations}
             keyField="id"
             isLoading={isLoading}
             page={page}
             totalPages={totalPages}
             onPageChange={setPage}
             onTileClick={handleRowClick}
-            emptyState={
-              <EmptyState
-                icon={FileText}
-                title="No quotations yet"
-                description="Request a quote to get started"
-                action={{ label: 'Request Quote', onClick: () => navigate('/shop/quotations/new') }}
-              />
-            }
+            emptyState={<EmptyState icon={FileText} title="No quotations found" description="Try adjusting your filters" action={{ label: 'Request Quote', onClick: () => navigate('/shop/quotations/new') }} />}
             renderTile={(q) => (
-              <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-start gap-3 flex-1 min-w-0">
-                    <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center flex-shrink-0">
-                      <FileText className="w-5 h-5 text-orange-600" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="font-semibold text-slate-800 text-sm">{q.quotationNumber}</p>
-                      <p className="text-[11px] text-slate-400">{q.items?.length || 0} items</p>
-                      <p className="text-[10px] text-slate-300 mt-0.5">{formatRelative(q.createdAt)}</p>
-                    </div>
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    <p className="text-sm font-bold text-slate-800">{formatCurrency(q.totalAmount)}</p>
-                    <StatusBadge status={q.status} />
-                  </div>
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 relative overflow-hidden">
+                <div className="flex items-start justify-between mb-3">
+                  <span className="text-base font-bold text-slate-900">{q.quotationNumber}</span>
+                  <StatusBadge status={q.status} />
                 </div>
+                <div className="flex items-center justify-between mt-2">
+                  <span className="text-xs font-medium text-slate-500 flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-300"></span>
+                    {formatDate(q.createdAt)} • {q.items?.length || 0} items
+                  </span>
+                  <span className="text-sm font-bold text-slate-900">{formatCurrency(q.totalAmount)}</span>
+                </div>
+
                 {q.rejectionReason && (
-                  <div className="mt-2 bg-red-50 rounded-lg px-3 py-2">
-                    <p className="text-xs text-red-600">
-                      <span className="font-semibold">Rejected:</span> {q.rejectionReason}
+                  <div className="mt-3 bg-red-50 rounded-lg px-3 py-2 border border-red-100">
+                    <p className="text-[11px] text-red-600 font-medium">
+                      <span className="font-bold uppercase tracking-wider text-[10px]">Rejected:</span> {q.rejectionReason}
                     </p>
                   </div>
                 )}
-                {q.status === 'Approved' && !q.convertedOrderId && (
+                
+                <div className="mt-4 pt-4 border-t border-slate-100 flex items-center gap-2">
+                  {(q.status === 'Submitted' || q.status === 'UnderReview') && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleCancelQuotation(q); }}
+                      className="flex-1 py-2.5 bg-white border border-slate-200 text-red-600 rounded-xl text-xs font-bold hover:bg-red-50 transition shadow-sm"
+                    >
+                      Cancel Quote
+                    </button>
+                  )}
+                  {q.status === 'Approved' && !q.convertedOrderId && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setConvertQuotation(q); }}
+                      className="flex-1 py-2.5 bg-emerald-50 border border-emerald-100 text-emerald-700 rounded-xl text-xs font-bold hover:bg-emerald-100 transition shadow-sm flex items-center justify-center gap-1.5"
+                    >
+                      <ShoppingCart className="w-3.5 h-3.5" /> Convert
+                    </button>
+                  )}
                   <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setConvertQuotation(q);
-                    }}
-                    className="mt-3 w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-emerald-600 text-white text-xs font-semibold rounded-xl hover:bg-emerald-700 transition"
+                    onClick={(e) => { e.stopPropagation(); downloadQuotationPdf(q); }}
+                    className="flex-1 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-50 transition shadow-sm flex items-center justify-center gap-1.5"
                   >
-                    <ShoppingCart className="w-3.5 h-3.5" /> Convert to Order <ArrowRight className="w-3 h-3" />
+                    <Download className="w-3.5 h-3.5" /> PDF
                   </button>
-                )}
+                </div>
               </div>
             )}
           />
@@ -359,161 +476,196 @@ export default function CustomerQuotations() {
       </div>
 
       {/* Mobile Bottom Sheet — Quotation Detail */}
-      <BottomSheet open={!!selectedQuotation && !desktop} onClose={() => setSelectedQuotation(null)} title={selectedQuotation?.quotationNumber || 'Quotation'}>
-        {selectedQuotation && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <StatusBadge status={selectedQuotation.status} />
-              <span className="text-lg font-bold text-orange-600">{formatCurrency(selectedQuotation.totalAmount)}</span>
-            </div>
+      <BottomSheet open={!!selectedQuotation && !desktop} onClose={() => setSelectedQuotation(null)} title={selectedQuotation?.quotationNumber || 'Quotation Details'}>
+        {selectedQuotation && (() => {
+          let totalGross = 0;
+          let totalDiscount = 0;
+          let totalTax = 0;
 
-            <div>
-              <h3 className="font-semibold text-slate-900 text-sm mb-2">Items</h3>
-              <div className="rounded-xl border border-slate-200 overflow-x-auto">
-                <table className="w-full text-[11px] min-w-[980px]">
-                  <thead>
-                    <tr className="bg-slate-50">
-                      <th className="px-3 py-2 text-left font-semibold text-slate-500 uppercase">Description</th>
-                      <th className="px-3 py-2 text-left font-semibold text-slate-500 uppercase">Item</th>
-                      <th className="px-3 py-2 text-center font-semibold text-slate-500 uppercase">Qty</th>
-                      <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Rate</th>
-                      <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">MRP</th>
-                      <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Disc %</th>
-                      <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Disc Amt</th>
-                      <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Tax</th>
-                      <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Tax Amt</th>
-                      <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Amount</th>
-                      <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Request Price</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {selectedQuotation.items?.map((item: any) => {
-                      const rate = item.unitPrice || 0;
-                      const qty = item.quantity || 0;
-                      const discPct = item.discountPercent || 0;
-                      const discAmt = (rate * qty * discPct) / 100;
-                      const taxAmt = item.taxAmount || 0;
-                      const amount = item.lineTotal ?? ((rate * qty) - discAmt + taxAmt);
-                      return (
-                        <tr key={item.id || item.productId}>
-                          <td className="px-3 py-2.5 text-slate-800 max-w-[220px] truncate" title={item.productName || '-'}>{item.productName || '-'}</td>
-                          <td className="px-3 py-2.5 text-slate-600">{item.productSKU || '-'}</td>
-                          <td className="px-3 py-2.5 text-center text-slate-600">{qty}</td>
-                          <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(rate)}</td>
-                          <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(item.mrp ?? rate)}</td>
-                          <td className="px-3 py-2.5 text-right text-slate-700">{discPct}</td>
-                          <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(discAmt)}</td>
-                          <td className="px-3 py-2.5 text-right text-slate-700">{item.taxCode || '-'}</td>
-                          <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(taxAmt)}</td>
-                          <td className="px-3 py-2.5 text-right font-semibold text-slate-900">{formatCurrency(amount)}</td>
-                          <td className="px-3 py-2.5 text-right text-slate-700">{item.expectedPrice != null ? formatCurrency(item.expectedPrice) : '-'}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+          selectedQuotation.items?.forEach((item: any) => {
+            const rate = item.unitPrice || 0;
+            const qty = item.quantity || 0;
+            const discPct = item.discountPercent || 0;
+            const rowGrossBase = rate * qty;
+            const rowDiscount = item.discountAmount || ((rowGrossBase * discPct) / 100);
+            const rowTax = item.taxAmount || 0;
+            const rowGross = isTaxCustomer ? rowGrossBase : rowGrossBase + rowTax;
+
+            totalGross += rowGross;
+            totalDiscount += rowDiscount;
+            totalTax += isTaxCustomer ? rowTax : 0;
+          });
+
+          const finalAmount = isTaxCustomer ? totalGross - totalDiscount + totalTax : totalGross - totalDiscount;
+
+          return (
+            <div className="space-y-5 pb-6">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-slate-50 border border-slate-100 rounded-xl p-4">
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Requested Date</p>
+                  <p className="text-sm font-bold text-slate-900 mt-1">{formatDate(selectedQuotation.createdAt)}</p>
+                </div>
+                <div className="bg-slate-50 border border-slate-100 rounded-xl p-4">
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Status</p>
+                  <StatusBadge status={selectedQuotation.status} />
+                </div>
               </div>
-            </div>
 
-            {selectedQuotation.notes && (
-              <div className="bg-slate-50 rounded-xl p-3">
-                <p className="text-xs text-slate-400 font-medium mb-1">Notes</p>
-                <p className="text-sm text-slate-700">{selectedQuotation.notes}</p>
+              {selectedQuotation.rejectionReason && (
+                <div className="bg-red-50 border border-red-100 rounded-xl p-4">
+                  <p className="text-xs text-red-500 font-bold uppercase tracking-wider mb-1">Rejection Reason</p>
+                  <p className="text-sm text-red-700 font-medium">{selectedQuotation.rejectionReason}</p>
+                </div>
+              )}
+
+              {selectedQuotation.notes && (
+                <div className="bg-white border border-slate-200 shadow-sm rounded-xl p-4">
+                  <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">Notes</p>
+                  <p className="text-sm text-slate-700 font-medium">{selectedQuotation.notes}</p>
+                </div>
+              )}
+
+              <div>
+                <h3 className="font-bold text-slate-900 text-sm mb-3 px-1">Quotation Items</h3>
+                <div className="bg-white border border-slate-200 shadow-sm rounded-xl divide-y divide-slate-100 overflow-x-auto">
+                  <table className="w-full text-left text-sm min-w-[500px]">
+                    <thead className="bg-slate-50">
+                      <tr>
+                        <th className="px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-widest">Item</th>
+                        <th className="px-4 py-3 text-center text-xs font-bold text-slate-500 uppercase tracking-widest">Qty</th>
+                        <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-widest">Rate</th>
+                        <th className="px-4 py-3 text-right text-xs font-bold text-orange-600 uppercase tracking-widest bg-orange-50/50">Req. Price</th>
+                        <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-widest">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {selectedQuotation.items?.map((item: any) => {
+                        const rate = item.unitPrice || 0;
+                        const qty = item.quantity || 0;
+                        const rowTax = item.taxAmount || 0;
+                        const rowGrossBase = rate * qty;
+                        const rowGross = isTaxCustomer ? rowGrossBase : rowGrossBase + rowTax;
+
+                        return (
+                          <tr key={item.id}>
+                            <td className="px-4 py-3 font-bold text-slate-900 max-w-[200px] truncate">{item.productName}</td>
+                            <td className="px-4 py-3 text-center font-medium text-slate-700">{qty}</td>
+                            <td className="px-4 py-3 text-right font-medium text-slate-700">{formatCurrency(rate)}</td>
+                            <td className="px-4 py-3 text-right font-bold text-orange-600">{item.expectedPrice != null ? formatCurrency(item.expectedPrice) : '-'}</td>
+                            <td className="px-4 py-3 text-right font-bold text-slate-900">{formatCurrency(rowGross)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            )}
 
-            {selectedQuotation.rejectionReason && (
-              <div className="bg-red-50 rounded-xl p-3">
-                <p className="text-xs text-red-400 font-medium mb-1">Rejection Reason</p>
-                <p className="text-sm text-red-600">{selectedQuotation.rejectionReason}</p>
+              <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-3 shadow-sm">
+                <div className="flex justify-between text-sm">
+                  <span className="font-bold text-slate-500 uppercase tracking-wider text-xs">Total Gross</span>
+                  <span className="font-bold text-slate-900">{formatCurrency(totalGross)}</span>
+                </div>
+                {isTaxCustomer && (
+                  <div className="flex justify-between text-sm">
+                    <span className="font-bold text-slate-500 uppercase tracking-wider text-xs">Total Tax</span>
+                    <span className="font-bold text-slate-900">{formatCurrency(totalTax)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-sm pb-3 border-b border-slate-100">
+                  <span className="font-bold text-slate-500 uppercase tracking-wider text-xs">Total Discount</span>
+                  <span className="font-bold text-emerald-600">{formatCurrency(totalDiscount)}</span>
+                </div>
+                <div className="flex justify-between items-center pt-1">
+                  <span className="font-bold text-slate-800 uppercase tracking-wider text-sm">Total Value</span>
+                  <span className="text-xl font-bold text-orange-600">{formatCurrency(finalAmount)}</span>
+                </div>
               </div>
-            )}
 
-            {selectedQuotation.status === 'Approved' && !selectedQuotation.convertedOrderId && (
               <div className="flex gap-2">
                 <button
                   onClick={() => downloadQuotationPdf(selectedQuotation)}
-                  className="flex-1 py-3 border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-50 flex items-center justify-center gap-2 transition"
+                  className="flex-1 py-3.5 bg-white border border-slate-200 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-50 flex items-center justify-center gap-2 active:scale-[0.98] transition-all shadow-sm"
                 >
-                  <Download className="w-4 h-4" /> Download PDF
+                  <Download className="w-4 h-4 text-slate-400" /> Download PDF
                 </button>
-                <button
-                  onClick={() => {
-                    setConvertQuotation(selectedQuotation);
-                    setSelectedQuotation(null);
-                  }}
-                  className="flex-1 py-3 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 flex items-center justify-center gap-2 transition"
-                >
-                  <ShoppingCart className="w-4 h-4" /> Convert to Order
-                </button>
-              </div>
-            )}
+                
+                {selectedQuotation.status === 'Approved' && !selectedQuotation.convertedOrderId && (
+                  <button
+                    onClick={() => {
+                      setConvertQuotation(selectedQuotation);
+                      setSelectedQuotation(null);
+                    }}
+                    className="flex-1 py-3.5 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 flex items-center justify-center gap-2 active:scale-[0.98] transition-all shadow-sm"
+                  >
+                    <ShoppingCart className="w-4 h-4" /> Convert to Order
+                  </button>
+                )}
 
-            {(selectedQuotation.status === 'Submitted' || selectedQuotation.status === 'UnderReview') && (
-              <div className="flex gap-2">
-                <button
-                  onClick={() => downloadQuotationPdf(selectedQuotation)}
-                  className="flex-1 py-3 border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-50 flex items-center justify-center gap-2 transition"
-                >
-                  <Download className="w-4 h-4" /> Download PDF
-                </button>
-                <button
-                  onClick={() => cancelMut.mutate({ id: selectedQuotation.id })}
-                  disabled={cancelMut.isPending}
-                  className="flex-1 py-3 border border-red-200 text-red-600 rounded-xl text-sm font-semibold hover:bg-red-50 disabled:opacity-50 transition"
-                >
-                  Cancel Quotation
-                </button>
+                {(selectedQuotation.status === 'Submitted' || selectedQuotation.status === 'UnderReview') && (
+                  <button
+                    onClick={() => handleCancelQuotation(selectedQuotation)}
+                    disabled={cancelMut.isPending}
+                    className="flex-1 py-3.5 bg-white border border-red-200 text-red-600 rounded-xl text-sm font-bold hover:bg-red-50 disabled:opacity-50 active:scale-[0.98] transition-all shadow-sm"
+                  >
+                    Cancel Quotation
+                  </button>
+                )}
               </div>
-            )}
-
-            {selectedQuotation.status !== 'Approved' && selectedQuotation.status !== 'Submitted' && selectedQuotation.status !== 'UnderReview' && (
-              <button
-                onClick={() => downloadQuotationPdf(selectedQuotation)}
-                className="w-full py-3 border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-50 flex items-center justify-center gap-2 transition"
-              >
-                <Download className="w-4 h-4" /> Download PDF
-              </button>
-            )}
-          </div>
-        )}
+            </div>
+          );
+        })()}
       </BottomSheet>
 
       {/* Convert to Order Bottom Sheet / Modal */}
       <BottomSheet open={!!convertQuotation} onClose={() => setConvertQuotation(null)} title="Convert to Order">
         {convertQuotation && (
-          <div className="space-y-4">
-            <p className="text-sm text-slate-500">
-              {convertQuotation.quotationNumber} — {formatCurrency(convertQuotation.totalAmount)}
-            </p>
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">Delivery Address (optional)</label>
-              <input
-                type="text"
-                value={deliveryAddress}
-                onChange={(e) => setDeliveryAddress(e.target.value)}
-                className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400"
-              />
+          <div className="space-y-5">
+            <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 flex justify-between items-center">
+              <div>
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Quotation</p>
+                <p className="text-sm font-bold text-slate-900 mt-0.5">{convertQuotation.quotationNumber}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Total Amount</p>
+                <p className="text-sm font-bold text-orange-600 mt-0.5">{formatCurrency(convertQuotation.totalAmount)}</p>
+              </div>
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">Delivery Notes (optional)</label>
-              <textarea
-                value={deliveryNotes}
-                onChange={(e) => setDeliveryNotes(e.target.value)}
-                rows={2}
-                className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm outline-none resize-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400"
-              />
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">Delivery Address <span className="text-slate-400 normal-case font-medium">(optional)</span></label>
+                <input
+                  type="text"
+                  placeholder="Enter delivery address..."
+                  value={deliveryAddress}
+                  onChange={(e) => setDeliveryAddress(e.target.value)}
+                  className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-medium outline-none focus:ring-1 focus:ring-orange-500 focus:border-orange-500 transition-all shadow-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">Delivery Notes <span className="text-slate-400 normal-case font-medium">(optional)</span></label>
+                <textarea
+                  placeholder="Any special instructions..."
+                  value={deliveryNotes}
+                  onChange={(e) => setDeliveryNotes(e.target.value)}
+                  rows={2}
+                  className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-medium outline-none resize-none focus:ring-1 focus:ring-orange-500 focus:border-orange-500 transition-all shadow-sm"
+                />
+              </div>
             </div>
-            <div className="flex gap-2">
-              <button onClick={() => setConvertQuotation(null)} className="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 transition">
+
+            <div className="flex gap-2 pt-2">
+              <button onClick={() => setConvertQuotation(null)} className="flex-1 py-3.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 hover:bg-slate-50 active:scale-[0.98] transition-all shadow-sm">
                 Cancel
               </button>
               <button
                 onClick={() => convertMut.mutate({ id: convertQuotation.id })}
                 disabled={convertMut.isPending}
-                className="flex-1 px-4 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-semibold flex items-center justify-center gap-2 hover:bg-emerald-700 transition"
+                className="flex-[2] py-3.5 bg-emerald-600 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-emerald-700 disabled:opacity-60 active:scale-[0.98] transition-all shadow-sm"
               >
-                {convertMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShoppingCart className="w-4 h-4" />} Convert
+                {convertMut.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : <ShoppingCart className="w-4 h-4" />} 
+                Confirm Conversion
               </button>
             </div>
           </div>

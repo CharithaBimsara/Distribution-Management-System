@@ -1,9 +1,12 @@
 import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, Calendar, FileDown, MapPin, Package, User } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { Order } from '../../types/order.types';
 import { formatCurrency, formatDate, statusColor } from '../../utils/formatters';
 import { downloadPurchaseOrderPdf } from '../../utils/purchaseOrderPdf';
+import { getShopName } from '../../utils/shopName';
+import { customersApi } from '../../services/api/customersApi';
 
 type Props = {
   order: Order;
@@ -14,6 +17,15 @@ type Props = {
 
 export default function OrderDetailView({ order, backPath, summaryTitle = 'Order Summary', children }: Props) {
   const navigate = useNavigate();
+
+  const { data: customerProfile } = useQuery({
+    queryKey: ['customer-profile-for-order-tax-mode'],
+    queryFn: () => customersApi.customerGetProfile().then((r) => r.data.data),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const isTaxCustomer =
+    (customerProfile?.customerType || '').toLowerCase().replace(/[-\s]/g, '') === 'tax';
 
   return (
     <div className="animate-fade-in pb-16">
@@ -33,7 +45,7 @@ export default function OrderDetailView({ order, backPath, summaryTitle = 'Order
             <p className="text-[11px] text-slate-400 leading-none mt-0.5">{formatDate(order.orderDate)}</p>
           </div>
           <button
-            onClick={() => downloadPurchaseOrderPdf(order)}
+            onClick={() => downloadPurchaseOrderPdf({ ...order, isTaxCustomer })}
             className="flex items-center gap-1 px-2 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-[9px] sm:text-[10px] md:text-xs font-semibold transition shadow-sm"
             aria-label="Download order PDF"
           >
@@ -50,8 +62,8 @@ export default function OrderDetailView({ order, backPath, summaryTitle = 'Order
               <User className="w-4 h-4 text-blue-500" />
             </div>
             <div className="min-w-0">
-              <p className="text-[11px] font-medium text-slate-400 uppercase tracking-wide">Customer</p>
-              <p className="text-sm font-semibold text-slate-900 mt-0.5 truncate">{order.customerName}</p>
+              <p className="text-[11px] font-medium text-slate-400 uppercase tracking-wide">Shop Name</p>
+              <p className="text-sm font-semibold text-slate-900 mt-0.5 truncate">{getShopName(order)}</p>
               {order.repName && <p className="text-xs text-slate-400 mt-0.5">Rep: {order.repName}</p>}
             </div>
           </div>

@@ -489,7 +489,7 @@ export default function RepCreateOrder() {
                           <option value="">Select product</option>
                           {desktopProducts.map((option) => (
                             <option key={option.id} value={option.id} disabled={selectedIds.has(option.id)}>
-                              {option.name} ({option.sku})
+                              {option.name}
                             </option>
                           ))}
                         </select>

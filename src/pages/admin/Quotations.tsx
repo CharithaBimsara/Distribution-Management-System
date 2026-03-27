@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { adminApproveQuotation, adminGetQuotations, adminRejectQuotation } from '../../services/api/quotationApi';
 import { formatCurrency, formatDate } from '../../utils/formatters';
+import { getShopName } from '../../utils/shopName';
 import { downloadQuotationPdf, downloadQuotationsExcel, downloadQuotationsPdf } from '../../utils/quotationPdf';
 import { Check, Download, FileSpreadsheet, FileText, Search, X } from 'lucide-react';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
@@ -160,7 +161,7 @@ export default function AdminQuotations() {
                     />
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Quotation #</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Customer</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Shop Name</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Rep</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Total</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Valid Until</th>
@@ -196,7 +197,7 @@ export default function AdminQuotations() {
                         />
                       </td>
                       <td className="px-4 py-3.5 font-semibold text-slate-900">{q.quotationNumber}</td>
-                      <td className="px-4 py-3.5 text-slate-700">{q.customerName || '—'}</td>
+                      <td className="px-4 py-3.5 text-slate-700">{getShopName(q)}</td>
                       <td className="px-4 py-3.5 text-slate-500">{q.repName || '—'}</td>
                       <td className="px-4 py-3.5 text-right font-semibold text-slate-900">{formatCurrency(q.totalAmount)}</td>
                       <td className="px-4 py-3.5 text-xs text-slate-500">{q.validUntil ? formatDate(q.validUntil) : '—'}</td>
@@ -221,7 +222,7 @@ export default function AdminQuotations() {
                                       <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Disc Amt</th>
                                       <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Tax</th>
                                       <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Tax Amt</th>
-                                      <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Amount</th>
+                                      <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Line Gross</th>
                                       <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Request Price</th>
                                     </tr>
                                   </thead>
@@ -232,19 +233,19 @@ export default function AdminQuotations() {
                                       const discPct = item.discountPercent || 0;
                                       const discAmt = (rate * qty * discPct) / 100;
                                       const taxAmt = item.taxAmount || 0;
-                                      const amount = item.lineTotal ?? ((rate * qty) - discAmt + taxAmt);
+                                      const lineGross = rate * qty;
                                       return (
                                         <tr key={item.id}>
+                                          <td className="px-3 py-2.5 text-slate-400 text-xs">{item.productSKU || '-'}</td>
                                           <td className="px-3 py-2.5 text-slate-800 max-w-[220px] truncate" title={item.productName || '-'}>{item.productName || '-'}</td>
-                                          <td className="px-3 py-2.5 text-slate-600">{item.productSKU || '-'}</td>
                                           <td className="px-3 py-2.5 text-center text-slate-600">{qty}</td>
                                           <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(rate)}</td>
                                           <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(item.mrp ?? rate)}</td>
                                           <td className="px-3 py-2.5 text-right text-slate-700">{discPct}</td>
                                           <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(discAmt)}</td>
-                                          <td className="px-3 py-2.5 text-right text-slate-700">{item.taxCode || '-'}</td>
+                                          <td className="px-3 py-2.5 text-right text-slate-700">{item.taxCode || (taxAmt > 0 ? 'V18' : 'NV')}</td>
                                           <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(taxAmt)}</td>
-                                          <td className="px-3 py-2.5 text-right font-semibold text-slate-900">{formatCurrency(amount)}</td>
+                                          <td className="px-3 py-2.5 text-right font-semibold text-slate-900">{formatCurrency(lineGross)}</td>
                                           <td className="px-3 py-2.5 text-right text-slate-700">{item.expectedPrice != null ? formatCurrency(item.expectedPrice) : '-'}</td>
                                         </tr>
                                       );
@@ -256,8 +257,9 @@ export default function AdminQuotations() {
 
                             <div className="space-y-1.5 text-sm mb-4">
                               <div className="flex justify-between"><span className="text-slate-500">Subtotal</span><span>{formatCurrency(q.subTotal || 0)}</span></div>
+                              <div className="flex justify-between"><span className="text-slate-500">Discount</span><span>{formatCurrency(q.discountAmount || 0)}</span></div>
                               <div className="flex justify-between"><span className="text-slate-500">Tax</span><span>{formatCurrency(q.taxAmount || 0)}</span></div>
-                              <div className="flex justify-between font-bold text-base pt-2 border-t border-slate-100"><span>Total</span><span>{formatCurrency(q.totalAmount)}</span></div>
+                              <div className="flex justify-between font-bold text-base pt-2 border-t border-slate-100"><span>Total</span><span>{formatCurrency(q.totalAmount || 0)}</span></div>
                             </div>
 
                             {q.notes && <p className="text-sm text-slate-500 bg-slate-50 rounded-lg p-3 mb-4">{q.notes}</p>}

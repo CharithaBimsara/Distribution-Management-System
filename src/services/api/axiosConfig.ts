@@ -39,6 +39,14 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+const clearAuthAndRedirect = () => {
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('refreshToken');
+  localStorage.removeItem('user');
+  localStorage.removeItem('shoppingCart');
+  window.location.href = '/login';
+};
+
 // Response interceptor — handle 401 / token refresh
 api.interceptors.response.use(
   (response) => response,
@@ -49,28 +57,36 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (error.response?.status === 401) {
+      if (originalRequest?._retry) {
+        clearAuthAndRedirect();
+        return Promise.reject(error);
+      }
+
       originalRequest._retry = true;
       const refreshToken = localStorage.getItem('refreshToken');
       const accessToken = localStorage.getItem('accessToken');
-      if (refreshToken && accessToken) {
-        try {
-          const { data } = await axios.post(`${API_URL}/auth/refresh-token`, { accessToken, refreshToken });
-          if (data.success) {
-            localStorage.setItem('accessToken', data.data.accessToken);
-            localStorage.setItem('refreshToken', data.data.refreshToken);
-            originalRequest.headers.Authorization = `Bearer ${data.data.accessToken}`;
-            return api(originalRequest);
-          }
-        } catch {
-          localStorage.clear();
-          window.location.href = '/login';
-        }
-      } else {
-        localStorage.clear();
-        window.location.href = '/login';
+
+      if (!refreshToken || !accessToken) {
+        clearAuthAndRedirect();
+        return Promise.reject(error);
       }
+
+      try {
+        const { data } = await axios.post(`${API_URL}/auth/refresh-token`, { accessToken, refreshToken });
+        if (data?.success) {
+          localStorage.setItem('accessToken', data.data.accessToken);
+          localStorage.setItem('refreshToken', data.data.refreshToken);
+          originalRequest.headers.Authorization = `Bearer ${data.data.accessToken}`;
+          return api(originalRequest);
+        }
+      } catch {
+        // token refresh failed - invalidate current session and require login
+      }
+
+      clearAuthAndRedirect();
     }
+
     return Promise.reject(error);
   }
 );

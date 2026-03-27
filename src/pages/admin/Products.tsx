@@ -75,12 +75,45 @@ export default function AdminProducts() {
 
   // delete multiple helper (will run in parallel)
   const deleteMultiple = async (ids: string[]) => {
-    if (!ids.length) return;
+    if (!ids.length) return false;
+
+    const chunkSize = 100;
+    let totalDeleted = 0;
+    let totalMissing = 0;
+
     setIsBulkDeleting(true);
+    setImportProgress({ active: true, total: ids.length, processed: 0 });
+
     try {
-      await Promise.all(ids.map(id => productsApi.delete(id)));
-      toast.success(`${ids.length} products deleted`);
+      for (let start = 0; start < ids.length; start += chunkSize) {
+        const chunk = ids.slice(start, start + chunkSize);
+
+        try {
+          const res = await productsApi.bulkDelete(chunk);
+          const payload = res.data.data;
+          totalDeleted += payload?.deleted ?? 0;
+          totalMissing += payload?.missing ?? 0;
+        } catch (err) {
+          console.warn('Chunk delete failed; falling back to individual deletes', err);
+          for (const id of chunk) {
+            try {
+              await productsApi.delete(id);
+              totalDeleted += 1;
+            } catch (innerErr: any) {
+              if (innerErr?.response?.status === 404) {
+                totalMissing += 1;
+              } else {
+                console.error('Deleting single product failed', id, innerErr);
+              }
+            }
+          }
+        }
+
+        setImportProgress({ active: true, total: ids.length, processed: Math.min(start + chunk.length, ids.length) });
+      }
+
       await queryClient.invalidateQueries({ queryKey: ['admin-products'] });
+      toast.success(`${totalDeleted} products deleted (${totalMissing} not found)`);
       return true;
     } catch (err) {
       console.error('bulk delete failed', err);
@@ -88,6 +121,7 @@ export default function AdminProducts() {
       return false;
     } finally {
       setIsBulkDeleting(false);
+      setImportProgress({ active: false, total: 0, processed: 0 });
     }
   };
 
@@ -247,6 +281,36 @@ export default function AdminProducts() {
     }
   };
 
+  const clearAndImport = async (items: CreateProductRequest[]) => {
+    setImportProgress({ active: true, total: items.length, processed: 0 });
+
+    try {
+      const existingProducts = await productsApi.getAllForSelection();
+      const existingIds = existingProducts.map(p => p.id);
+      if (existingIds.length) {
+        const chunkSize = 100;
+        let deleted = 0;
+        for (let i = 0; i < existingIds.length; i += chunkSize) {
+          const chunk = existingIds.slice(i, i + chunkSize);
+          const result = await productsApi.bulkDelete(chunk);
+          deleted += result.data.data?.deleted ?? 0;
+          setImportProgress({ active: true, total: items.length, processed: deleted });
+        }
+        toast.success(`Existing products removed: ${deleted}`);
+      }
+
+      const orphanResult = await productsApi.cleanupOrphans();
+      toast.success(`Orphan categories removed: ${orphanResult.data.data}`);
+
+      await importInChunks(items);
+    } catch (err) {
+      console.error('clear and import failed', err);
+      toast.error('Clear and import failed. Please retry.');
+    } finally {
+      setImportProgress({ active: false, total: 0, processed: 0 });
+    }
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -260,24 +324,47 @@ export default function AdminProducts() {
         return XLSX.utils.sheet_to_json(ws, { defval: '' }) as any[];
       });
       const items: CreateProductRequest[] = rows.map(r => {
-        // import now supports two columns: Main Category and Subcategory
-        const mainName: string = r['Main Category'] || r['MainCategory'] || '';
-        const subName: string = r['Subcategory'] || r['Sub Category'] || '';
-        // attempt to resolve id if the category already exists (search both main and sub entries)
-        let cat = categories?.find(c => c.name.toLowerCase() === (subName || mainName).toLowerCase());
-        if (!cat && subName && categories) {
+        // import now supports several category formats: category field, main/sub columns, or path strings.
+        const rawCategory: string = r['Category'] || r['Category Name'] || r['CategoryName'] || '';
+        let mainName: string = r['Main Category'] || r['MainCategory'] || '';
+        let subName: string = r['Subcategory'] || r['Sub Category'] || '';
+
+        if (!mainName && !subName && rawCategory) {
+          const candidate = rawCategory.toString().trim();
+          if (candidate.includes('>') || candidate.includes('/')) {
+            const separator = candidate.includes('>') ? '>' : '/';
+            const parts = candidate.split(separator).map((p: string) => (p || '').trim()).filter(Boolean);
+            mainName = parts[0] || '';
+            subName = parts[1] || '';
+          } else {
+            mainName = candidate;
+            subName = '';
+          }
+        }
+
+        const normalizedMain = mainName?.trim() || '';
+        const normalizedSub = subName?.trim() || '';
+
+        // attempt to resolve id if the category already exists (search sub first for exact path alignment).
+        let cat: Category | undefined;
+        if (normalizedSub && categories) {
           for (const c of categories) {
-            const sc = (c.subCategories || []).find((x: any) => x.name.toLowerCase() === subName.toLowerCase());
+            const sc = (c.subCategories || []).find((x: Category) => x.name.toLowerCase() === normalizedSub.toLowerCase());
             if (sc) { cat = sc; break; }
           }
         }
+
+        if (!cat && normalizedMain && categories) {
+          cat = categories.find(c => c.name.toLowerCase() === normalizedMain.toLowerCase());
+        }
+
         return {
           name: r['Description'] || r['Name'] || '',
           sku: r['Item'] || r['SKU'] || '',
           barcode: r['Barcode'] || undefined,
           categoryId: cat ? cat.id : undefined, // ignore provided ID, categories wiped prior to import
-          mainCategory: mainName || undefined,
-          subCategory: subName || undefined,
+          mainCategory: normalizedMain || undefined,
+          subCategory: normalizedSub || undefined,
           brand: r['Brand'] || undefined,
           sellingPrice: parseFloat(r['Rate'] ?? r['Selling Price'] ?? 0) || 0,
           mrp: r['MRP'] || r['M R P'] ? parseFloat(r['MRP'] ?? r['M R P'] ?? 0) : undefined,
@@ -291,7 +378,7 @@ export default function AdminProducts() {
           totalAmount: (r['Amount'] !== null && r['Amount'] !== undefined && r['Amount'] !== '') ? parseFloat(r['Amount']) : undefined,
         } as CreateProductRequest;
       }).filter(item => !!item.sku && !!item.name);
-      importInChunks(items);
+      clearAndImport(items);
     };
     reader.readAsBinaryString(file);
     e.target.value = '';

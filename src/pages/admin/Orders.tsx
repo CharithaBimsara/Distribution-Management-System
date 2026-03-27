@@ -6,10 +6,11 @@ import { ordersApi } from '../../services/api/ordersApi';
 import { repsApi } from '../../services/api/repsApi';
 import { customersApi } from '../../services/api/customersApi';
 import { formatCurrency, formatDate } from '../../utils/formatters';
+import { getShopName } from '../../utils/shopName';
 import {
-  ShoppingCart, Eye, CheckCircle, XCircle, ChevronRight,
-  Search, Trash2, X, Check, FileSpreadsheet, FileText,
-  SlidersHorizontal, RefreshCw,
+  ShoppingCart, CheckCircle, XCircle, ChevronRight,
+  Search, Trash2, X, FileSpreadsheet, FileText,
+  SlidersHorizontal, RefreshCw, Package
 } from 'lucide-react';
 import type { Order, OrderStatus } from '../../types/order.types';
 import { ORDER_STATUSES } from '../../types/order.types';
@@ -25,7 +26,7 @@ const selectCls =
   'px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/15 focus:border-indigo-300 transition cursor-pointer';
 
 export default function AdminOrders() {
-  //  Filter state 
+  // Filter state
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState<OrderStatus | ''>('');
   const [search, setSearch] = useState('');
@@ -34,11 +35,11 @@ export default function AdminOrders() {
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
 
-  //  Selection state (always enabled)
+  // Selection state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [showSingleExportDrop, setShowSingleExportDrop] = useState<string | null>(null); // order id
+  const [showSingleExportDrop, setShowSingleExportDrop] = useState<string | null>(null);
 
-  //  Detail / modal state 
+  // Detail / modal state
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
   const [statusChangeOrder, setStatusChangeOrder] = useState<Order | null>(null);
   const [statusPickerValue, setStatusPickerValue] = useState<OrderStatus | ''>('');
@@ -60,8 +61,7 @@ export default function AdminOrders() {
     setSelectedIds(new Set());
   }, [page, status, fromDate, toDate, repIdFilter, customerIdFilter]);
 
-
-  //  Queries 
+  // Queries
   const { data: repsData } = useQuery({
     queryKey: ['reps-all'],
     queryFn: () => repsApi.adminGetAll({ pageSize: 500 }).then((r) => r.data.data?.items || []),
@@ -90,7 +90,7 @@ export default function AdminOrders() {
         .then((r) => r.data.data),
   });
 
-  //  Mutations 
+  // Mutations
   const approveMut = useMutation({
     mutationFn: (id: string) => ordersApi.adminApprove(id),
     onSuccess: () => {
@@ -129,7 +129,6 @@ export default function AdminOrders() {
     },
   });
 
-  //  Data 
   const orders: Order[] = (data?.items || []).filter((o: Order) => {
     if (!search) return true;
     const q = search.toLowerCase();
@@ -137,9 +136,8 @@ export default function AdminOrders() {
   });
 
   const reps: { id: string; fullName: string }[] = repsData || [];
-  const customers: { id: string; shopName: string }[] = customersData || [];
+  const customers: { id: string; shopName: string; customerType?: string }[] = customersData || [];
 
-  //  Selection helpers 
   const toggleSelection = (id: string) => {
     setSelectedIds((prev) => {
       const s = new Set(prev);
@@ -155,21 +153,17 @@ export default function AdminOrders() {
   };
 
   const handleRowClick = (e: React.MouseEvent, order: Order) => {
-    // if the user actually clicked a checkbox itself, toggle selection
     if ((e.target as HTMLElement).closest('input[type="checkbox"]')) {
       toggleSelection(order.id);
       return;
     }
-    // otherwise open/close detail (same as earlier behavior)
     setExpandedOrderId((prev) => (prev === order.id ? null : order.id));
   };
 
-  // tile-specific click just opens detail, checkbox propagation already blocked
   const handleTileClick = (order: Order) => {
     setExpandedOrderId((prev) => (prev === order.id ? null : order.id));
   };
 
-  //  Bulk operations 
   const handleBulkDelete = async () => {
     const ids = [...selectedIds];
     try {
@@ -199,7 +193,13 @@ export default function AdminOrders() {
     }
   };
 
-  //  Export – professional purchase-order format
+  // Format amount cleanly without LKR symbol for tables
+  const formatAmt = (amt: number | null | undefined) => {
+    if (amt == null) return '0.00';
+    return amt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  // Export
   const exportOrders = async (format: 'excel' | 'pdf', onlySelected = false, singleOrder?: Order) => {
     let items: Order[] = [];
     if (singleOrder) {
@@ -211,76 +211,87 @@ export default function AdminOrders() {
     }
     if (!items.length) { toast.error('No orders to export'); return; }
 
-    /** Returns discount amount: prefer stored value, else derive from percent × qty × price */
-    const calcDiscAmt = (it: { unitPrice: number; quantity: number; discountPercent?: number | null; discountAmount?: number | null }) => {
-      if (it.discountAmount != null && it.discountAmount !== 0) return it.discountAmount;
-      if (it.discountPercent) return (it.unitPrice * it.quantity * it.discountPercent) / 100;
-      return 0;
-    };
-
     try {
       if (format === 'excel') {
-        /* ─────────────────────────────────────────────────────────────
-           EXCEL – one sheet per order, full tabular layout
-        ───────────────────────────────────────────────────────────── */
         const wb = XLSX.utils.book_new();
 
         for (const o of items) {
+          const customer = customers.find(c => c.id === o.customerId || c.shopName === o.customerName);
+          const isNonTaxCustomer = (customer?.customerType || (o as any).customerType || '').toLowerCase().replace(/[-\s]/g, '') === 'nontax';
+
+          let totalGrossAmount = 0;
+          let totalTaxAmount = 0;
+          let totalDiscountAmount = 0;
+
           const rows: (string | number | null)[][] = [];
+          rows.push(['PURCHASE ORDER']);
+          rows.push([]);
+          rows.push(['Order #', o.orderNumber, 'Date', formatDate(o.orderDate)]);
+          rows.push(['Customer', o.customerName, 'Status', o.status]);
+          rows.push(['Sales Rep', o.repName || '—']);
+          rows.push([]);
 
-          // ── Document title ──
-          rows.push(['PURCHASE ORDER', null, null, null, null, null, null, null, null, null, null]);
-          rows.push([null]);
+          const excelHeaders = ['#', 'Product', 'SKU', 'Qty', 'Rate', 'Disc %', 'Disc Amt'];
+          if (!isNonTaxCustomer) {
+            excelHeaders.push('Tax Code', 'Tax Amt');
+          }
+          excelHeaders.push('Gross Amount');
+          rows.push(excelHeaders);
 
-          // ── Order information ──
-          rows.push(['Order #', o.orderNumber, null, null, null, 'Date', formatDate(o.orderDate), null, null, null, null]);
-          rows.push(['Customer', o.customerName, null, null, null, 'Status', o.status, null, null, null, null]);
-          rows.push(['Sales Rep', o.repName || '—', null, null, null, null, null, null, null, null, null]);
-          if (o.deliveryAddress) rows.push(['Delivery', o.deliveryAddress, null, null, null, null, null, null, null, null, null]);
-          rows.push([null]);
+          // Setup Column Widths for better styling
+          const colWidths = [
+            { wch: 5 },   // #
+            { wch: 40 },  // Product
+            { wch: 15 },  // SKU
+            { wch: 8 },   // Qty
+            { wch: 15 },  // Rate
+            { wch: 10 },  // Disc %
+            { wch: 15 },  // Disc Amt
+          ];
+          if (!isNonTaxCustomer) {
+            colWidths.push({ wch: 10 }); // Tax Code
+            colWidths.push({ wch: 15 }); // Tax Amt
+          }
+          colWidths.push({ wch: 20 }); // Gross Amount
 
-          // ── Items header ──
-          rows.push(['#', 'Product', 'SKU', 'Qty', 'Unit Price', 'MRP', 'Disc %', 'Disc Amt', 'Tax', 'Tax Amt', 'Line Total']);
-
-          // ── Line items ──
           (o.items || []).forEach((it, i) => {
-            const da = calcDiscAmt(it);
-            rows.push([
-              i + 1,
-              it.productName,
-              it.productSKU || '—',
-              it.quantity,
-              it.unitPrice,
-              it.mrp ?? null,
-              it.discountPercent ? `${it.discountPercent}%` : '—',
-              da || null,
-              'V18',
-              it.taxAmount ?? null,
-              it.lineTotal,
-            ]);
-          });
-          rows.push([null]);
+            const rate = it.unitPrice || 0;
+            const qty = it.quantity || 0;
+            const discPct = it.discountPercent || 0;
+            const baseAmount = rate * qty;
+            const rowDiscountAmount = baseAmount * (discPct / 100);
+            const rowTaxAmount = it.taxAmount || 0;
 
-          // ── Totals ──
-          rows.push([null, null, null, null, null, null, null, null, null, 'Subtotal', o.subTotal]);
-          if (o.discountAmount > 0) rows.push([null, null, null, null, null, null, null, null, null, 'Discount', -o.discountAmount]);
-          if (o.taxAmount > 0)     rows.push([null, null, null, null, null, null, null, null, null, 'Tax (V18)', o.taxAmount]);
-          rows.push([null, null, null, null, null, null, null, null, null, '*** GRAND TOTAL ***', o.totalAmount]);
+            const displayTotal = isNonTaxCustomer ? (baseAmount + rowTaxAmount) : baseAmount;
+
+            totalGrossAmount += isNonTaxCustomer ? (baseAmount + rowTaxAmount) : baseAmount;
+            if (!isNonTaxCustomer) totalTaxAmount += rowTaxAmount;
+            totalDiscountAmount += rowDiscountAmount;
+
+            const rowData: any[] = [
+              i + 1, it.productName, it.productSKU || '—', qty, rate,
+              discPct ? `${discPct}%` : '—', rowDiscountAmount || '—'
+            ];
+
+            if (!isNonTaxCustomer) {
+              rowData.push(rowTaxAmount > 0 ? 'V18' : 'NV', rowTaxAmount || '—');
+            }
+            rowData.push(displayTotal);
+            rows.push(rowData);
+          });
+
+          const finalAmount = isNonTaxCustomer
+            ? totalGrossAmount - totalDiscountAmount
+            : totalGrossAmount + totalTaxAmount - totalDiscountAmount;
+
+          rows.push([]);
+          rows.push([...Array(excelHeaders.length - 2).fill(null), 'Total Gross', totalGrossAmount]);
+          if (!isNonTaxCustomer) rows.push([...Array(excelHeaders.length - 2).fill(null), 'Total Tax', totalTaxAmount]);
+          rows.push([...Array(excelHeaders.length - 2).fill(null), 'Total Discount', -totalDiscountAmount]);
+          rows.push([...Array(excelHeaders.length - 2).fill(null), 'GRAND TOTAL', finalAmount]);
 
           const ws = XLSX.utils.aoa_to_sheet(rows);
-          ws['!cols'] = [
-            { wch: 4 },   // #
-            { wch: 36 },  // Product
-            { wch: 14 },  // SKU
-            { wch: 6 },   // Qty
-            { wch: 13 },  // Unit Price
-            { wch: 13 },  // MRP
-            { wch: 9 },   // Disc %
-            { wch: 13 },  // Disc Amt
-            { wch: 6 },   // Tax
-            { wch: 13 },  // Tax Amt
-            { wch: 15 },  // Line Total
-          ];
+          ws['!cols'] = colWidths; // Apply dynamic column widths
 
           const safeName = o.orderNumber.replace(/[:/\\?*[\]]/g, '-').substring(0, 31);
           XLSX.utils.book_append_sheet(wb, ws, safeName);
@@ -291,215 +302,195 @@ export default function AdminOrders() {
         toast.success('Excel exported');
 
       } else {
-        // PDF – portrait A4, professional purchase-order format, one page per order
+        // PDF Export - Black & White Format like image
         const { jsPDF } = await import('jspdf');
         const autoTable = (await import('jspdf-autotable')).default;
         const doc = new jsPDF({ unit: 'mm', format: 'a4' });
         const pageW = doc.internal.pageSize.getWidth();
-        const pageH = doc.internal.pageSize.getHeight();
-        const BLUE: [number, number, number] = [31, 73, 125];
-        const WHITE: [number, number, number] = [255, 255, 255];
-        const DARK: [number, number, number] = [0, 0, 0];
-        const LGRAY: [number, number, number] = [242, 242, 242];
-
+        
         items.forEach((o, index) => {
           if (index > 0) doc.addPage();
 
-          // ── Company name + address (top-left) ──────────────────────
+          const customer = customers.find(c => c.id === o.customerId || c.shopName === o.customerName);
+          const isNonTaxCustomer = (customer?.customerType || (o as any).customerType || '').toLowerCase().replace(/[-\s]/g, '') === 'nontax';
+
+          // --- 1. Header Left ---
           doc.setFontSize(14);
           doc.setFont('helvetica', 'bold');
-          doc.setTextColor(...DARK);
-          doc.text('Janasiri Distribution Pvt Ltd', 14, 16);
-          doc.setFontSize(7.5);
-          doc.setFont('helvetica', 'normal');
-          doc.text('No 205 Wattarantenna Passage, Kandy, Sri Lanka', 14, 21);
-          doc.text('Phone: 0814 950206  |  Hotline: 0777 675322', 14, 25);
-          doc.text('Email: janasiridistributors@yahoo.com', 14, 29);
-
-          // ── PURCHASE ORDER title (top-right) ────────────────────────
-          doc.setFontSize(20);
-          doc.setFont('helvetica', 'bold');
-          doc.setTextColor(...BLUE);
-          doc.text('PURCHASE ORDER', pageW - 14, 16, { align: 'right' });
-
-          let poVal = String(o.orderNumber || '').replace(/[^\x00-\x7F]/g, '');
-          if (poVal.length > 14) poVal = poVal.substring(0, 14) + '...';
-          doc.setFontSize(9);
-          doc.setFont('helvetica', 'bold');
-          doc.setTextColor(...DARK);
-          doc.text('DATE', pageW - 60, 23.5);
-          doc.text('PO #', pageW - 60, 30);
-          doc.setFont('helvetica', 'normal');
-          doc.setFontSize(8.5);
-          doc.setDrawColor(180, 180, 180);
-          doc.rect(pageW - 48, 19, 34, 5.5, 'S');
           doc.setTextColor(0, 0, 0);
-          doc.text(formatDate(o.orderDate), pageW - 15, 23.5, { align: 'right' });
-          doc.rect(pageW - 48, 25.5, 34, 5.5, 'S');
-          doc.text(poVal, pageW - 15, 30, { align: 'right' });
-
-          // ── VENDOR / SHIP TO boxes ───────────────────────────────────
-          const secY = 42;
-          const colMid = pageW / 2 + 2;
-          doc.setFillColor(...BLUE);
-          doc.rect(14, secY, 88, 6, 'F');
-          doc.setTextColor(...WHITE);
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(9);
-          doc.text('VENDOR', 16, secY + 4.2);
-          doc.setFillColor(...BLUE);
-          doc.rect(colMid, secY, 88, 6, 'F');
-          doc.text('SHIP TO', colMid + 2, secY + 4.2);
-
-          doc.setTextColor(...DARK);
+          doc.text('JANASIRI DISTRIBUTORS (PVT) LTD', 14, 18);
+          
+          doc.setFontSize(8);
           doc.setFont('helvetica', 'normal');
-          doc.setFontSize(8.5);
-          const vY = secY + 10;
-          doc.text('Janasiri Distribution Pvt Ltd', 16, vY);
-          doc.text('No 205 Wattarantenna Passage', 16, vY + 5);
-          doc.text('Kandy, Sri Lanka', 16, vY + 10);
-          doc.text('Phone: 0814 950206', 16, vY + 15);
-          doc.text('Hotline: 0777 675322', 16, vY + 20);
+          doc.text('Reg Address: No 205 Wattarantenna Passage, Kandy.', 14, 23);
+          doc.text('TP: 0814 950206 / Hotline: 0777 675322', 14, 27);
+          doc.text('Email: janasiridistributors@yahoo.com / Vat 114608394-7000', 14, 31);
+          doc.text('Bank AC: Sampath Bank PLC / Kandy Super Grade Branch / AC: 0007 1002 3131', 14, 35);
 
-          const sY = secY + 10;
-          doc.text(o.customerName || '', colMid + 2, sY);
-          doc.text(o.repName ? `Rep: ${o.repName}` : '', colMid + 2, sY + 5);
-          const addrParts = doc.splitTextToSize(o.deliveryAddress || '', 80);
-          doc.text(addrParts[0] || '', colMid + 2, sY + 10);
-          if (addrParts[1]) doc.text(addrParts[1], colMid + 2, sY + 15);
-          doc.text(`Status: ${o.status}`, colMid + 2, sY + 20);
+          // --- 2. Header Right ---
+          doc.setFontSize(11);
+          doc.setFont('helvetica', 'bold');
+          doc.text(isNonTaxCustomer ? 'INVOICE' : 'TAX INVOICE', pageW - 14, 18, { align: 'right' });
 
-          doc.setDrawColor(180, 180, 180);
-          doc.rect(14, secY, 88, 30);
-          doc.rect(colMid, secY, 88, 30);
+          const boxX = pageW - 74;
+          const boxY = 21;
+          const boxW = 60;
+          const rowH = 6;
+          
+          doc.setDrawColor(0, 0, 0);
+          doc.setLineWidth(0.2);
+          
+          // Draw Info Table
+          doc.rect(boxX, boxY, boxW, rowH * 3);
+          doc.line(boxX, boxY + rowH, boxX + boxW, boxY + rowH);
+          doc.line(boxX, boxY + rowH * 2, boxX + boxW, boxY + rowH * 2);
+          doc.line(boxX + 20, boxY, boxX + 20, boxY + rowH * 3);
 
-          // ── Items table ─────────────────────────────────────────────
-          const tableStartY = secY + 36;
-          const tCols = ['#', 'Product', 'SKU', 'Qty', 'Rate', 'MRP', 'Disc%', 'Disc Amt', 'Tax', 'Tax Amt', 'Total'];
+          doc.setFontSize(8);
+          doc.setFont('helvetica', 'normal');
+          doc.text('Date', boxX + 2, boxY + 4);
+          doc.text('Inv No', boxX + 2, boxY + rowH + 4);
+          doc.text('Department', boxX + 2, boxY + rowH * 2 + 4);
+
+          doc.text(formatDate(o.orderDate), boxX + 22, boxY + 4);
+          doc.text(o.orderNumber || '', boxX + 22, boxY + rowH + 4);
+          doc.text('CENTRAL', boxX + 22, boxY + rowH * 2 + 4);
+
+          // --- 3. Customer Box (Updated - No "Ship To" section) ---
+          const cBoxY = 44;
+          const cBoxH = 22;
+          doc.rect(14, cBoxY, pageW - 28, cBoxH);
+          doc.line(14, cBoxY + 6, pageW - 14, cBoxY + 6); // Just the header underline
+
+          doc.setFont('helvetica', 'bold');
+          doc.text('Customer Details', 16, cBoxY + 4);
+
+          doc.setFont('helvetica', 'normal');
+          const shopNameStr = getShopName(o) || o.customerName || '';
+          doc.text(shopNameStr, 16, cBoxY + 10);
+          
+          // Allow address to use the full width of the box
+          const cAddr = doc.splitTextToSize(o.deliveryAddress || '', pageW - 32);
+          doc.text(cAddr, 16, cBoxY + 15);
+
+          // --- 4. Table Setup ---
+          let totalGrossAmount = 0;
+          let totalTaxAmount = 0;
+          let totalDiscountAmount = 0;
+
+          const tCols = isNonTaxCustomer 
+            ? ['No', 'Item Code', 'Item Description', 'Qty', 'Rate', 'Disc %', 'Disc Amt', 'Gross Amount']
+            : ['No', 'Item Code', 'Item Description', 'Qty', 'Rate', 'Disc %', 'Disc Amt', 'Tax Code', 'Tax Amt', 'Gross Amount'];
+
           const tRows = (o.items || []).map((it, i) => {
-            const da = calcDiscAmt(it);
-            return [
-              i + 1,
-              it.productName,
-              it.productSKU || '—',
-              it.quantity,
-              formatCurrency(it.unitPrice),
-              it.mrp ? formatCurrency(it.mrp) : '—',
-              it.discountPercent ? `${it.discountPercent}%` : '—',
-              da ? formatCurrency(da) : '—',
-              'V18',
-              it.taxAmount ? formatCurrency(it.taxAmount) : '—',
-              formatCurrency(it.lineTotal),
-            ];
-          });
-          while (tRows.length < 5) tRows.push(['', '', '', '', '', '', '', '', '', '', '']);
+            const rate = it.unitPrice || 0;
+            const qty = it.quantity || 0;
+            const discPct = it.discountPercent || 0;
+            
+            const baseAmount = rate * qty;
+            const rowDiscountAmount = baseAmount * (discPct / 100);
+            const rowTaxAmount = it.taxAmount || 0;
 
+            const displayTotal = isNonTaxCustomer ? (baseAmount + rowTaxAmount) : baseAmount;
+
+            totalGrossAmount += isNonTaxCustomer ? (baseAmount + rowTaxAmount) : baseAmount;
+            if (!isNonTaxCustomer) totalTaxAmount += rowTaxAmount;
+            totalDiscountAmount += rowDiscountAmount;
+
+            if (isNonTaxCustomer) {
+              return [
+                i + 1, it.productSKU || '', it.productName, qty, formatAmt(rate), 
+                formatAmt(discPct), formatAmt(rowDiscountAmount), formatAmt(displayTotal)
+              ];
+            } else {
+              return [
+                i + 1, it.productSKU || '', it.productName, qty, formatAmt(rate), 
+                formatAmt(discPct), formatAmt(rowDiscountAmount), 
+                rowTaxAmount > 0 ? 'V18' : 'NV', formatAmt(rowTaxAmount), formatAmt(displayTotal)
+              ];
+            }
+          });
+
+          // Pad empty rows to make the grid look full (like the image)
+          const MIN_ROWS = 10;
+          while(tRows.length < MIN_ROWS) {
+             tRows.push(Array(tCols.length).fill(''));
+          }
+
+          // --- 5. Render Table ---
           autoTable(doc, {
             head: [tCols],
             body: tRows,
-            startY: tableStartY,
-            styles: { fontSize: 7, cellPadding: 1.8, overflow: 'linebreak', valign: 'middle' },
-            headStyles: { fillColor: BLUE, textColor: WHITE, fontStyle: 'bold', fontSize: 7 },
+            startY: 70,
+            theme: 'grid',
+            styles: { fontSize: 8, cellPadding: 2, textColor: [0, 0, 0], lineColor: [0,0,0], lineWidth: 0.2 },
+            headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], fontStyle: 'bold', halign: 'center' },
+            bodyStyles: { fillColor: [255, 255, 255] },
             columnStyles: {
-              0:  { cellWidth: 7,  halign: 'center' },
-              1:  { cellWidth: 42 },
-              2:  { cellWidth: 14 },
-              3:  { cellWidth: 8,  halign: 'center' },
-              4:  { cellWidth: 18, halign: 'right' },
-              5:  { cellWidth: 17, halign: 'right' },
-              6:  { cellWidth: 10, halign: 'center' },
-              7:  { cellWidth: 17, halign: 'right' },
-              8:  { cellWidth: 8,  halign: 'center' },
-              9:  { cellWidth: 17, halign: 'right' },
-              10: { cellWidth: 24, halign: 'right' },
-            },
-            alternateRowStyles: { fillColor: [255, 255, 255] },
-            tableLineColor: [180, 180, 180],
-            tableLineWidth: 0.2,
-            tableWidth: 'auto',
-            didDrawCell: (d: any) => {
-              if (d.cell.section === 'body' || d.cell.section === 'head') {
-                doc.setDrawColor(180, 180, 180);
-                doc.setLineWidth(0.2);
-                doc.rect(d.cell.x, d.cell.y, d.cell.width, d.cell.height);
-              }
-            },
+              0: { cellWidth: 8, halign: 'center' },
+              1: { cellWidth: 20 },
+              2: { cellWidth: 'auto' },
+              3: { cellWidth: 10, halign: 'center' },
+              // Alignment based on Tax / Non-Tax
+              ...isNonTaxCustomer 
+                ? { 4: { halign: 'right' }, 5: { halign: 'right' }, 6: { halign: 'right' }, 7: { halign: 'right' } }
+                : { 4: { halign: 'right' }, 5: { halign: 'right' }, 6: { halign: 'right' }, 7: { halign: 'center' }, 8: { halign: 'right' }, 9: { halign: 'right' } }
+            }
           });
 
           const afterTableY = (doc as any).lastAutoTable.finalY;
 
-          // ── Totals (right) + Comments (left) ────────────────────────
-          const totalsX = pageW - 80;
-          const totalsStartY = afterTableY + 4;
-          const totRows: [string, string][] = [
-            ['SUBTOTAL',  formatCurrency(o.subTotal)],
-            ['DISCOUNT',  o.discountAmount > 0 ? `- ${formatCurrency(o.discountAmount)}` : '—'],
-            ['TAX (V18)', o.taxAmount > 0 ? formatCurrency(o.taxAmount) : '—'],
-            ['SHIPPING',  '—'],
-          ];
-          const rowH = 6;
-          const boxRight = pageW - 14;
-          const boxW = boxRight - totalsX;
+          // --- 6. Totals Box ---
+          const finalAmount = isNonTaxCustomer
+            ? totalGrossAmount - totalDiscountAmount
+            : totalGrossAmount + totalTaxAmount - totalDiscountAmount;
 
-          doc.setFontSize(8.5);
-          doc.setDrawColor(180, 180, 180);
-          totRows.forEach(([label, val], i) => {
-            const ry = totalsStartY + i * rowH;
-            doc.setFillColor(...LGRAY);
-            doc.rect(totalsX, ry - 4, boxW / 2, rowH, 'FD');
-            doc.setFillColor(...WHITE);
-            doc.rect(totalsX + boxW / 2, ry - 4, boxW / 2, rowH, 'FD');
-            doc.setFont('helvetica', 'bold');
-            doc.setTextColor(...DARK);
-            doc.text(label, totalsX + 2, ry);
-            doc.setFont('helvetica', 'normal');
-            doc.text(val, boxRight - 2, ry, { align: 'right' });
-          });
-          const totalRowY = totalsStartY + totRows.length * rowH;
-          doc.setFillColor(...BLUE);
-          doc.rect(totalsX, totalRowY - 4, boxW, rowH + 1, 'F');
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(9);
-          doc.setTextColor(...WHITE);
-          doc.text('TOTAL', totalsX + 2, totalRowY);
-          doc.text(formatCurrency(o.totalAmount), boxRight - 2, totalRowY, { align: 'right' });
-
-          // Comments box (left side)
-          const cbX = 14, cbY = afterTableY + 4;
-          const cbW = totalsX - 18;
-          const cbH = totRows.length * rowH + 10;
-          doc.setFillColor(...LGRAY);
-          doc.setTextColor(...DARK);
-          doc.rect(cbX, cbY, cbW, 6, 'F');
-          doc.setDrawColor(180, 180, 180);
-          doc.rect(cbX, cbY, cbW, cbH);
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(8);
-          doc.text('Comments or Special Instructions', cbX + 2, cbY + 4);
-          const notes = (o as any).deliveryNotes || (o as any).notes || '';
-          if (notes) {
-            const split = doc.splitTextToSize(String(notes), cbW - 4);
-            doc.setFont('helvetica', 'normal');
-            doc.setFontSize(7.5);
-            doc.text(split, cbX + 2, cbY + 11);
+          const summaryLines: { label: string; value: string; isBold?: boolean }[] = [];
+          summaryLines.push({ label: 'Total Gross', value: formatAmt(totalGrossAmount) });
+          if (!isNonTaxCustomer) {
+            summaryLines.push({ label: 'Total Tax', value: formatAmt(totalTaxAmount) });
           }
+          summaryLines.push({ label: 'Total Discount', value: formatAmt(totalDiscountAmount) });
+          summaryLines.push({ label: 'Total Invoice Value', value: `LKR ${formatAmt(finalAmount)}`, isBold: true });
 
-          // ── Footer – full company contact ────────────────────────────
-          const ftY = pageH - 32;
-          doc.setDrawColor(31, 73, 125);
-          doc.setLineWidth(0.4);
-          doc.line(14, ftY, pageW - 14, ftY);
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(7.5);
-          doc.setTextColor(31, 73, 125);
-          doc.text('HOW TO CONTACT US', 14, ftY + 5);
+          const totalsRowH = 6;
+          // Calculate right col widths directly from AutoTable to align perfectly
+          const tableConfig = (doc as any).lastAutoTable;
+          const cols = tableConfig.columns;
+          let totalsW = 0;
+          if(isNonTaxCustomer) {
+             totalsW = cols[5].width + cols[6].width + cols[7].width;
+          } else {
+             totalsW = cols[7].width + cols[8].width + cols[9].width;
+          }
+          const totalsX = pageW - 14 - totalsW;
+
+          let currentY = afterTableY;
+          
+          doc.setLineWidth(0.2);
+          doc.setDrawColor(0,0,0);
+
+          summaryLines.forEach((line) => {
+            doc.rect(totalsX, currentY, totalsW, totalsRowH);
+            
+            if(line.isBold) {
+               doc.setFont('helvetica', 'bold');
+            } else {
+               doc.setFont('helvetica', 'normal');
+            }
+            
+            doc.text(line.label, totalsX + 2, currentY + 4);
+            doc.text(line.value, pageW - 16, currentY + 4, { align: 'right' });
+            currentY += totalsRowH;
+          });
+
+          // --- 7. Signatures ---
+          const signY = afterTableY + 15;
           doc.setFont('helvetica', 'normal');
-          doc.setFontSize(7);
-          doc.setTextColor(80, 80, 80);
-          doc.text('Janasiri Distribution Pvt Ltd  |  No 205 Wattarantenna Passage, Kandy, Sri Lanka', 14, ftY + 11);
-          doc.text('HEAD OFFICE (Kandy): No 205 Wattarantenna Passage  –  0777 675322  |  KANDY: No 02 Mawilmada Road  –  0814 950206', 14, ftY + 17);
-          doc.text('COLOMBO: No.41A, Gnanathilaka Road, Mount Lavinia  –  75 381 6756', 14, ftY + 22);
-          doc.text('Office: 0814 950206  |  Hotline: 0777 675322  |  Email: janasiridistributors@yahoo.com', 14, ftY + 27);
+          doc.text('Received By / Customer', 40, signY);
+          doc.text('......................................................', 35, signY + 12);
+          doc.text('Seal & signature', 46, signY + 17);
+
         });
 
         const pdfFile = items.length === 1 ? `${items[0].orderNumber}.pdf` : 'orders-bulk-export.pdf';
@@ -512,13 +503,12 @@ export default function AdminOrders() {
     }
   };
 
-  //  Misc 
   const hasActiveFilters = !!(status || repIdFilter || customerIdFilter || fromDate || toDate || search);
   const clearFilters = () => {
     setStatus(''); setRepIdFilter(''); setCustomerIdFilter('');
     setFromDate(''); setToDate(''); setSearch(''); setPage(1);
   };
-  const colCount = 8; // checkboxes always visible
+  const colCount = 8;
 
   return (
     <div className="animate-fade-in flex flex-col gap-4 pb-28">
@@ -528,11 +518,10 @@ export default function AdminOrders() {
         <p className="text-slate-500 text-sm mt-1">Manage and track customer orders</p>
       </div>
 
-      {/*  Sticky Toolbar  */}
+      {/* Sticky Toolbar  */}
       <div className="sticky top-0 z-30">
         <div className="bg-white/90 backdrop-blur-md border border-slate-200/70 rounded-2xl shadow-[0_2px_16px_-4px_rgba(0,0,0,0.10)] px-4 py-3 space-y-2.5">
 
-          {/* Row 1: Search + action buttons */}
           <div className="flex items-center gap-2.5 flex-wrap">
             <div className="relative flex-1 min-w-[180px] group">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
@@ -549,13 +538,8 @@ export default function AdminOrders() {
                 </button>
               )}
             </div>
-
-
-            {/* only search input on toolbar; checkboxes shown in table below */}
-            {/* no export or select controls needed */}
           </div>
 
-          {/* Row 2: Filters */}
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-1.5 text-slate-400">
               <SlidersHorizontal className="w-3.5 h-3.5" />
@@ -589,9 +573,8 @@ export default function AdminOrders() {
         </div>
       </div>
 
-      {/*  Order list  */}
+      {/* Order list  */}
       {isDesktop ? (
-        // Custom expandable table
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           {isLoading ? (
             <div className="p-10 text-center text-slate-400 text-sm">Loading orders</div>
@@ -615,6 +598,7 @@ export default function AdminOrders() {
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide w-8" />
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Order #</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Customer</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Shop Name</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Rep</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Date</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Total</th>
@@ -623,215 +607,226 @@ export default function AdminOrders() {
                 </tr>
               </thead>
               <tbody>
-                {orders.map((order) => (
-                  <Fragment key={order.id}>
-                    <tr
-                      onClick={(e) => handleRowClick(e, order)}
-                      className={`border-b border-slate-50 cursor-pointer transition-colors ${
-                        selectedIds.has(order.id)
-                          ? 'bg-indigo-50/60'
-                          : expandedOrderId === order.id
-                          ? 'bg-blue-50/50 border-blue-100'
-                          : 'hover:bg-slate-50/70'
-                      }`}
-                    >
-                      <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.has(order.id)}
-                          onChange={() => toggleSelection(order.id)}
-                          className="shrink-0"
-                        />
-                      </td>
-                      <td className="px-3 py-3.5 w-8">
-                        <ChevronRight
-                          className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${
-                            expandedOrderId === order.id ? 'rotate-90 text-blue-500' : ''
-                          }`}
-                        />
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <div className="flex flex-col gap-1">
-                          <span className="font-semibold text-slate-900 text-sm">{order.orderNumber}</span>
-                          {order.isFromApprovedQuotation && (
-                            <span className="inline-flex w-fit px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                              Approved Quotation
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3.5 text-sm text-slate-700">{order.customerName}</td>
-                      <td className="px-4 py-3.5 text-sm text-slate-500">{order.repName || ''}</td>
-                      <td className="px-4 py-3.5 text-sm text-slate-500">{formatDate(order.orderDate)}</td>
-                      <td className="px-4 py-3.5 text-right text-sm font-semibold text-slate-900">{formatCurrency(order.totalAmount)}</td>
-                      <td className="px-4 py-3.5 text-center text-sm text-slate-500">{order.items?.length || 0}</td>
-                      <td className="px-4 py-3.5 text-center"><StatusBadge status={order.status} /></td>
-                    </tr>
+                {orders.map((order) => {
+                  const customer = customers.find(c => c.id === order.customerId || c.shopName === order.customerName);
+                  const isNonTaxCustomer = (customer?.customerType || (order as any).customerType || '').toLowerCase().replace(/[-\s]/g, '') === 'nontax';
 
-                    {/*  Inline expandable detail row  */}
-                    {expandedOrderId === order.id && (
-                      <tr className="border-b border-blue-100">
-                        <td colSpan={colCount + 2} className="p-0">
-                          <div
-                            className="bg-gradient-to-b from-blue-50/70 to-slate-50/20 px-8 py-5"
-                            style={{ animation: 'fadeIn 0.18s ease-out both' }}
-                          >
-                            <div>
-                              {/* Detail actions row */}
-                              <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-                                <div className="flex items-center gap-2 text-sm">
-                                  <span className="font-semibold text-slate-700">{order.orderNumber}</span>
-                                  <span className="text-slate-400"></span>
-                                  <span className="text-slate-500">{order.customerName}</span>
-                                  {order.deliveryAddress && (
-                                    <>
-                                      <span className="text-slate-400"></span>
-                                      <span className="text-xs text-slate-400 truncate max-w-[200px]">{order.deliveryAddress}</span>
-                                    </>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <div className="relative">
-                                    <button
-                                      onClick={(e) => { e.stopPropagation(); setShowSingleExportDrop(order.id); }}
-                                      className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-medium hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition"
-                                    >
-                                      <FileText className="w-3.5 h-3.5" /> Export
-                                    </button>
-                                    {showSingleExportDrop === order.id && (
-                                      <div className="absolute right-0 mt-1 w-40 bg-white border border-slate-200 rounded-xl shadow-lg z-20 overflow-hidden">
-                                        <button
-                                          className="flex w-full items-center gap-2 px-4 py-2.5 text-xs text-slate-700 hover:bg-emerald-50 transition"
-                                          onClick={() => { exportOrders('excel', false, order); setShowSingleExportDrop(null); }}
-                                        >
-                                          <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" /> Excel
-                                        </button>
-                                        <div className="h-px bg-slate-100" />
-                                        <button
-                                          className="flex w-full items-center gap-2 px-4 py-2.5 text-xs text-slate-700 hover:bg-red-50 transition"
-                                          onClick={() => { exportOrders('pdf', false, order); setShowSingleExportDrop(null); }}
-                                        >
-                                          <FileText className="w-3.5 h-3.5 text-red-500" /> PDF
-                                        </button>
-                                      </div>
+                  let displayTotalGross = 0;
+                  let displayTotalTax = 0;
+                  let displayTotalDiscount = 0;
+
+                  order.items?.forEach(item => {
+                    const rate = item.unitPrice || 0;
+                    const qty = item.quantity || 0;
+                    const discPct = item.discountPercent || 0;
+                    const baseAmount = rate * qty;
+                    const rowDiscountAmount = baseAmount * (discPct / 100);
+                    const rowTaxAmount = item.taxAmount || 0;
+
+                    displayTotalGross += isNonTaxCustomer ? (baseAmount + rowTaxAmount) : baseAmount;
+                    if (!isNonTaxCustomer) displayTotalTax += rowTaxAmount;
+                    displayTotalDiscount += rowDiscountAmount;
+                  });
+
+                  const displayFinalAmount = isNonTaxCustomer
+                    ? displayTotalGross - displayTotalDiscount
+                    : displayTotalGross + displayTotalTax - displayTotalDiscount;
+
+                  return (
+                    <Fragment key={order.id}>
+                      <tr
+                        onClick={(e) => handleRowClick(e, order)}
+                        className={`border-b border-slate-50 cursor-pointer transition-colors ${
+                          selectedIds.has(order.id)
+                            ? 'bg-indigo-50/60'
+                            : expandedOrderId === order.id
+                            ? 'bg-blue-50/50 border-blue-100'
+                            : 'hover:bg-slate-50/70'
+                        }`}
+                      >
+                        <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(order.id)}
+                            onChange={() => toggleSelection(order.id)}
+                            className="shrink-0"
+                          />
+                        </td>
+                        <td className="px-3 py-3.5 w-8">
+                          <ChevronRight
+                            className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${
+                              expandedOrderId === order.id ? 'rotate-90 text-blue-500' : ''
+                            }`}
+                          />
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <div className="flex flex-col gap-1">
+                            <span className="font-semibold text-slate-900 text-sm">{order.orderNumber}</span>
+                            {order.isFromApprovedQuotation && (
+                              <span className="inline-flex w-fit px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                Approved Quotation
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3.5 text-sm text-slate-700">{order.customerName || '—'}</td>
+                        <td className="px-4 py-3.5 text-sm text-slate-700">{getShopName(order)}</td>
+                        <td className="px-4 py-3.5 text-sm text-slate-500">{order.repName || ''}</td>
+                        <td className="px-4 py-3.5 text-sm text-slate-500">{formatDate(order.orderDate)}</td>
+                        <td className="px-4 py-3.5 text-right text-sm font-semibold text-slate-900">{formatCurrency(displayFinalAmount)}</td>
+                        <td className="px-4 py-3.5 text-center text-sm text-slate-500">{order.items?.length || 0}</td>
+                        <td className="px-4 py-3.5 text-center"><StatusBadge status={order.status} /></td>
+                      </tr>
+
+                      {/* Inline expandable detail row  */}
+                      {expandedOrderId === order.id && (
+                        <tr className="border-b border-blue-100">
+                          <td colSpan={colCount + 2} className="p-0">
+                            <div
+                              className="bg-gradient-to-b from-blue-50/70 to-slate-50/20 px-8 py-5"
+                              style={{ animation: 'fadeIn 0.18s ease-out both' }}
+                            >
+                              <div>
+                                <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                                  <div className="flex items-center gap-2 text-sm">
+                                    <span className="font-semibold text-slate-700">{order.orderNumber}</span>
+                                    <span className="text-slate-400"></span>
+                                    <span className="text-slate-500">{getShopName(order)}</span>
+                                    {order.deliveryAddress && (
+                                      <>
+                                        <span className="text-slate-400"></span>
+                                        <span className="text-xs text-slate-400 truncate max-w-[200px]">{order.deliveryAddress}</span>
+                                      </>
                                     )}
                                   </div>
-                                  <button
-                                    onClick={() => navigate(`/admin/orders/${order.id}`)}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-50 transition"
-                                  >
-                                    <Eye className="w-3.5 h-3.5" /> Full Details
-                                  </button>
-                                  {order.status === 'Pending' && (
-                                    <>
-                                      <button onClick={() => approveMut.mutate(order.id)} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-medium hover:bg-emerald-700 transition">
-                                        <CheckCircle className="w-3.5 h-3.5" /> Approve
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <div className="relative">
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); setShowSingleExportDrop(order.id); }}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-medium hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition"
+                                      >
+                                        <FileText className="w-3.5 h-3.5" /> Export
                                       </button>
-                                      <button onClick={() => setRejectOrder(order)} className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 transition">
-                                        <XCircle className="w-3.5 h-3.5" /> Reject
-                                      </button>
-                                    </>
-                                  )}
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); setStatusChangeOrder(order); }}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-medium hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition"
-                                  >
-                                    <RefreshCw className="w-3.5 h-3.5" /> Status
-                                  </button>
-                                  <button
-                                    onClick={() => { setDeleteOrder(order); setExpandedOrderId(null); }}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-lg text-xs font-medium hover:bg-red-600 hover:text-white hover:border-red-600 transition"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" /> Delete
-                                  </button>
-                                </div>
-                              </div>
-
-                              {/* Items table */}
-                              {order.items && order.items.length > 0 && (
-                                <div className="rounded-xl overflow-hidden border border-blue-100/80 mb-4">
-                                  <table className="w-full text-sm">
-                                    <thead>
-                                      <tr className="bg-slate-100/80">
-                                        <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">#</th>
-                                        <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Product</th>
-                                        <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">SKU</th>
-                                        {/* category not stored on order item, left blank */}
-                                        <th className="px-4 py-2 text-center text-xs font-semibold text-slate-500 uppercase tracking-wide">Qty</th>
-                                        <th className="px-4 py-2 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Rate</th>
-                                        <th className="px-4 py-2 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">MRP</th>
-                                        <th className="px-4 py-2 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Disc %</th>
-                                        <th className="px-4 py-2 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Disc Amt</th>
-                                        <th className="px-4 py-2 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Tax</th>
-                                        <th className="px-4 py-2 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Tax Amt</th>
-                                        <th className="px-4 py-2 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Line Total</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                      {order.items.map((item, i) => (
-                                        <tr key={item.id} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
-                                          <td className="px-4 py-2.5 text-center text-xs text-slate-400 font-medium">{i + 1}</td>
-                                          <td className="px-4 py-2.5 font-medium text-slate-900">{item.productName}</td>
-                                          <td className="px-4 py-2.5 text-slate-400 text-xs">{item.productSKU || ''}</td>
-                                          <td className="px-4 py-2.5 text-center text-slate-700">{item.quantity}</td>
-                                          <td className="px-4 py-2.5 text-right text-slate-600">{formatCurrency(item.unitPrice)}</td>
-                                          <td className="px-4 py-2.5 text-right text-slate-500">
-                                            {item.mrp ? formatCurrency(item.mrp) : <span className="text-slate-300">—</span>}
-                                          </td>
-                                          <td className="px-4 py-2.5 text-right text-slate-500">
-                                            {item.discountPercent != null && item.discountPercent !== 0 ? `${item.discountPercent}%` : <span className="text-slate-300">—</span>}
-                                          </td>
-                                          <td className="px-4 py-2.5 text-right text-slate-500">
-                                            {item.discountPercent
-                                              ? formatCurrency((item.unitPrice * item.quantity * item.discountPercent) / 100)
-                                              : <span className="text-slate-300">—</span>}
-                                          </td>
-                                          {/* tax code/description not available – placeholder */}
-                                          <td className="px-4 py-2.5 text-right text-slate-500">V18</td>
-                                          <td className="px-4 py-2.5 text-right text-slate-500">
-                                            {item.taxAmount ? formatCurrency(item.taxAmount) : <span className="text-slate-300">—</span>}
-                                          </td>
-                                          <td className="px-4 py-2.5 text-right font-semibold text-slate-900">{formatCurrency(item.lineTotal)}</td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              )}
-
-                              {/* Totals summary  right aligned */}
-                              <div className="flex justify-end">
-                                <div className="w-60 space-y-1.5 text-sm bg-white border border-slate-100 rounded-xl p-4">
-                                  <div className="flex justify-between text-slate-500">
-                                    <span>Subtotal</span><span>{formatCurrency(order.subTotal)}</span>
+                                      {showSingleExportDrop === order.id && (
+                                        <div className="absolute right-0 mt-1 w-40 bg-white border border-slate-200 rounded-xl shadow-lg z-20 overflow-hidden">
+                                          <button
+                                            className="flex w-full items-center gap-2 px-4 py-2.5 text-xs text-slate-700 hover:bg-emerald-50 transition"
+                                            onClick={() => { exportOrders('excel', false, order); setShowSingleExportDrop(null); }}
+                                          >
+                                            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" /> Excel
+                                          </button>
+                                          <div className="h-px bg-slate-100" />
+                                          <button
+                                            className="flex w-full items-center gap-2 px-4 py-2.5 text-xs text-slate-700 hover:bg-red-50 transition"
+                                            onClick={() => { exportOrders('pdf', false, order); setShowSingleExportDrop(null); }}
+                                          >
+                                            <FileText className="w-3.5 h-3.5 text-red-500" /> PDF
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); setStatusChangeOrder(order); }}
+                                      className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-medium hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition"
+                                    >
+                                      <RefreshCw className="w-3.5 h-3.5" /> Status
+                                    </button>
+                                    <button
+                                      onClick={() => { setDeleteOrder(order); setExpandedOrderId(null); }}
+                                      className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-lg text-xs font-medium hover:bg-red-600 hover:text-white hover:border-red-600 transition"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" /> Delete
+                                    </button>
                                   </div>
-                                  {order.discountAmount > 0 && (
-                                    <div className="flex justify-between text-slate-500">
-                                      <span>Discount</span><span className="text-emerald-600">{formatCurrency(order.discountAmount)}</span>
+                                </div>
+
+                                {/* Items table */}
+                                {order.items && order.items.length > 0 && (
+                                  <div className="rounded-xl overflow-hidden border border-blue-100/80 mb-4">
+                                    <table className="w-full text-sm">
+                                      <thead>
+                                        <tr className="bg-slate-100/80">
+                                          <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">No</th>
+                                          <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Item Code</th>
+                                          <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Description</th>
+                                          <th className="px-4 py-2 text-center text-xs font-semibold text-slate-500 uppercase tracking-wide">Qty</th>
+                                          <th className="px-4 py-2 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Rate</th>
+                                          <th className="px-4 py-2 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Disc %</th>
+                                          <th className="px-4 py-2 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Disc Amt</th>
+                                          {!isNonTaxCustomer && <th className="px-4 py-2 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Tax Code</th>}
+                                          {!isNonTaxCustomer && <th className="px-4 py-2 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Tax Amt</th>}
+                                          <th className="px-4 py-2 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Gross Amount</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-slate-100">
+                                        {order.items.map((item, i) => {
+                                          const rate = item.unitPrice || 0;
+                                          const qty = item.quantity || 0;
+                                          const discPct = item.discountPercent || 0;
+                                          const baseAmount = rate * qty;
+                                          const rowDiscountAmount = baseAmount * (discPct / 100);
+                                          const rowTaxAmount = item.taxAmount || 0;
+                                          const lineGross = isNonTaxCustomer ? (baseAmount + rowTaxAmount) : baseAmount;
+
+                                          return (
+                                            <tr key={item.id} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
+                                              <td className="px-4 py-2.5 text-center text-xs text-slate-400 font-medium">{i + 1}</td>
+                                              <td className="px-4 py-2.5 text-slate-400 text-xs">{item.productSKU || '—'}</td>
+                                              <td className="px-4 py-2.5 font-medium text-slate-900">{item.productName}</td>
+                                              <td className="px-4 py-2.5 text-center text-slate-700">{qty}</td>
+                                              <td className="px-4 py-2.5 text-right text-slate-600">{formatCurrency(rate)}</td>
+                                              <td className="px-4 py-2.5 text-right text-slate-500">
+                                                {discPct ? `${discPct}%` : <span className="text-slate-300">—</span>}
+                                              </td>
+                                              <td className="px-4 py-2.5 text-right text-slate-500">
+                                                {rowDiscountAmount ? formatCurrency(rowDiscountAmount) : <span className="text-slate-300">—</span>}
+                                              </td>
+                                              {!isNonTaxCustomer && <td className="px-4 py-2.5 text-right text-slate-500">{rowTaxAmount > 0 ? 'V18' : 'NV'}</td>}
+                                              {!isNonTaxCustomer && (
+                                                <td className="px-4 py-2.5 text-right text-slate-500">
+                                                  {rowTaxAmount ? formatCurrency(rowTaxAmount) : <span className="text-slate-300">—</span>}
+                                                </td>
+                                              )}
+                                              <td className="px-4 py-2.5 text-right font-semibold text-slate-900">{formatCurrency(lineGross)}</td>
+                                            </tr>
+                                          );
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                )}
+
+                                {/* Totals summary  right aligned */}
+                                <div className="flex justify-end">
+                                  <div className="w-64 space-y-2 text-sm bg-white border border-slate-100 rounded-xl p-5 shadow-sm">
+                                    <div className="flex justify-between font-medium text-slate-500">
+                                      <span>Total Gross</span><span>{formatCurrency(displayTotalGross)}</span>
                                     </div>
-                                  )}
-                                  {order.taxAmount > 0 && (
-                                    <div className="flex justify-between text-slate-500">
-                                      <span>Tax</span><span>{formatCurrency(order.taxAmount)}</span>
+                                    {!isNonTaxCustomer && (
+                                      <div className="flex justify-between font-medium text-slate-500">
+                                        <span>Total Tax</span><span>{formatCurrency(displayTotalTax)}</span>
+                                      </div>
+                                    )}
+                                    <div className="flex justify-between font-medium text-emerald-600">
+                                      <span>Total Discount</span><span>-{formatCurrency(displayTotalDiscount)}</span>
                                     </div>
-                                  )}
-                                  <div className="flex justify-between font-bold text-base pt-2.5 border-t border-slate-200 text-indigo-700">
-                                    <span>Total</span><span>{formatCurrency(order.totalAmount)}</span>
+                                    <div className="flex justify-between font-bold text-lg pt-3 border-t border-slate-100 text-indigo-700">
+                                      <span>Grand Total</span><span>{formatCurrency(displayFinalAmount)}</span>
+                                    </div>
                                   </div>
                                 </div>
                               </div>
                             </div>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
-                ))}
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           )}
 
-          {/* Pagination */}
           {data && data.totalPages > 1 && (
             <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-between">
               <span className="text-xs text-slate-500">{data.totalCount} total  page {data.page} of {data.totalPages}</span>
@@ -843,7 +838,6 @@ export default function AdminOrders() {
           )}
         </div>
       ) : (
-        // Mobile tiles
         <MobileTileList
           data={orders}
           keyExtractor={(o) => o.id}
@@ -854,68 +848,87 @@ export default function AdminOrders() {
           page={data?.page}
           totalPages={data?.totalPages}
           onPageChange={setPage}
-          renderTile={(order) => (
-            <div className="p-4">
-              <div className="flex items-start justify-between gap-3 mb-2">
-                <input
-                  type="checkbox"
-                  checked={selectedIds.has(order.id)}
-                  onChange={(e) => { e.stopPropagation(); toggleSelection(order.id); }}
-                  onClick={(e) => e.stopPropagation()}
-                  className="shrink-0 mt-0.5"
-                />
-                <div className="min-w-0 flex-1">
-                  <p className="font-semibold text-slate-900 truncate">{order.orderNumber}</p>
-                  <p className="text-sm text-slate-500 truncate">{order.customerName}</p>
+          renderTile={(order) => {
+            const customer = customers.find(c => c.id === order.customerId || c.shopName === order.customerName);
+            const isNonTaxCustomer = (customer?.customerType || (order as any).customerType || '').toLowerCase().replace(/[-\s]/g, '') === 'nontax';
+            
+            let mobDisplayTotalGross = 0;
+            let mobDisplayTotalTax = 0;
+            let mobDisplayTotalDiscount = 0;
+
+            order.items?.forEach(item => {
+              const baseAmt = (item.unitPrice || 0) * (item.quantity || 0);
+              const rDisc = baseAmt * ((item.discountPercent || 0) / 100);
+              const rTax = item.taxAmount || 0;
+              mobDisplayTotalGross += isNonTaxCustomer ? (baseAmt + rTax) : baseAmt;
+              if (!isNonTaxCustomer) mobDisplayTotalTax += rTax;
+              mobDisplayTotalDiscount += rDisc;
+            });
+
+            const mobFinalAmount = isNonTaxCustomer
+              ? mobDisplayTotalGross - mobDisplayTotalDiscount
+              : mobDisplayTotalGross + mobDisplayTotalTax - mobDisplayTotalDiscount;
+
+            return (
+              <div className="p-4">
+                <div className="flex items-start justify-between gap-3 mb-2">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(order.id)}
+                    onChange={(e) => { e.stopPropagation(); toggleSelection(order.id); }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="shrink-0 mt-0.5"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-slate-900 truncate">{order.orderNumber}</p>
+                    <p className="text-sm text-slate-500 truncate">{order.customerName}</p>
+                  </div>
+                  <StatusBadge status={order.status} />
                 </div>
-                <StatusBadge status={order.status} />
-              </div>
-              <div className="flex items-center gap-3 text-xs text-slate-400 mb-2">
-                <span>{formatDate(order.orderDate)}</span>
-                <span>Rep: {order.repName || ''}</span>
-                <span>{order.items?.length || 0} items</span>
-              </div>
-              <div className="flex justify-between items-center pt-2.5 border-t border-slate-50">
-                <p className="font-bold text-slate-900">{formatCurrency(order.totalAmount)}</p>
-                <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${expandedOrderId === order.id ? 'rotate-90 text-blue-500' : ''}`} />
-              </div>
-              {expandedOrderId === order.id && (
-                <div className="mt-3 pt-3 border-t border-blue-100 space-y-3 animate-fade-in">
-                  {order.items?.map((item) => (
-                    <div key={item.id} className="flex justify-between text-xs bg-slate-50 rounded-lg p-2.5">
-                      <div>
-                        <span className="font-medium text-slate-800">{item.productName}</span>
-                        <span className="text-slate-400 ml-1"> {item.quantity}</span>
-                        {item.productSKU && <span className="text-slate-400 ml-1 text-[10px]">({item.productSKU})</span>}
-                      </div>
-                      <span className="font-semibold">{formatCurrency(item.lineTotal)}</span>
+                <div className="flex items-center gap-3 text-xs text-slate-400 mb-2">
+                  <span>{formatDate(order.orderDate)}</span>
+                  <span>Rep: {order.repName || ''}</span>
+                  <span>{order.items?.length || 0} items</span>
+                </div>
+                <div className="flex justify-between items-center pt-2.5 border-t border-slate-50">
+                  <p className="font-bold text-slate-900">{formatCurrency(mobFinalAmount)}</p>
+                  <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${expandedOrderId === order.id ? 'rotate-90 text-blue-500' : ''}`} />
+                </div>
+                {expandedOrderId === order.id && (
+                  <div className="mt-3 pt-3 border-t border-blue-100 space-y-3 animate-fade-in">
+                    {order.items?.map((item) => {
+                      const baseAmt = (item.unitPrice || 0) * (item.quantity || 0);
+                      const rTax = item.taxAmount || 0;
+                      const lineGross = isNonTaxCustomer ? (baseAmt + rTax) : baseAmt;
+                      return (
+                        <div key={item.id} className="flex justify-between text-xs bg-slate-50 rounded-lg p-2.5">
+                          <div>
+                            <span className="font-medium text-slate-800">{item.productName}</span>
+                            <span className="text-slate-400 ml-1"> {item.quantity}</span>
+                          </div>
+                          <span className="font-semibold">{formatCurrency(lineGross)}</span>
+                        </div>
+                      );
+                    })}
+                    <div className="text-xs space-y-1.5 bg-white border border-slate-100 rounded-xl p-3 mt-1">
+                      <div className="flex justify-between text-slate-500"><span>Total Gross</span><span>{formatCurrency(mobDisplayTotalGross)}</span></div>
+                      {!isNonTaxCustomer && <div className="flex justify-between text-slate-500"><span>Total Tax</span><span>{formatCurrency(mobDisplayTotalTax)}</span></div>}
+                      <div className="flex justify-between text-emerald-600"><span>Discount</span><span>-{formatCurrency(mobDisplayTotalDiscount)}</span></div>
+                      <div className="flex justify-between font-bold text-indigo-700 pt-1.5 border-t border-slate-100"><span>Grand Total</span><span>{formatCurrency(mobFinalAmount)}</span></div>
                     </div>
-                  ))}
-                  <div className="text-xs space-y-1.5 bg-white border border-slate-100 rounded-xl p-3 mt-1">
-                    <div className="flex justify-between text-slate-500"><span>Subtotal</span><span>{formatCurrency(order.subTotal)}</span></div>
-                    {order.discountAmount > 0 && <div className="flex justify-between text-emerald-600"><span>Discount</span><span>{formatCurrency(order.discountAmount)}</span></div>}
-                    {order.taxAmount > 0 && <div className="flex justify-between text-slate-500"><span>Tax</span><span>{formatCurrency(order.taxAmount)}</span></div>}
-                    <div className="flex justify-between font-bold text-indigo-700 pt-1.5 border-t border-slate-100"><span>Total</span><span>{formatCurrency(order.totalAmount)}</span></div>
+                    <div className="flex flex-wrap gap-1.5 pt-1.5">
+                      <button onClick={(e) => { e.stopPropagation(); exportOrders('pdf', false, order); }} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-indigo-50 text-indigo-700 active:scale-95 flex items-center gap-1"><FileText className="w-3 h-3"/> PDF</button>
+                      <button onClick={(e) => { e.stopPropagation(); exportOrders('excel', false, order); }} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-50 text-emerald-700 active:scale-95 flex items-center gap-1"><FileSpreadsheet className="w-3 h-3"/> Excel</button>
+                    </div>
                   </div>
-                  <div className="flex flex-wrap gap-1.5 pt-0.5">
-                    <button onClick={() => navigate(`/admin/orders/${order.id}`)} className="px-2.5 py-1 text-xs font-medium rounded-lg bg-slate-100 text-slate-600 active:scale-95">View</button>
-                    {order.status === 'Pending' && (
-                      <>
-                        <button onClick={() => approveMut.mutate(order.id)} className="px-2.5 py-1 text-xs font-medium rounded-lg bg-emerald-50 text-emerald-700 active:scale-95">Approve</button>
-                        <button onClick={() => setRejectOrder(order)} className="px-2.5 py-1 text-xs font-medium rounded-lg bg-orange-50 text-orange-600 active:scale-95">Reject</button>
-                      </>
-                    )}
-                    <button onClick={() => setStatusChangeOrder(order)} className="px-2.5 py-1 text-xs font-medium rounded-lg bg-indigo-50 text-indigo-700 active:scale-95">Status</button>
-                    <button onClick={() => setDeleteOrder(order)} className="px-2.5 py-1 text-xs font-medium rounded-lg bg-red-50 text-red-600 active:scale-95">Delete</button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+                )}
+              </div>
+            );
+          }}
         />
       )}
 
-      {/*  Sticky selection action bar  */}
+      {/* Sticky selection action bar  */}
       {selectedIds.size > 0 &&
         createPortal(
           <div className="fixed bottom-0 left-0 right-0 z-50 flex justify-center pb-5 pointer-events-none">
@@ -928,7 +941,7 @@ export default function AdminOrders() {
               <button onClick={() => exportOrders('excel', true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium transition">
                 <FileSpreadsheet className="w-3.5 h-3.5" /> Excel
               </button>
-              <button onClick={() => exportOrders('pdf', true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-medium transition">
+              <button onClick={() => exportOrders('pdf', true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition">
                 <FileText className="w-3.5 h-3.5" /> PDF
               </button>
               <button onClick={() => { setBulkStatusValue(''); setShowBulkStatusModal(true); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition">
@@ -945,7 +958,7 @@ export default function AdminOrders() {
           document.body
         )}
 
-      {/*  Per-order status change modal  */}
+      {/* Per-order status change modal  */}
       {statusChangeOrder &&
         createPortal(
           <div className="fixed inset-0 z-50 flex flex-col items-center">
@@ -980,7 +993,7 @@ export default function AdminOrders() {
           document.body
         )}
 
-      {/*  Bulk status change modal  */}
+      {/* Bulk status change modal  */}
       {showBulkStatusModal &&
         createPortal(
           <div className="fixed inset-0 z-50 flex flex-col items-center">
@@ -1012,7 +1025,7 @@ export default function AdminOrders() {
           document.body
         )}
 
-      {/*  Reject confirmation  */}
+      {/* Reject confirmation  */}
       <ConfirmModal
         open={!!rejectOrder}
         title="Reject Order"
@@ -1023,7 +1036,7 @@ export default function AdminOrders() {
         onCancel={() => setRejectOrder(null)}
       />
 
-      {/*  Delete confirmation  */}
+      {/* Delete confirmation  */}
       {deleteOrder && (
         <DeleteOrderModal
           orderNumber={deleteOrder.orderNumber}
@@ -1033,7 +1046,7 @@ export default function AdminOrders() {
         />
       )}
 
-      {/*  Bulk delete confirmation  */}
+      {/* Bulk delete confirmation  */}
       <ConfirmModal
         open={bulkDeleteConfirm}
         title="Delete Selected Orders"
@@ -1048,7 +1061,6 @@ export default function AdminOrders() {
 }
 
 function DeleteOrderModal({ orderNumber, isPending, onClose, onConfirm }: { orderNumber: string; isPending: boolean; onClose: () => void; onConfirm: () => void }) {
-  // always render through portal so it's on top of the page DOM
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="fixed inset-0 bg-black/50" onClick={onClose} />
@@ -1064,4 +1076,3 @@ function DeleteOrderModal({ orderNumber, isPending, onClose, onConfirm }: { orde
     document.body
   );
 }
-
