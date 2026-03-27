@@ -50,6 +50,7 @@ export default function AdminSupport() {
           <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="bg-slate-50/80 border-b border-slate-200/80">
             <th className="text-left px-5 py-3.5 font-semibold text-slate-600 text-xs uppercase tracking-wider">Subject</th>
             <th className="text-left px-5 py-3.5 font-semibold text-slate-600 text-xs uppercase tracking-wider">Customer</th>
+            <th className="text-left px-5 py-3.5 font-semibold text-slate-600 text-xs uppercase tracking-wider">Contact</th>
             <th className="text-left px-5 py-3.5 font-semibold text-slate-600 text-xs uppercase tracking-wider">Date</th>
             <th className="text-center px-5 py-3.5 font-semibold text-slate-600 text-xs uppercase tracking-wider">Priority</th>
             <th className="text-center px-5 py-3.5 font-semibold text-slate-600 text-xs uppercase tracking-wider">Status</th>
@@ -59,6 +60,7 @@ export default function AdminSupport() {
               <tr key={c.id} className="hover:bg-slate-50/60 transition-all cursor-pointer" onClick={() => navigate(`/admin/support/${c.id}`, { state: { complaint: c } })}>
                 <td className="px-5 py-3.5"><div><p className="font-medium text-slate-900">{c.subject}</p><p className="text-xs text-slate-500 mt-0.5 line-clamp-1">{c.description}</p></div></td>
                 <td className="px-5 py-3.5 text-slate-600">{c.customerName}</td>
+                <td className="px-5 py-3.5 text-slate-600">{c.contactName || c.createdByName || '-'}{c.contactEmail ? ` • ${c.contactEmail}` : ''}</td>
                 <td className="px-5 py-3.5 text-slate-600">{formatDate(c.createdAt)}</td>
                 <td className="px-5 py-3.5 text-center"><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${priorityColor(c.priority)}`}>{c.priority}</span></td>
                 <td className="px-5 py-3.5 text-center"><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusColor(c.status)}`}>{c.status}</span></td>

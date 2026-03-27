@@ -132,6 +132,10 @@ export interface Complaint {
   createdByUserId?: string;
   createdByRole?: string;
   createdByName?: string;
+  contactName?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  contactPosition?: string;
   assignedTo?: string;
   orderId?: string;
   subject: string;
@@ -149,6 +153,10 @@ export interface CreateComplaintRequest {
   subject: string;
   ticketType?: 'Support' | 'Complaint';
   description: string;
+  contactName?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  contactPosition?: string;
   priority?: string;
 }
 

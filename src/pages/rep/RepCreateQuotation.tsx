@@ -204,7 +204,7 @@ export default function RepCreateQuotation() {
                           <option value="">Select product</option>
                           {((products || []) as Product[]).map((option) => (
                             <option key={option.id} value={option.id} disabled={selectedProductIds.has(option.id)}>
-                              {option.name} ({option.sku})
+                              {option.name}
                             </option>
                           ))}
                         </select>

@@ -112,11 +112,11 @@ export default function CoordinatorLayout() {
         {/* Sidebar Header */}
         <div className={`flex items-center h-14 border-b border-slate-100 ${sidebarOpen ? 'px-4 gap-3' : 'justify-center'}`}>
           <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20 flex-shrink-0">
-            <Shield className="w-4 h-4 text-white" />
+            <span className="text-white font-black text-xs">J</span>
           </div>
           {sidebarOpen && (
             <div className="overflow-hidden">
-              <span className="font-bold text-slate-900 text-sm">Sales<span className="text-cyan-600">Coord</span></span>
+              <span className="font-bold text-slate-900 text-sm">JANASIRI DISTRIBUTORS (PVT) LTD</span>
               <p className="text-[10px] text-slate-400 -mt-0.5">Coordinator Portal</p>
             </div>
           )}
@@ -260,10 +260,12 @@ export default function CoordinatorLayout() {
               {sidebarOpen ? <ChevronLeft className="w-5 h-5 text-slate-400" /> : <Menu className="w-5 h-5 text-slate-400" />}
             </button>
             <div className="lg:hidden flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center">
-                <Shield className="w-3.5 h-3.5 text-white" />
-              </div>
-              <span className="font-bold text-slate-900 text-sm">Sales<span className="text-cyan-600">Coord</span></span>
+              <div
+            className="w-9 h-9 rounded-xl flex items-center justify-center shadow-lg flex-shrink-0 overflow-hidden bg-white"
+          >
+            <img src="/logo.png" alt="JANASIRI DISTRIBUTORS (PVT) LTD" className="w-full h-full object-fit" />
+          </div>
+              <span className="font-bold text-slate-900 text-xs">JANASIRI DISTRIBUTORS</span>
             </div>
             <div className="hidden lg:block">
               <h2 className="text-sm font-semibold text-slate-800">{currentPage?.label || 'Dashboard'}</h2>
