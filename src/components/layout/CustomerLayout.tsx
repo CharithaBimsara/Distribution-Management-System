@@ -79,6 +79,15 @@ export default function CustomerLayout() {
     markSectionAsRead(activeSection);
   }, [activeSection, counts, markSectionAsRead]);
 
+  const { data: customerProfile } = useQuery({
+    queryKey: ['customer-profile'],
+    queryFn: () => import('../../services/api/customersApi').then(m => m.customersApi.customerGetProfile()).then(r => r.data.data),
+    staleTime: 5 * 60 * 1000,
+    enabled: !!user?.id,
+  });
+
+  const displayName = customerProfile?.shopName || user?.username || 'Customer';
+
   const itemSection: Record<string, string> = {
     '/shop/orders': 'orders',
     '/shop/quotations': 'quotations',
@@ -95,12 +104,14 @@ export default function CustomerLayout() {
       >
         {/* Sidebar Header */}
         <div className={`flex items-center h-14 border-b border-slate-100 ${sidebarOpen ? 'px-4 gap-3' : 'justify-center'}`}>
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-orange-500 to-rose-500 flex items-center justify-center shadow-lg shadow-orange-500/20 flex-shrink-0">
-            <Sparkles className="w-4 h-4 text-white" />
+          <div
+            className="w-9 h-9 rounded-xl flex items-center justify-center shadow-lg flex-shrink-0 overflow-hidden bg-white"
+          >
+            <img src="/logo.png" alt="JANASIRI DISTRIBUTORS (PVT) LTD" className="w-full h-full object-fit" />
           </div>
           {sidebarOpen && (
             <div className="overflow-hidden">
-              <span className="font-bold text-slate-900 text-sm">Janasiri<span className="text-orange-500">Shop</span></span>
+              <span className="font-bold text-slate-900 text-xs">JANASIRI DISTRIBUTORS</span>
               <p className="text-[10px] text-slate-400 -mt-0.5">Customer Portal</p>
             </div>
           )}
@@ -150,10 +161,10 @@ export default function CustomerLayout() {
           {sidebarOpen ? (
             <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-slate-50">
               <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-rose-500 flex items-center justify-center flex-shrink-0">
-                <span className="text-white text-xs font-bold">{user?.username?.[0]?.toUpperCase()}</span>
+                <span className="text-white text-xs font-bold">{displayName?.[0]?.toUpperCase()}</span>
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-semibold text-slate-700 truncate">{user?.username}</p>
+                <p className="text-xs font-semibold text-slate-700 truncate">{displayName}</p>
                 <p className="text-[10px] text-slate-400">Customer</p>
               </div>
               <button onClick={handleLogout} className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition">
@@ -249,9 +260,9 @@ export default function CustomerLayout() {
             {/* Mobile: brand */}
             <div className="lg:hidden flex items-center gap-2">
               <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-orange-500 to-rose-500 flex items-center justify-center">
-                <Sparkles className="w-3.5 h-3.5 text-white" />
+                <span className="text-white font-black text-xs">J</span>
               </div>
-              <span className="font-bold text-slate-900 text-sm">{user?.username || 'Shop'}</span>
+              <span className="font-bold text-slate-900 text-sm">JANASIRI DISTRIBUTORS (PVT) LTD</span>
             </div>
             {/* Desktop: page title */}
             <div className="hidden lg:block">
@@ -307,7 +318,7 @@ export default function CustomerLayout() {
 
         {/* Page Content */}
         <main className="flex-1 overflow-y-auto pb-20 lg:pb-0">
-          <div className="lg:p-6 lg:max-w-6xl lg:mx-auto">
+          <div className="lg:px-6 lg:py-6 lg:max-w-7xl lg:mx-auto w-full">
             <Outlet />
           </div>
         </main>

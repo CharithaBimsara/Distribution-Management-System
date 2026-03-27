@@ -10,6 +10,7 @@ export default defineConfig(({ mode }) => {
     plugins: [react(), tailwindcss()],
     server: {
       port: 3000,
+      allowedHosts: true,
       proxy: {
         '/api': {
           target: devProxyTarget,

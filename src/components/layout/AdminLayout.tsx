@@ -114,19 +114,14 @@ export default function AdminLayout() {
         {/* Sidebar Header */}
         <div className={`flex items-center h-16 border-b border-slate-100 ${sidebarOpen ? 'px-5 gap-3' : 'justify-center'}`}>
           <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center shadow-lg flex-shrink-0 overflow-hidden"
-            style={{ background: 'linear-gradient(135deg, var(--brand-primary), var(--brand-secondary))' }}
+            className="w-9 h-9 rounded-xl flex items-center justify-center shadow-lg flex-shrink-0 overflow-hidden bg-white"
           >
-            {config?.companyLogo ? (
-              <img src={config.companyLogo} alt={config.companyName || 'Company logo'} className="h-full w-full object-cover" />
-            ) : (
-              <span className="text-white font-black text-sm">D</span>
-            )}
+            <img src="/logo.png" alt="JANASIRI DISTRIBUTORS (PVT) LTD" className="w-full h-full object-fit" />
           </div>
           {sidebarOpen && (
             <div className="overflow-hidden">
-              <span className="font-bold text-slate-900 text-sm">{config?.companyName || 'Distribution'}<span style={{ color: 'var(--brand-primary)' }}>MS</span></span>
-              <p className="text-[10px] text-slate-400 -mt-0.5">Admin Panel</p>
+              <span className="font-bold text-slate-900 text-xs">JANASIRI DISTRIBUTORS</span>
+              <p className="text-[10px] text-slate-400 -mt-0.5">Admin Portal</p>
             </div>
           )}
         </div>
@@ -202,16 +197,12 @@ export default function AdminLayout() {
             <div className="flex items-center justify-between px-5 h-16 border-b border-slate-100">
               <div className="flex items-center gap-3">
                   <div
-                    className="w-9 h-9 rounded-xl flex items-center justify-center overflow-hidden"
+                    className="w-9 h-9 rounded-xl flex items-center justify-center"
                     style={{ background: 'linear-gradient(135deg, var(--brand-primary), var(--brand-secondary))' }}
                   >
-                    {config?.companyLogo ? (
-                      <img src={config.companyLogo} alt={config.companyName || 'Company logo'} className="h-full w-full object-cover" />
-                    ) : (
-                      <span className="text-white font-black text-sm">D</span>
-                    )}
+                    <span className="text-white font-black text-xs">J</span>
                 </div>
-                  <span className="font-bold text-slate-900 text-sm">{config?.companyName || 'Janasiri'} <span style={{ color: 'var(--brand-primary)' }}>Dist.</span></span>
+                  <span className="font-bold text-slate-900 text-sm">JANASIRI DISTRIBUTORS (PVT) LTD</span>
               </div>
               <button onClick={() => setMobileOpen(false)} className="p-2 hover:bg-slate-100 rounded-xl transition">
                 <X className="w-5 h-5 text-slate-500" />
@@ -319,7 +310,7 @@ export default function AdminLayout() {
         </header>
 
         <main className="flex-1 overflow-y-auto p-4 lg:p-6">
-          <div className="max-w-7xl mx-auto">
+          <div className="lg:max-w-7xl lg:mx-auto w-full">
             <Outlet />
           </div>
         </main>

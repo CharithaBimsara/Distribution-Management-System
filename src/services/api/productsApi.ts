@@ -55,6 +55,12 @@ export const productsApi = {
   delete: (id: string) =>
     api.delete<ApiResponse<string>>(`/admin/products/${id}`),
 
+  bulkDelete: (ids: string[]) =>
+    api.post<ApiResponse<{ deleted: number; missing: number }>>('/admin/products/bulk-delete', { ids }),
+  cleanupOrphans: () =>
+    api.post<ApiResponse<number>>('/admin/categories/cleanup-orphans'),
+  fullReplaceImport: (data: { requests: CreateProductRequest[] }) =>
+    api.post<ApiResponse<Product[]>>('/admin/products/import/full-replace', data, { timeout: 180000 }),
 
   getCategories: () =>
     api.get<ApiResponse<Category[]>>('/categories'),

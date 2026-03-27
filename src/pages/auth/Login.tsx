@@ -1,15 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
-import { Eye, EyeOff, Loader2, LogIn } from 'lucide-react';
-import { useSystemBranding } from '../../hooks/useSystemBranding';
+import { Eye, EyeOff, Loader2, LogIn, MapPin, Phone, Building2 } from 'lucide-react';
+// useSystemBranding epa, api dynamic nethuwa Janasiri ekatama hdmu.
 
 export default function Login() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const { login, isLoading, error, isAuthenticated, user, clearError } = useAuth();
-  const { config } = useSystemBranding();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -31,188 +30,136 @@ export default function Login() {
     await login(username, password);
   };
 
+  // Primary Brand Color from the new logo
+  const brandPrimary = '#C15B3E';
+
   return (
-    <div
-      className="min-h-screen flex items-center justify-center p-5 relative overflow-hidden"
-      style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%)' }}
-    >
-      {/* Animated background orbs */}
-      <div
-        className="absolute w-[500px] h-[500px] rounded-full animate-pulse-glow"
-        style={{ top: '-15%', left: '-10%', background: 'radial-gradient(circle, rgba(99,102,241,0.15) 0%, transparent 70%)' }}
-      />
-      <div
-        className="absolute w-[400px] h-[400px] rounded-full animate-pulse-glow"
-        style={{ bottom: '-10%', right: '-10%', background: 'radial-gradient(circle, rgba(139,92,246,0.12) 0%, transparent 70%)', animationDelay: '1.5s' }}
-      />
-      <div
-        className="absolute w-[300px] h-[300px] rounded-full animate-pulse-glow"
-        style={{ top: '40%', left: '60%', background: 'radial-gradient(circle, rgba(6,182,212,0.08) 0%, transparent 70%)', animationDelay: '3s' }}
-      />
-
-      {/* Dot grid pattern */}
-      <div
-        className="absolute inset-0"
-        style={{
-          backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px)',
-          backgroundSize: '32px 32px',
-        }}
-      />
-
-      {/* Main Content */}
-      <div className="w-full max-w-[420px] relative z-10 animate-fade-in-scale">
-
-        {/* Logo */}
-        <div className="text-center mb-10">
-          <div
-            className="inline-flex items-center justify-center w-[92px] h-[92px] mb-6 animate-float overflow-hidden"
-          >
-            {config?.companyLogo ? (
-              <img src={config.companyLogo} alt={config.companyName || 'Company logo'} className="h-full w-full object-contain" />
-            ) : (
-              <span className="text-white font-black text-[28px]">D</span>
-            )}
+    <div className="min-h-screen w-full flex bg-white text-slate-900 font-sans">
+      
+      {/* -------------------- LEFT SIDE: Business Branding & Details -------------------- */}
+      <div className="hidden lg:flex lg:w-3/5 bg-slate-50 border-r border-slate-100 flex-col p-16 justify-between relative overflow-hidden">
+        
+        {/* Subtle background pattern (dot grid) */}
+        <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 1px)', backgroundSize: '24px 24px' }}></div>
+        
+        <div className="relative z-10 space-y-12">
+          {/* Main Logo & Title */}
+          <div className="flex items-center gap-5">
+            <img src="/logo.png" alt="Janasiri Logo" className="w-20 h-20 object-contain rounded-full shadow-sm" />
+            <div className="flex flex-col">
+              <h1 className="text-3xl font-extrabold tracking-tighter text-slate-950">
+                JANASIRI <span style={{ color: brandPrimary }}>DISTRIBUTORS</span>
+              </h1>
+              <p className="text-sm font-semibold text-slate-600 uppercase tracking-widest -mt-1">(PVT) LTD</p>
+            </div>
           </div>
-          <h1 className="text-[22px] font-extrabold text-white tracking-tight leading-tight">
-            {config?.companyName || 'Janasiri'} <span style={{ color: 'var(--brand-primary)' }}>Distribution</span>
-          </h1>
-          <p className="text-[13px] font-semibold text-white/70 -mt-0.5">Pvt Ltd</p>
-          <p className="text-[13px] mt-1.5" style={{ color: '#64748b' }}>
-            Wholesale Distribution Management
-          </p>
+
+          <blockquote className="space-y-3">
+            <p className="text-5xl font-bold text-slate-950 leading-tight tracking-tight">
+              Sri Lanka's Trusted Food Service Partner.
+            </p>
+            <p className="text-lg text-slate-600 max-w-xl">
+              Simplifying supply chains for thousands of businesses across the island. Reliable wholesale distribution management, optimized.
+            </p>
+          </blockquote>
+
+          {/* Contact Details from Card */}
+          <div className="grid grid-cols-2 gap-x-10 gap-y-8 pt-6 border-t border-slate-200">
+            <InfoBlock icon={MapPin} title="Registered Office" details="No. 205, Wattarantenna Passage, Kandy." />
+            <InfoBlock icon={MapPin} title="Warehouse Central" details="No. 02, Mawilmada Road, Kandy." />
+            <InfoBlock icon={MapPin} title="Warehouse West" details="No. 41A, Gnanathilaka Road, Mount Lavinia." />
+            <InfoBlock icon={Building2} title="Contact & VAT" details="+94 81 495 0206 | TP / Hotline | VAT: 114608394-7000" />
+          </div>
         </div>
 
-        {/* Login Card */}
-        <div
-          className="rounded-[20px] p-8"
-          style={{
-            background: 'rgba(15, 23, 42, 0.65)',
-            backdropFilter: 'blur(24px)',
-            WebkitBackdropFilter: 'blur(24px)',
-            border: '1px solid rgba(255, 255, 255, 0.08)',
-            boxShadow: '0 24px 48px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255,255,255,0.05) inset',
-          }}
-        >
+        {/* Footer */}
+        <div className="relative z-10 flex justify-between items-center text-xs text-slate-400 pt-8 border-t border-slate-100">
+          <p>&copy; {new Date().getFullYear()} Janasiri Distributors (Pvt) Ltd. All rights reserved.</p>
+          <a href="https://janasiri.com" target="_blank" rel="noreferrer" className="hover:text-slate-600">WWW.JANASIRI.COM</a>
+        </div>
+      </div>
+
+      {/* -------------------- RIGHT SIDE: Login Form -------------------- */}
+      <div className="w-full lg:w-2/5 flex items-center justify-center p-8 md:p-12 lg:p-16">
+        <div className="w-full max-w-md space-y-10 animate-fade-in-scale">
+          
+          {/* Mobile Logo Visibility (hidden on large screens) */}
+          <div className="lg:hidden text-center flex flex-col items-center mb-10 gap-4">
+             <img src="/logo.png" alt="Janasiri Logo" className="w-16 h-16 object-contain rounded-full shadow-sm" />
+             <div className="flex flex-col">
+              <h1 className="text-2xl font-extrabold tracking-tighter text-slate-950">
+                JANASIRI <span style={{ color: brandPrimary }}>DISTRIBUTORS</span>
+              </h1>
+              <p className="text-xs font-semibold text-slate-600 uppercase tracking-widest -mt-1">(PVT) LTD</p>
+            </div>
+          </div>
+
+          {/* Welcome Text */}
+          <div className="space-y-2">
+            <h2 className="text-3xl font-extrabold tracking-tighter text-slate-950">Welcome back</h2>
+            <p className="text-base text-slate-600">Sign in to your wholesale management portal.</p>
+          </div>
+
           {error && (
-            <div
-              className="flex items-center gap-3 px-4 py-3 rounded-[12px] mb-6 text-[13px] font-medium animate-scale-in"
-              style={{
-                background: 'rgba(239, 68, 68, 0.1)',
-                border: '1px solid rgba(239, 68, 68, 0.2)',
-                color: '#fca5a5',
-              }}
-            >
-              <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: '#f87171' }} />
+            <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-sm font-medium text-red-800 animate-scale-in">
+              <div className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" />
               {error}
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Username */}
-            <div>
-              <label className="block text-[13px] font-semibold mb-2.5" style={{ color: '#94a3b8' }}>
+          <form onSubmit={handleSubmit} className="space-y-7">
+            {/* Username Input */}
+            <div className="space-y-2">
+              <label htmlFor="username" className="block text-sm font-semibold text-slate-700">
                 Username
               </label>
               <input
+                id="username"
+                name="username"
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="Enter your username"
+                placeholder="Ex: jdist_coordinator"
                 required
-                className="w-full transition-all duration-200 outline-none"
-                style={{
-                  padding: '14px 16px',
-                  fontSize: '14px',
-                  background: 'rgba(255, 255, 255, 0.06)',
-                  border: '1.5px solid rgba(255, 255, 255, 0.1)',
-                  borderRadius: '14px',
-                  color: '#f1f5f9',
-                }}
-                onFocus={(e) => {
-                  e.target.style.borderColor = 'rgba(99, 102, 241, 0.5)';
-                  e.target.style.boxShadow = '0 0 0 3px rgba(99, 102, 241, 0.15)';
-                  e.target.style.background = 'rgba(255, 255, 255, 0.08)';
-                }}
-                onBlur={(e) => {
-                  e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)';
-                  e.target.style.boxShadow = 'none';
-                  e.target.style.background = 'rgba(255, 255, 255, 0.06)';
-                }}
+                className="w-full px-5 py-3.5 text-sm border border-slate-200 rounded-xl bg-white text-slate-900 placeholder:text-slate-400 outline-none transition duration-150 focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
               />
             </div>
 
-            {/* Password */}
-            <div>
-              <label className="block text-[13px] font-semibold mb-2.5" style={{ color: '#94a3b8' }}>
+            {/* Password Input */}
+            <div className="space-y-2">
+              <label htmlFor="password" className="block text-sm font-semibold text-slate-700">
                 Password
               </label>
               <div className="relative">
                 <input
+                  id="password"
+                  name="password"
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your password"
+                  placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;"
                   required
-                  className="w-full transition-all duration-200 outline-none"
-                  style={{
-                    padding: '14px 48px 14px 16px',
-                    fontSize: '14px',
-                    background: 'rgba(255, 255, 255, 0.06)',
-                    border: '1.5px solid rgba(255, 255, 255, 0.1)',
-                    borderRadius: '14px',
-                    color: '#f1f5f9',
-                  }}
-                  onFocus={(e) => {
-                    e.target.style.borderColor = 'rgba(99, 102, 241, 0.5)';
-                    e.target.style.boxShadow = '0 0 0 3px rgba(99, 102, 241, 0.15)';
-                    e.target.style.background = 'rgba(255, 255, 255, 0.08)';
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)';
-                    e.target.style.boxShadow = 'none';
-                    e.target.style.background = 'rgba(255, 255, 255, 0.06)';
-                  }}
+                  className="w-full px-5 py-3.5 text-sm border border-slate-200 rounded-xl bg-white text-slate-900 placeholder:text-slate-400 outline-none transition duration-150 focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-lg transition-colors"
-                  style={{ color: '#64748b' }}
-                  onMouseEnter={(e) => (e.currentTarget.style.color = '#cbd5e1')}
-                  onMouseLeave={(e) => (e.currentTarget.style.color = '#64748b')}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1 rounded-lg text-slate-400 hover:text-slate-600 transition"
                 >
-                  {showPassword ? <EyeOff className="w-[18px] h-[18px]" /> : <Eye className="w-[18px] h-[18px]" />}
+                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
               </div>
             </div>
 
-            {/* Sign In Button */}
+            {/* Sign In Button (Branded Color) */}
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full font-semibold flex items-center justify-center gap-2.5 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full font-semibold flex items-center justify-center gap-2.5 px-6 py-4 rounded-xl text-base text-white border-none cursor-pointer transition-all duration-200 shadow-lg disabled:opacity-60 disabled:cursor-not-allowed hover:shadow-xl hover:-translate-y-0.5"
               style={{
-                padding: '15px 24px',
-                fontSize: '15px',
-                background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                color: 'white',
-                borderRadius: '14px',
-                border: 'none',
-                cursor: isLoading ? 'not-allowed' : 'pointer',
-                boxShadow: '0 4px 20px rgba(99, 102, 241, 0.35)',
+                backgroundColor: brandPrimary,
+                boxShadow: `0 8px 16px ${brandPrimary}25`, // Add subtle color shadow
               }}
-              onMouseEnter={(e) => {
-                if (!isLoading) {
-                  e.currentTarget.style.boxShadow = '0 8px 32px rgba(99, 102, 241, 0.5)';
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.boxShadow = '0 4px 20px rgba(99, 102, 241, 0.35)';
-                e.currentTarget.style.transform = 'translateY(0)';
-              }}
-              onMouseDown={(e) => { if (!isLoading) e.currentTarget.style.transform = 'scale(0.98)'; }}
-              onMouseUp={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; }}
             >
               {isLoading ? (
                 <><Loader2 className="w-5 h-5 animate-spin" /> Signing in...</>
@@ -221,28 +168,42 @@ export default function Login() {
               )}
             </button>
           </form>
-        </div>
 
-        {/* Register Link */}
-        <div className="text-center mt-6 space-y-3">
-          <p className="text-[14px]" style={{ color: '#64748b' }}>
-            Want to become a customer?{' '}
-            <Link
-              to="/customer-register"
-              className="font-semibold transition-all duration-200 hover:underline"
-              style={{ color: '#34d399' }}
-              onMouseEnter={(e) => { e.currentTarget.style.color = '#6ee7b7'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.color = '#34d399'; }}
-            >
-              Apply for an account
-            </Link>
-          </p>
+          {/* Registration Section */}
+          <div className="text-center pt-8 border-t border-slate-100">
+            <p className="text-sm text-slate-500">
+              New customer?{' '}
+              <Link
+                to="/customer-register"
+                className="font-semibold transition hover:underline"
+                style={{ color: brandPrimary }}
+              >
+                Apply for an account
+              </Link>
+            </p>
+          </div>
         </div>
+      </div>
+    </div>
+  );
+}
 
-        {/* Footer */}
-        <p className="text-center text-[12px] mt-10" style={{ color: '#334155' }}>
-          &copy; {new Date().getFullYear()} Janasiri Distributors &middot; All rights reserved
-        </p>
+// Helper component for business info blocks
+interface InfoBlockProps {
+  icon: React.ElementType;
+  title: string;
+  details: string;
+}
+
+function InfoBlock({ icon: Icon, title, details }: InfoBlockProps) {
+  return (
+    <div className="flex items-start gap-3.5">
+      <div className="p-2.5 rounded-xl bg-white border border-slate-100 text-slate-900 shadow-sm mt-1">
+         <Icon className="w-5 h-5" strokeWidth={2.5} />
+      </div>
+      <div className="flex flex-col">
+        <h4 className="font-bold text-slate-950 text-base">{title}</h4>
+        <p className="text-sm text-slate-600 whitespace-pre-line">{details}</p>
       </div>
     </div>
   );

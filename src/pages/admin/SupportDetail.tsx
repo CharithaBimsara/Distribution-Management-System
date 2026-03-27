@@ -119,6 +119,19 @@ export default function AdminSupportDetail() {
           <div>
             <h1 className="text-2xl font-bold text-slate-900">{complaint.subject}</h1>
             <p className="text-slate-500 text-sm mt-1">Customer: {complaint.customerName}</p>
+            {complaint.contactName && (
+              <p className="text-slate-500 text-sm mt-1">Contact: {complaint.contactName}</p>
+            )}
+            {complaint.contactPosition && (
+              <p className="text-slate-500 text-sm mt-1">Position: {complaint.contactPosition}</p>
+            )}
+            {(complaint.contactEmail || complaint.contactPhone) && (
+              <p className="text-slate-500 text-sm mt-1">
+                {complaint.contactEmail && <>Email: {complaint.contactEmail}</>}
+                {complaint.contactEmail && complaint.contactPhone && ' • '}
+                {complaint.contactPhone && <>Phone: {complaint.contactPhone}</>}
+              </p>
+            )}
           </div>
           <div className="flex gap-2">
             <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${priorityColor(complaint.priority)}`}>{complaint.priority}</span>

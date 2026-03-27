@@ -130,9 +130,10 @@ export function useSignalR() {
       refreshSupportQueries();
     });
 
-    conn.on('NewOrder', (data: { id: string; orderNumber: string; actorName?: string; customerName?: string }) => {
+    conn.on('NewOrder', (data: { id: string; orderNumber: string; actorName?: string; customerName?: string; shopName?: string }) => {
       let txt = `New order #${data.orderNumber}`;
-      if (data.customerName) txt += ` for ${data.customerName}`;
+      const customerOrShop = data.shopName || data.customerName;
+      if (customerOrShop) txt += ` for ${customerOrShop}`;
       if (data.actorName) txt += ` by ${data.actorName}`;
       toast.success(txt, { duration: 4000 });
       queryClient.invalidateQueries({ queryKey: ['notifications', user?.id] });
@@ -150,6 +151,14 @@ export function useSignalR() {
       toast(`Price updated: ${data.name}`, { icon: '💰', duration: 4000 });
       queryClient.invalidateQueries({ queryKey: ['admin-products'] });
       queryClient.invalidateQueries({ queryKey: ['rep-catalog'] });
+    });
+
+    conn.on('ProductsUpdated', () => {
+      toast('Product catalog updated by admin', { icon: '🔄', duration: 4000 });
+      queryClient.invalidateQueries({ queryKey: ['customer-products'] });
+      queryClient.invalidateQueries({ queryKey: ['customer-catalog'] });
+      queryClient.invalidateQueries({ queryKey: ['rep-catalog'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-products'] });
     });
 
     startConnection(conn, cancelled, 'NotificationHub');
