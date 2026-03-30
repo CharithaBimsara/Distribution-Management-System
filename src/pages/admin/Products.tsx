@@ -647,7 +647,7 @@ export default function AdminProducts() {
             </div>
 
             {/* Desktop/table (unchanged) */}
-            <div className="hidden lg:block overflow-x-auto"><table className="w-full text-sm"><thead><tr className="bg-slate-50/80 border-b border-slate-200/80">
+            <div className="hidden lg:block overflow-x-auto"><table className="w-full text-[12px]"><thead><tr className="bg-slate-50/80 border-b border-slate-200/80">
                 <th className="px-5 py-3.5">
                   <input type="checkbox" checked={data.items.length > 0 && selectedIds.size === data.items.length} onChange={() => {
                     if (selectedIds.size === data.items.length) setSelectedIds(new Set());
@@ -678,7 +678,9 @@ export default function AdminProducts() {
                         onBlur={() => commitEdit('new','name')}
                         onChange={e => setEditValue(e.target.value)}
                       />
-                      : <div><p className="font-medium text-slate-900">{newProduct.name || ''}</p></div>}
+                      : <div className="truncate max-w-[300px]">
+                          <p className="font-medium text-[12px] text-slate-900 whitespace-nowrap overflow-hidden text-ellipsis">{newProduct.name || ''}</p>
+                        </div>}
                   </td>
                   <td className="px-5 py-3.5 text-slate-600 font-mono text-xs" onDoubleClick={() => startEdit('new', 'sku', newProduct.sku || '')}>
                     {editing?.id === 'new' && editing.field === 'sku' ?
@@ -835,7 +837,9 @@ export default function AdminProducts() {
                         onChange={e => setEditValue(e.target.value)}
                         // saving only via explicit button
                       />
-                      : <div><p className="font-medium text-slate-900">{product.name}</p></div>}
+                      : <div className="truncate max-w-[300px]">
+                          <p className="font-medium text-[12px] text-slate-900 whitespace-nowrap overflow-hidden text-ellipsis">{product.name}</p>
+                        </div>}
                   </td>
                   <td className="px-5 py-3.5 text-slate-600 font-mono text-xs" onDoubleClick={() => startEdit(product.id, 'sku', product.sku)}>
                     {editing?.id === product.id && editing.field === 'sku' ?

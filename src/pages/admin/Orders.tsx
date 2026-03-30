@@ -330,7 +330,7 @@ export default function AdminOrders() {
           // --- 2. Header Right ---
           doc.setFontSize(11);
           doc.setFont('helvetica', 'bold');
-          doc.text(isNonTaxCustomer ? 'INVOICE' : 'TAX INVOICE', pageW - 14, 18, { align: 'right' });
+          doc.text('PURCHASE ORDER', pageW - 14, 18, { align: 'right' });
 
           const boxX = pageW - 74;
           const boxY = 21;
@@ -356,22 +356,29 @@ export default function AdminOrders() {
           doc.text(o.orderNumber || '', boxX + 22, boxY + rowH + 4);
           doc.text('CENTRAL', boxX + 22, boxY + rowH * 2 + 4);
 
-          // --- 3. Customer Box (Updated - No "Ship To" section) ---
+          // --- 3. Supplier/Customer Box ---
           const cBoxY = 44;
-          const cBoxH = 22;
+          const cBoxH = 28;
+          const colX = pageW / 2;
+
           doc.rect(14, cBoxY, pageW - 28, cBoxH);
-          doc.line(14, cBoxY + 6, pageW - 14, cBoxY + 6); // Just the header underline
+          doc.line(14, cBoxY + 8, pageW - 14, cBoxY + 8);
 
           doc.setFont('helvetica', 'bold');
-          doc.text('Customer Details', 16, cBoxY + 4);
+          doc.text('Supplier / Customer', 16, cBoxY + 6);
+
+          const shopNameStr = customers.find(c => c.id === o.customerId)?.shopName || (o as any).shopName || o.customerName || '';
 
           doc.setFont('helvetica', 'normal');
-          const shopNameStr = getShopName(o) || o.customerName || '';
-          doc.text(shopNameStr, 16, cBoxY + 10);
-          
-          // Allow address to use the full width of the box
-          const cAddr = doc.splitTextToSize(o.deliveryAddress || '', pageW - 32);
-          doc.text(cAddr, 16, cBoxY + 15);
+          doc.text('Supplier', 16, cBoxY + 14);
+          doc.text('Customer', colX + 2, cBoxY + 14);
+
+          doc.setFont('helvetica', 'normal');
+          doc.text('JANASIRI DISTRIBUTORS (PVT) LTD', 16, cBoxY + 20);
+          doc.text(shopNameStr, colX + 2, cBoxY + 20);
+
+          const cAddr = doc.splitTextToSize(o.deliveryAddress || '', (pageW / 2) - 24);
+          doc.text(cAddr, 16, cBoxY + 24);
 
           // --- 4. Table Setup ---
           let totalGrossAmount = 0;
@@ -483,13 +490,6 @@ export default function AdminOrders() {
             doc.text(line.value, pageW - 16, currentY + 4, { align: 'right' });
             currentY += totalsRowH;
           });
-
-          // --- 7. Signatures ---
-          const signY = afterTableY + 15;
-          doc.setFont('helvetica', 'normal');
-          doc.text('Received By / Customer', 40, signY);
-          doc.text('......................................................', 35, signY + 12);
-          doc.text('Seal & signature', 46, signY + 17);
 
         });
 
@@ -670,7 +670,7 @@ export default function AdminOrders() {
                           </div>
                         </td>
                         <td className="px-4 py-3.5 text-sm text-slate-700">{order.customerName || '—'}</td>
-                        <td className="px-4 py-3.5 text-sm text-slate-700">{getShopName(order)}</td>
+                        <td className="px-4 py-3.5 text-sm text-slate-700">{customers.find(c => c.id === order.customerId)?.shopName || (order as any).shopName || order.customerName || '—'}</td>
                         <td className="px-4 py-3.5 text-sm text-slate-500">{order.repName || ''}</td>
                         <td className="px-4 py-3.5 text-sm text-slate-500">{formatDate(order.orderDate)}</td>
                         <td className="px-4 py-3.5 text-right text-sm font-semibold text-slate-900">{formatCurrency(displayFinalAmount)}</td>
@@ -691,7 +691,7 @@ export default function AdminOrders() {
                                   <div className="flex items-center gap-2 text-sm">
                                     <span className="font-semibold text-slate-700">{order.orderNumber}</span>
                                     <span className="text-slate-400"></span>
-                                    <span className="text-slate-500">{getShopName(order)}</span>
+                                    <span className="text-slate-500">{customers.find(c => c.id === order.customerId)?.shopName || (order as any).shopName || order.customerName || '—'}</span>
                                     {order.deliveryAddress && (
                                       <>
                                         <span className="text-slate-400"></span>

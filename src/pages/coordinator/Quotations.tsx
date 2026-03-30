@@ -38,7 +38,7 @@ export default function CoordinatorQuotations() {
   const approveMut = useMutation({
     mutationFn: ({ id, notes }: { id: string; notes?: string }) => coordinatorApproveQuotation(id, { notes }),
     onSuccess: () => {
-      toast.success('Quotation approved and moved to orders');
+      toast.success('Quotation approved');
       setSelected(null); setApproveNotes('');
       queryClient.invalidateQueries({ queryKey: ['coordinator-quotations'] });
       queryClient.invalidateQueries({ queryKey: ['coordinator-dashboard'] });

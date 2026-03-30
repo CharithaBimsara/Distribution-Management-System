@@ -23,8 +23,8 @@ export async function downloadPurchaseOrderPdf(order: Order & { isTaxCustomer?: 
   const pageWidth = doc.internal.pageSize.getWidth();
   const DARK: [number, number, number] = [0, 0, 0];
   
-  const isTax = order.isTaxCustomer === true; 
-  const invoiceTitle = isTax ? 'TAX INVOICE' : 'INVOICE';
+  const isTax = order.isTaxCustomer === true;
+  const invoiceTitle = 'PURCHASE ORDER';
 
   // --- HEADER SECTION ---
   doc.setFontSize(12);
@@ -70,26 +70,27 @@ export async function downloadPurchaseOrderPdf(order: Order & { isTaxCustomer?: 
   doc.rect(gridX + 25, 29, 36, 6); 
   doc.text('CENTRAL', gridX + 27, 33);
 
-  // --- CUSTOMER & SHIP TO SECTION ---
+  // --- SUPPLIER & CUSTOMER SECTION ---
   const sectionY = 40;
   const colWidth = (pageWidth - 28) / 2;
-  
+
   doc.rect(14, sectionY, colWidth, 6);
   doc.rect(14 + colWidth, sectionY, colWidth, 6);
   doc.setFont('helvetica', 'bold');
-  doc.text('Shop Name', 16, sectionY + 4);
-  doc.text('Ship To', 16 + colWidth, sectionY + 4);
-  
+  doc.text('Supplier', 16, sectionY + 4);
+  doc.text('Customer', 16 + colWidth, sectionY + 4);
+
   doc.rect(14, sectionY + 6, colWidth, 18);
   doc.rect(14 + colWidth, sectionY + 6, colWidth, 18);
   doc.setFont('helvetica', 'normal');
-  
+
   const shopName = getShopNameOrPlaceholder(order);
   const custAddress = doc.splitTextToSize(order.deliveryAddress || '[Address]', colWidth - 4);
   const custName = doc.splitTextToSize(shopName, colWidth - 4);
-  doc.text(custName, 16, sectionY + 11);
+
+  doc.text('JANASIRI DISTRIBUTORS (PVT) LTD', 16, sectionY + 11);
   doc.text(custAddress, 16, sectionY + 16);
-  
+
   doc.text(custName, 16 + colWidth, sectionY + 11);
   doc.text(custAddress, 16 + colWidth, sectionY + 16);
 
@@ -175,11 +176,6 @@ export async function downloadPurchaseOrderPdf(order: Order & { isTaxCustomer?: 
 
   doc.setFontSize(8);
   doc.setDrawColor(0, 0, 0);
-
-  // Receiver Signature area
-  doc.text('Received By / Customer', 50, afterTableY + 20, { align: 'center' });
-  doc.text('...................................', 50, afterTableY + 28, { align: 'center' });
-  doc.text('Seal & signature', 50, afterTableY + 32, { align: 'center' });
 
   // Right side Totals Box
   if (isTax) {

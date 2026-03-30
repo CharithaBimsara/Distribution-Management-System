@@ -50,7 +50,7 @@ export default function AdminQuotations() {
   const approveMut = useMutation({
     mutationFn: (id: string) => adminApproveQuotation(id, {}),
     onSuccess: () => {
-      toast.success('Quotation approved and moved to orders');
+      toast.success('Quotation approved');
       setSelectedQuotation(null);
       queryClient.invalidateQueries({ queryKey: ['admin-quotations'] });
       queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
