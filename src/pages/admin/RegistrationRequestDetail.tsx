@@ -61,6 +61,7 @@ export default function RegistrationRequestDetail() {
   const queryClient = useQueryClient();
 
   const [reviewAction, setReviewAction] = useState<'Approve' | 'Reject' | null>(null);
+  const [reviewPassword, setReviewPassword] = useState('');
   const [reviewNotes, setReviewNotes] = useState('');
   const [reviewRejectionReason, setReviewRejectionReason] = useState('');
   const [selectedRegionId, setSelectedRegionId] = useState('');
@@ -129,6 +130,7 @@ export default function RegistrationRequestDetail() {
     if (!reviewAction) return;
     reviewMutation.mutate({
       action: reviewAction,
+      password: reviewAction === 'Approve' ? reviewPassword : undefined,
       rejectionReason: reviewAction === 'Reject' ? reviewRejectionReason : undefined,
       reviewNotes: reviewNotes || undefined,
       regionId: reviewAction === 'Approve' ? selectedRegionId || undefined : undefined,
@@ -225,6 +227,7 @@ export default function RegistrationRequestDetail() {
           {/* General Information */}
           <Section title="General Information" icon={<Building2 className="w-4 h-4" />}>
             <InfoRow label="Customer Name (BR)" value={r.customerName} />
+            <InfoRow label="Business Registration Number" value={r.businessRegistrationNumber} />
             <InfoRow label="Business Name" value={r.businessName} />
             <InfoRow label="Registered Address" value={r.registeredAddress} />
             <InfoRow label="Business Location" value={r.businessLocation} />
@@ -334,7 +337,10 @@ export default function RegistrationRequestDetail() {
                 {/* Action buttons */}
                 <div className="grid grid-cols-2 gap-3">
                   <button
-                    onClick={() => setReviewAction('Approve')}
+                    onClick={() => {
+                      setReviewAction('Approve');
+                      setReviewRejectionReason('');
+                    }}
                     className={`py-3 rounded-xl border-2 text-sm font-semibold flex items-center justify-center gap-2 transition-all ${
                       reviewAction === 'Approve'
                         ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
@@ -344,7 +350,10 @@ export default function RegistrationRequestDetail() {
                     <CheckCircle className="w-4 h-4" /> Approve
                   </button>
                   <button
-                    onClick={() => setReviewAction('Reject')}
+                    onClick={() => {
+                      setReviewAction('Reject');
+                      setReviewPassword('');
+                    }}
                     className={`py-3 rounded-xl border-2 text-sm font-semibold flex items-center justify-center gap-2 transition-all ${
                       reviewAction === 'Reject'
                         ? 'border-red-500 bg-red-50 text-red-700'
@@ -358,6 +367,19 @@ export default function RegistrationRequestDetail() {
                 {/* Cascading: Region → Coordinator → Rep (Approve only) */}
                 {reviewAction === 'Approve' && (
                   <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
+                        Account Password <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="password"
+                        value={reviewPassword}
+                        onChange={e => setReviewPassword(e.target.value)}
+                        placeholder="Set permanent password"
+                        className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white outline-none focus:ring-2 focus:ring-indigo-500/15 focus:border-indigo-300 transition"
+                      />
+                    </div>
+
                     {/* Region */}
                     <div>
                       <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
@@ -450,7 +472,12 @@ export default function RegistrationRequestDetail() {
                 {/* Submit */}
                 <button
                   onClick={handleSubmit}
-                  disabled={!reviewAction || (reviewAction === 'Reject' && !reviewRejectionReason.trim()) || reviewMutation.isPending}
+                  disabled={
+                    !reviewAction
+                    || (reviewAction === 'Approve' && !reviewPassword.trim())
+                    || (reviewAction === 'Reject' && !reviewRejectionReason.trim())
+                    || reviewMutation.isPending
+                  }
                   className={`w-full py-3.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
                     reviewAction === 'Approve'
                       ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm'

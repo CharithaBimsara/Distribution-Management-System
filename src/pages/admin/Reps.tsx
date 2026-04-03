@@ -31,6 +31,7 @@ export default function AdminReps() {
   const [repForm, setRepForm] = useState({
     fullName: '',
     employeeCode: '',
+    password: '',
     regionId: '',
     subRegionId: '',
     coordinatorId: '',
@@ -71,8 +72,8 @@ export default function AdminReps() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-reps'] });
       setShowCreate(false);
-      setRepForm({ fullName: '', employeeCode: '', regionId: '', subRegionId: '', coordinatorId: '', email: '', phoneNumber: '', hireDate: '' });
-      toast.success('Rep created! Credentials have been sent by email.');
+      setRepForm({ fullName: '', employeeCode: '', password: '', regionId: '', subRegionId: '', coordinatorId: '', email: '', phoneNumber: '', hireDate: '' });
+      toast.success('Rep created successfully.');
     },
     onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed'),
   });
@@ -340,7 +341,8 @@ export default function AdminReps() {
             {[
               { label: 'Full Name', key: 'fullName', type: 'text' },
               { label: 'Employee Code', key: 'employeeCode', type: 'text' },
-              { label: 'Email', key: 'email', type: 'email' },
+              { label: 'Password', key: 'password', type: 'password' },
+              { label: 'Email (Optional)', key: 'email', type: 'email' },
               { label: 'Phone', key: 'phoneNumber', type: 'tel' },
             ].map(f => (
               <div key={f.key}>
@@ -420,8 +422,16 @@ export default function AdminReps() {
             <div className="flex gap-3 pt-2">
               <button onClick={() => setShowCreate(false)} className="flex-1 py-2.5 bg-slate-100 rounded-xl text-sm font-medium text-slate-600">Cancel</button>
               <button
-                onClick={() => createRepMut.mutate({ ...repForm })}
-                disabled={createRepMut.isPending || !repForm.fullName || !repForm.email}
+                onClick={() => createRepMut.mutate({
+                  ...repForm,
+                  email: repForm.email || undefined,
+                  phoneNumber: repForm.phoneNumber || undefined,
+                  hireDate: repForm.hireDate || undefined,
+                  regionId: repForm.regionId || undefined,
+                  subRegionId: repForm.subRegionId || undefined,
+                  coordinatorId: repForm.coordinatorId || undefined,
+                })}
+                disabled={createRepMut.isPending || !repForm.fullName || !repForm.employeeCode || !repForm.password}
                 className="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium disabled:opacity-50"
               >
                 {createRepMut.isPending ? 'Creating...' : 'Create'}

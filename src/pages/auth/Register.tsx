@@ -91,7 +91,7 @@ const Register: React.FC = () => {
     try {
       await register({
         username: formData.username,
-        email: formData.email,
+        email: formData.email.trim() || undefined,
         password: formData.password,
         phoneNumber: formData.phoneNumber,
         role: 3, // Customer role enum value
@@ -110,7 +110,7 @@ const Register: React.FC = () => {
       case 0:
         return formData.shopName.trim().length >= 2;
       case 1:
-        return formData.email.includes('@') && formData.phoneNumber.length >= 10;
+        return (formData.email.trim().length === 0 || formData.email.includes('@')) && formData.phoneNumber.length >= 10;
       case 2:
         return formData.fullName.trim().length >= 2 && formData.location.trim().length >= 2;
       case 3:
@@ -160,7 +160,7 @@ const Register: React.FC = () => {
             </div>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Email Address</label>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Email Address (Optional)</label>
                 <input
                   type="email"
                   value={formData.email}

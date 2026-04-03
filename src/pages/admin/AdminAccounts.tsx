@@ -84,10 +84,10 @@ export default function AdminAccounts() {
       const payload = res.data.data;
       setGeneratedTempPassword({ username: payload.username, password: payload.temporaryPassword });
       queryClient.invalidateQueries({ queryKey: ['superadmin-admin-accounts'] });
-      toast.success('Temporary password generated');
+      toast.success('Password reset successfully');
     },
     onError: (error: any) => {
-      toast.error(error?.response?.data?.message || 'Failed to generate temporary password');
+      toast.error(error?.response?.data?.message || 'Failed to reset password');
     },
   });
 
@@ -95,7 +95,7 @@ export default function AdminAccounts() {
     if (!generatedTempPassword?.password) return;
     try {
       await navigator.clipboard.writeText(generatedTempPassword.password);
-      toast.success('Temporary password copied');
+      toast.success('Password copied');
     } catch {
       toast.error('Could not copy password');
     }
@@ -142,10 +142,10 @@ export default function AdminAccounts() {
     },
     {
       key: 'mustChangePassword',
-      header: 'First Login',
+      header: 'Password Status',
       render: (admin) => (
         <span className={`text-xs font-semibold px-2 py-1 rounded-full ${admin.mustChangePassword ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}`}>
-          {admin.mustChangePassword ? 'Password reset pending' : 'Completed'}
+          {admin.mustChangePassword ? 'Reset required' : 'No forced reset'}
         </span>
       ),
     },
@@ -180,7 +180,7 @@ export default function AdminAccounts() {
             className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 px-2.5 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-50"
           >
             <KeyRound className="w-3.5 h-3.5" />
-            Temp Password
+            Reset Password
           </button>
           <button
             type="button"
@@ -198,7 +198,7 @@ export default function AdminAccounts() {
     },
   ];
 
-  const canSubmit = form.email.trim().length > 0;
+  const canSubmit = true;
 
   return (
     <div className="animate-fade-in">
@@ -351,16 +351,16 @@ export default function AdminAccounts() {
       <BottomSheet
         open={!!generatedTempPassword}
         onClose={() => setGeneratedTempPassword(null)}
-        title="Temporary Password"
+        title="New Password"
       >
         <div className="space-y-3">
-          <p className="text-sm text-slate-600">Share this once with the user and ask them to change it after login.</p>
+          <p className="text-sm text-slate-600">Share this new password securely with the user.</p>
           <div className="rounded-xl border border-slate-200 p-3 bg-slate-50">
             <p className="text-xs text-slate-500">Username</p>
             <p className="text-sm font-semibold text-slate-800 break-all">{generatedTempPassword?.username}</p>
           </div>
           <div className="rounded-xl border border-indigo-200 p-3 bg-indigo-50">
-            <p className="text-xs text-indigo-700">Temporary Password</p>
+            <p className="text-xs text-indigo-700">Generated Password</p>
             <div className="mt-1 flex items-center justify-between gap-2">
               <p className="text-sm font-mono font-semibold text-indigo-800">{selectedGeneratedPassword}</p>
               <button

@@ -56,6 +56,7 @@ export interface CustomerSummary {
 export interface RegistrationSummary {
   customerType: string;
   customerName: string;
+  businessRegistrationNumber?: string;
   registeredAddress?: string;
   incorporateDate?: string;
   businessName?: string;

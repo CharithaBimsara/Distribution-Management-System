@@ -6,15 +6,13 @@ import { useQuery } from '@tanstack/react-query';
 import { notificationsApi } from '../../services/api/notificationsApi';
 import {
   LayoutDashboard, Package, ShoppingCart, Users, UserCheck,
-  BarChart3, Bell, Settings, LogOut, Menu, X, ChevronLeft, Search,
-  MessageSquare, Shield, FileText, MapPin, Gift, Hourglass
+  BarChart3, Bell, Settings, LogOut, Menu, X, ChevronLeft,
+  MessageSquare, Shield, FileText, MapPin, Gift
 } from 'lucide-react';
 import ConfirmModal from '../common/ConfirmModal';
 import NotificationPanel from '../common/NotificationPanel';
 import { useSectionNotificationBadges } from '../../hooks/useSectionNotificationBadges';
 import { useAutoCollapseSidebar } from '../../hooks/useAutoCollapseSidebar';
-import { useSystemBranding } from '../../hooks/useSystemBranding';
-import { useTrialCountdown } from '../../hooks/useTrialCountdown';
 
 const baseNavItems = [
   { to: '/admin', icon: LayoutDashboard, label: 'Dashboard', end: true },
@@ -38,8 +36,6 @@ export default function AdminLayout() {
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const { user, logout } = useAuth();
-  const { config } = useSystemBranding();
-  const { formattedTime, isExpired } = useTrialCountdown();
   useSignalR();
   const navigate = useNavigate();
   const location = useLocation();
@@ -272,10 +268,6 @@ export default function AdminLayout() {
           </div>
 
           <div className="flex items-center gap-2">
-            <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-amber-200 bg-amber-50 text-amber-700">
-              <Hourglass className="w-3.5 h-3.5" />
-              <span className="text-[11px] font-semibold">Trial {isExpired ? 'ended' : formattedTime}</span>
-            </div>
             <div className="relative">
               <button
                 onClick={() => setShowNotifications((v) => !v)}

@@ -132,6 +132,7 @@ export default function AdminCustomerForm({ onSuccess, onCancel }) {
 
   const [form, setForm] = useState({
     customerName: '', registeredAddress: '', incorporateDate: '',
+    businessRegistrationNumber: '', password: '',
     businessName: '', businessLocation: '', telephone: '', email: '', bankBranch: '',
     province: '', town: '',
     proprietorName: '', proprietorTp: '', proprietorEmail: '',
@@ -171,7 +172,7 @@ export default function AdminCustomerForm({ onSuccess, onCancel }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-customers'] });
       queryClient.invalidateQueries({ queryKey: ['admin-registration-requests'] });
-      toast.success('Customer created! Credentials sent by email.');
+      toast.success('Customer created successfully.');
       onSuccess?.();
     },
     onError: (err) => {
@@ -186,7 +187,7 @@ export default function AdminCustomerForm({ onSuccess, onCancel }) {
   const goBack = () => { scroll(); setStep(s => s - 1); };
 
   const canNext = () => {
-    if (step === 0) return !!(customerType && form.customerName && form.email && form.telephone);
+    if (step === 0) return !!(customerType && form.customerName && form.businessRegistrationNumber && form.password && form.telephone);
     if (step === 2) return customerType === 'tax' ? !!files.vatDocument : true;
     if (step === 4) return confirmed;
     return true;
@@ -196,7 +197,11 @@ export default function AdminCustomerForm({ onSuccess, onCancel }) {
     setError('');
     const fd = new FormData();
     fd.append('customerType', customerType === 'tax' ? 'Tax' : 'NonTax');
-    Object.entries(form).forEach(([k, v]) => { if (v) fd.append(k, v); });
+    Object.entries(form).forEach(([k, v]) => {
+      if (k === 'email') return;
+      if (v) fd.append(k, v);
+    });
+    fd.append('email', form.email?.trim() || '');
     if (files.businessReg) fd.append('businessRegDoc', files.businessReg);
     if (files.businessAddress) fd.append('businessAddressDoc', files.businessAddress);
     if (files.vatDocument) fd.append('vatDoc', files.vatDocument);
@@ -238,6 +243,8 @@ export default function AdminCustomerForm({ onSuccess, onCancel }) {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="Customer Name in BR" name="customerName" value={form.customerName} onChange={upd} required />
+            <Field label="Business Registration Number" name="businessRegistrationNumber" value={form.businessRegistrationNumber} onChange={upd} required />
+            <Field label="Account Password" name="password" value={form.password} onChange={upd} type="password" required />
             <Field label="Incorporate Date" name="incorporateDate" value={form.incorporateDate} onChange={upd} type="date" />
             <div className="sm:col-span-2">
               <Field label="Registered Address in BR" name="registeredAddress" value={form.registeredAddress} onChange={upd} />
@@ -247,7 +254,7 @@ export default function AdminCustomerForm({ onSuccess, onCancel }) {
             <div className="sm:col-span-2">
               <Field label="Business Location Address" name="businessLocation" value={form.businessLocation} onChange={upd} />
             </div>
-            <Field label="Email" name="email" value={form.email} onChange={upd} type="email" required />
+            <Field label="Email (Optional)" name="email" value={form.email} onChange={upd} type="email" placeholder="customer@email.com (optional)" />
             <Field label="Operating Bank & Branch" name="bankBranch" value={form.bankBranch} onChange={upd} />
             <SelectField label="Province" name="province" value={form.province} onChange={upd}>
               <option value="">Select Province</option>
@@ -325,8 +332,7 @@ export default function AdminCustomerForm({ onSuccess, onCancel }) {
             <p className="text-xs font-semibold text-indigo-700 mb-1">What happens after creation?</p>
             <ul className="text-xs text-indigo-600 space-y-0.5 list-disc list-inside">
               <li>A new user account is automatically created for this customer.</li>
-              <li>Login credentials are sent to <strong>{form.email || 'the customer\'s email'}</strong>.</li>
-              <li>The customer will be prompted to change their password on first login.</li>
+              <li>Email is optional and email notifications are currently disabled system-wide.</li>
             </ul>
           </div>
         </div>
@@ -341,6 +347,7 @@ export default function AdminCustomerForm({ onSuccess, onCancel }) {
               <ReviewSectionTitle>General Information</ReviewSectionTitle>
               <ReviewGrid rows={[
                 ['Customer Type', customerType === 'tax' ? 'Tax Customer' : 'Non-Tax Customer'],
+                ['Business Registration Number', form.businessRegistrationNumber],
                 ['Customer Name', form.customerName], ['Email', form.email],
                 ['Telephone', form.telephone], ['Registered Address', form.registeredAddress],
                 ['Business Name', form.businessName], ['Business Location', form.businessLocation],
@@ -389,7 +396,8 @@ export default function AdminCustomerForm({ onSuccess, onCancel }) {
                 {confirmed && <Check className="w-3 h-3 text-white" />}
               </div>
               <p className="text-sm text-slate-600 leading-relaxed">
-                I confirm the details above are <strong className="text-slate-800">true and correct</strong>. The customer will receive credentials by email after creation.
+                I confirm the details above are <strong className="text-slate-800">true and correct</strong>.
+                {' '}Email notifications are disabled, so no email will be sent.
               </p>
             </button>
             {error && (

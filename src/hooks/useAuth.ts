@@ -14,7 +14,7 @@ export function useAuth() {
   );
 
   const handleRegister = useCallback(
-    (userData: { username: string; email: string; password: string; phoneNumber: string; role: number; fullName?: string; shopName?: string; location?: string }) => 
+    (userData: { username: string; email?: string; password: string; phoneNumber: string; role: number; fullName?: string; shopName?: string; location?: string }) => 
       dispatch(register(userData)),
     [dispatch]
   );

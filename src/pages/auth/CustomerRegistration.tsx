@@ -160,6 +160,7 @@ function StepIndicator({ current }: { current: number }) {
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface FormState {
   customerName: string; registeredAddress: string; incorporateDate: string;
+  businessRegistrationNumber: string;
   businessName: string; businessLocation: string; telephone: string; email: string; bankBranch: string;
   regionId: string; subRegionId: string;
   province: string; town: string;
@@ -196,6 +197,7 @@ export default function CustomerRegistration() {
 
   const [form, setForm] = useState<FormState>({
     customerName: '', registeredAddress: '', incorporateDate: '',
+    businessRegistrationNumber: '',
     businessName: '', businessLocation: '', telephone: '', email: '', bankBranch: '',
     regionId: '', subRegionId: '',
     province: '', town: '',
@@ -284,14 +286,13 @@ export default function CustomerRegistration() {
     if (targetStep === 0) {
       if (!customerType) errors.customerType = 'Please select customer type.';
       if (!form.customerName.trim()) errors.customerName = 'Customer name is required.';
+      if (!form.businessRegistrationNumber.trim()) errors.businessRegistrationNumber = 'Business Registration Number is required.';
       if (!form.telephone.trim()) {
         errors.telephone = 'Telephone is required.';
       } else if (!PHONE_REGEX.test(form.telephone.trim())) {
         errors.telephone = 'Please enter a valid telephone number.';
       }
-      if (!form.email.trim()) {
-        errors.email = 'Email is required.';
-      } else if (!EMAIL_REGEX.test(form.email.trim())) {
+      if (form.email.trim() && !EMAIL_REGEX.test(form.email.trim())) {
         errors.email = 'Please enter a valid email address.';
       }
       if (!form.regionId) errors.regionId = 'Please select a region.';
@@ -495,6 +496,7 @@ export default function CustomerRegistration() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-5">
                 <Field label="Customer / Company Name (as in BR)" name="customerName" value={form.customerName} onChange={upd} required error={fieldErrors.customerName} placeholder="Enter full legal name" />
+                  <Field label="Business Registration Number (BR)" name="businessRegistrationNumber" value={form.businessRegistrationNumber} onChange={upd} required error={fieldErrors.businessRegistrationNumber} placeholder="Enter BR number" />
                 <Field label="Incorporate / Registration Date" name="incorporateDate" value={form.incorporateDate} onChange={upd} type="date" />
                 <div className="sm:col-span-2">
                   <Field label="Registered Address (as in BR)" name="registeredAddress" value={form.registeredAddress} onChange={upd} placeholder="Enter full registered office address" />
@@ -504,7 +506,7 @@ export default function CustomerRegistration() {
                 <div className="sm:col-span-2">
                   <Field label="Operating / Delivery Address" name="businessLocation" value={form.businessLocation} onChange={upd} placeholder="Where do you want goods delivered?" />
                 </div>
-                <Field label="Operating Email Address" name="email" value={form.email} onChange={upd} type="email" required error={fieldErrors.email} placeholder="For receiving invoices & updates" />
+                <Field label="Operating Email Address (Optional)" name="email" value={form.email} onChange={upd} type="email" error={fieldErrors.email} placeholder="For receiving invoices & updates (optional)" />
                 <Field label="Operating Bank & Branch" name="bankBranch" value={form.bankBranch} onChange={upd} placeholder="Bank name and branch for payments" />
                 
                 <SelectField label="Region" name="regionId" value={form.regionId} onChange={upd} required error={fieldErrors.regionId}>
@@ -598,6 +600,7 @@ export default function CustomerRegistration() {
                   {[
                     ['Customer Type', customerType === 'tax' ? '🧾 Tax Customer' : '🏪 Non-Tax Customer'],
                     ['Company/Customer Name', form.customerName], ['Registered Address', form.registeredAddress], ['Incorporate Date', form.incorporateDate],
+                    ['Business Registration Number', form.businessRegistrationNumber],
                     ['Business/Shop Name', form.businessName], ['Telephone/Hotline', form.telephone], ['Business Location Address', form.businessLocation],
                     ['operating Email', form.email], ['Bank & Branch', form.bankBranch],
                     ['Region', regions?.find((r:any)=>r.id===form.regionId)?.name],

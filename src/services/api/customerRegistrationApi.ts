@@ -6,6 +6,7 @@ export interface RegistrationRequest {
   id: string;
   customerType: string;
   customerName: string;
+  businessRegistrationNumber?: string;
   registeredAddress?: string;
   incorporateDate?: string;
   businessName?: string;
@@ -79,6 +80,7 @@ export const customerRegistrationApi = {
   /** Admin: approve or reject a request */
   adminReview: (id: string, data: {
     action: 'Approve' | 'Reject';
+    password?: string;
     rejectionReason?: string;
     reviewNotes?: string;
     assignedCoordinatorId?: string;
@@ -104,6 +106,7 @@ export const customerRegistrationApi = {
   /** Coordinator: approve or reject a request */
   coordinatorReview: (id: string, data: {
     action: 'Approve' | 'Reject';
+    password?: string;
     rejectionReason?: string;
     reviewNotes?: string;
     subRegionId?: string;

@@ -10,7 +10,7 @@ import { regionsApi } from '../../services/api/regionsApi';
 import { formatDate } from '../../utils/formatters';
 import {
   ArrowLeft, MapPin, Users, Phone, Mail, Calendar,
-  ChevronRight, BarChart2, TrendingUp, Power, UserPlus, User, UserMinus, Trash2, KeyRound, Copy,
+  ChevronRight, BarChart2, TrendingUp, Power, UserPlus, User, UserMinus, Trash2, KeyRound, Copy
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import StatusBadge from '../../components/common/StatusBadge';
@@ -125,7 +125,6 @@ export default function AdminCoordinatorDetail() {
       });
     },
   });
-
 
   const { data: repsData } = useQuery({
     queryKey: ['admin-coordinator-reps', id],
@@ -250,21 +249,10 @@ export default function AdminCoordinatorDetail() {
     onSuccess: (res: any) => {
       setGeneratedTempPassword(res.data.data.temporaryPassword);
       qc.invalidateQueries({ queryKey: ['admin-coordinator', id] });
-      toast.success('New temporary password generated');
+      toast.success('New password generated');
     },
-    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to generate temporary password'),
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to generate password'),
   });
-
-  const copyTempPassword = async () => {
-    const value = generatedTempPassword || coordinator?.temporaryPassword || '';
-    if (!value) return;
-    try {
-      await navigator.clipboard.writeText(value);
-      toast.success('Temporary password copied');
-    } catch {
-      toast.error('Could not copy password');
-    }
-  };
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
@@ -517,45 +505,73 @@ export default function AdminCoordinatorDetail() {
                     <span className="text-sm font-medium text-slate-800 text-right truncate">{coordinator.email || '—'}</span>
                   </div>
 
-                  <div className="flex items-center justify-between py-2.5 gap-4">
-                    <span className="text-xs text-slate-400 uppercase tracking-wider w-32 flex-shrink-0">Username</span>
-                    <span className="text-sm font-medium text-slate-800 text-right truncate">{coordinator.username || '—'}</span>
-                  </div>
+                </div>
+              </div>
+            </Card>
 
-                  <div className="flex items-center justify-between py-2.5 gap-4">
-                    <span className="text-xs text-slate-400 uppercase tracking-wider w-32 flex-shrink-0">Password</span>
-                    <span className={`text-xs font-semibold px-2 py-1 rounded-full ${coordinator.mustChangePassword ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}`}>
-                      {coordinator.mustChangePassword ? 'Temporary password pending' : 'Updated by user'}
+            {/* Credentials Card (New Layout) */}
+            <Card>
+              <CardHeader title="Credentials" icon={<KeyRound className="w-4 h-4" />} />
+              <div className="p-5 flex flex-col">
+                
+                {/* Username Row */}
+                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 pb-3 border-b border-slate-100">
+                  <span className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Username</span>
+                  
+                  <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200/60 px-3 py-1.5 rounded-lg w-fit">
+                    <span className="text-sm text-slate-700 font-medium select-all">
+                      {coordinator.employeeCode || coordinator.username || '-'}
                     </span>
-                  </div>
-
-                  <div className="py-2.5 space-y-2">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-xs text-slate-400 uppercase tracking-wider">Temporary Password</span>
-                      <button
-                        onClick={() => resetTempPasswordMut.mutate()}
-                        disabled={resetTempPasswordMut.isPending}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
-                      >
-                        <KeyRound className="w-3.5 h-3.5" />
-                        {resetTempPasswordMut.isPending ? 'Generating…' : 'Generate New'}
-                      </button>
-                    </div>
-                    {visibleTempPassword ? (
-                      <div className="flex items-center justify-between gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2">
-                        <span className="text-sm font-mono font-semibold text-indigo-700">{visibleTempPassword}</span>
-                        <button
-                          onClick={copyTempPassword}
-                          className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-700 hover:text-indigo-900"
-                        >
-                          <Copy className="w-3.5 h-3.5" /> Copy
-                        </button>
-                      </div>
-                    ) : (
-                      <p className="text-xs text-slate-500">Current password cannot be shown. Generate a new temporary password when needed.</p>
-                    )}
+                    <button
+                      onClick={() => {
+                        const text = coordinator.employeeCode || coordinator.username || '';
+                        if (text && text !== '-') {
+                          navigator.clipboard.writeText(text);
+                          toast.success('Username copied!');
+                        }
+                      }}
+                      className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors ml-1"
+                      title="Copy Username"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 </div>
+
+                {/* Password Row */}
+                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 pt-3">
+                  <span className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Current Password</span>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200/60 px-3 py-1.5 rounded-lg w-fit">
+                      <span className="text-sm text-slate-700 font-medium select-all">
+                        {visibleTempPassword || '-'}
+                      </span>
+                      <button
+                        onClick={() => {
+                          if (visibleTempPassword && visibleTempPassword !== '-') {
+                            navigator.clipboard.writeText(visibleTempPassword);
+                            toast.success('Password copied!');
+                          }
+                        }}
+                        className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors ml-1"
+                        title="Copy Password"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    <button
+                      onClick={() => resetTempPasswordMut.mutate()}
+                      disabled={resetTempPasswordMut.isPending}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-blue-50 text-blue-700 border border-blue-100 hover:bg-blue-100 hover:border-blue-200 transition-all disabled:opacity-50 shadow-sm"
+                    >
+                      <KeyRound className="w-3.5 h-3.5" />
+                      {resetTempPasswordMut.isPending ? 'Generating…' : 'Generate New'}
+                    </button>
+                  </div>
+                </div>
+                
               </div>
             </Card>
 
@@ -834,8 +850,6 @@ export default function AdminCoordinatorDetail() {
           )}
         </div>
       )}
-
-      {/* ── Edit Coordinator Bottom Sheet ── */}
 
       {/* ── Assign Rep Bottom Sheet ── */}
       {showAssignRep && (

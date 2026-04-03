@@ -5,7 +5,7 @@ export interface LoginRequest {
 
 export interface RegisterRequest {
   username: string;
-  email: string;
+  email?: string;
   password: string;
   phoneNumber: string;
   role: number;
@@ -15,8 +15,10 @@ export interface RegisterRequest {
 }
 
 export interface CreateAdminAccountRequest {
-  email: string;
-  phoneNumber: string;
+  username: string;
+  password: string;
+  email?: string;
+  phoneNumber?: string;
   fullName?: string;
   department?: string;
 }
@@ -36,8 +38,8 @@ export interface AdminAccountInfo {
 }
 
 export interface UpdateAdminAccountRequest {
-  email: string;
-  phoneNumber: string;
+  email?: string;
+  phoneNumber?: string;
   fullName?: string;
   department?: string;
   isActive?: boolean;

@@ -36,6 +36,11 @@ export const customersApi = {
   adminUpdate: (id: string, data: Record<string, unknown>) =>
     api.put<ApiResponse<Customer>>(`/admin/customers/${id}`, data),
 
+  adminUpdateRegistrationDetails: (id: string, formData: FormData) =>
+    api.put<ApiResponse<CustomerSummary>>(`/admin/customers/${id}/registration-details`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+
   adminToggleStatus: (id: string, isActive: boolean) =>
     api.put<ApiResponse<string>>(`/admin/customers/${id}/status`, isActive, {
       headers: { 'Content-Type': 'application/json' },

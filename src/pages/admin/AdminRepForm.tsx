@@ -11,6 +11,7 @@ export default function AdminRepForm({ rep, onSuccess, onCancel }: Props) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState({
     email: '',
+    password: '',
     fullName: '',
     phoneNumber: '',
     employeeCode: '',
@@ -48,18 +49,19 @@ export default function AdminRepForm({ rep, onSuccess, onCancel }: Props) {
     mutationFn: (d: any) => repsApi.adminCreate(d),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-reps'] });
-      toast.success('Rep created! Credentials have been sent by email.');
+      toast.success('Rep created successfully.');
       onSuccess?.();
     },
     onError: () => toast.error('Failed to create rep'),
   });
 
   const handleCreate = () => {
-    if (!form.email || !form.fullName) {
-      return toast.error('Email and full name are required');
+    if (!form.fullName || !form.employeeCode || !form.password) {
+      return toast.error('Full name, employee code, and password are required');
     }
     createMut.mutate({
-      email: form.email,
+      email: form.email || undefined,
+      password: form.password,
       fullName: form.fullName,
       phoneNumber: form.phoneNumber || undefined,
       employeeCode: form.employeeCode || undefined,
@@ -74,38 +76,50 @@ export default function AdminRepForm({ rep, onSuccess, onCancel }: Props) {
 
   return (
     <div className="space-y-3">
-      <input
-        value={form.email}
-        onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-        placeholder="Email*"
-        className={cls}
-      />
+      <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-3 text-xs text-indigo-700">
+        Username will be the rep employee code. Set a permanent password now.
+        Email is optional.
+      </div>
+
       <input
         value={form.fullName}
         onChange={e => setForm(f => ({ ...f, fullName: e.target.value }))}
         placeholder="Full name*"
         className={cls}
       />
+      <input
+        value={form.employeeCode}
+        onChange={e => setForm(f => ({ ...f, employeeCode: e.target.value }))}
+        placeholder="Employee code*"
+        className={cls}
+      />
       <div className="grid grid-cols-2 gap-2">
+        <input
+          type="password"
+          value={form.password}
+          onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+          placeholder="Password*"
+          className={cls}
+        />
         <input
           value={form.phoneNumber}
           onChange={e => setForm(f => ({ ...f, phoneNumber: e.target.value }))}
           placeholder="Phone"
           className={cls}
         />
-        <input
-          value={form.employeeCode}
-          onChange={e => setForm(f => ({ ...f, employeeCode: e.target.value }))}
-          placeholder="Employee code"
-          className={cls}
-        />
       </div>
+      <input
+        value={form.email}
+        onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+        placeholder="Email (optional)"
+        className={cls}
+      />
       <input
         type="date"
         value={form.hireDate}
         onChange={e => setForm(f => ({ ...f, hireDate: e.target.value }))}
-        className={cls}
-      />
+          className={cls}
+        />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div className="flex flex-col gap-1">

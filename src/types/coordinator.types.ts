@@ -19,8 +19,8 @@ export interface Coordinator {
 
 export interface CreateCoordinatorRequest {
   username?: string;
-  email: string;
-  password?: string;
+  email?: string;
+  password: string;
   phoneNumber?: string;
   fullName: string;
   employeeCode: string;

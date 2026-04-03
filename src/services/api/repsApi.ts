@@ -33,7 +33,7 @@ export const repsApi = {
   adminGetById: (id: string) =>
     api.get<ApiResponse<Rep>>(`/admin/reps/${id}`),
 
-  adminCreate: (data: { username?: string; email: string; password?: string; fullName: string; phoneNumber?: string; employeeCode?: string; hireDate?: string; regionId?: string; subRegionId?: string; coordinatorId?: string }) =>
+  adminCreate: (data: { username?: string; email?: string; password: string; fullName: string; phoneNumber?: string; employeeCode?: string; hireDate?: string; regionId?: string; subRegionId?: string; coordinatorId?: string }) =>
     api.post<ApiResponse<Rep>>('/admin/reps', data),
 
   adminUpdate: (id: string, data: { fullName?: string; phoneNumber?: string; regionId?: string; subRegionId?: string; coordinatorId?: string; isActive?: boolean }) =>

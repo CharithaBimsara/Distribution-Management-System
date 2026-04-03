@@ -61,16 +61,16 @@ export default function ForceChangePassword() {
           </div>
           <h1 className="text-2xl font-bold text-slate-900">Change Your Password</h1>
           <p className="text-sm text-slate-500 mt-2">
-            For security, you must change your temporary password before continuing.
+            For security, please confirm your current password and set a new one to continue.
           </p>
         </div>
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 space-y-5">
-          {/* Current (temporary) password */}
+          {/* Current password */}
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-              Temporary Password
+              Current Password
             </label>
             <div className="relative">
               <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -78,7 +78,7 @@ export default function ForceChangePassword() {
                 type={showCurrent ? 'text' : 'password'}
                 value={currentPassword}
                 onChange={e => setCurrentPassword(e.target.value)}
-                placeholder="Enter temporary password from email"
+                placeholder="Enter current password"
                 required
                 className="w-full pl-10 pr-10 py-2.5 border border-slate-200 rounded-xl text-sm bg-white outline-none focus:ring-2 focus:ring-indigo-500/15 focus:border-indigo-300 transition"
               />

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Mail, Phone, User } from 'lucide-react';
+import { ArrowLeft, Mail, Phone, User, KeyRound } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { authApi } from '../../services/api/authApi';
 
@@ -10,6 +10,8 @@ export default function CreateAdminAccount() {
   const queryClient = useQueryClient();
 
   const [form, setForm] = useState({
+    username: '',
+    password: '',
     fullName: '',
     email: '',
     phoneNumber: '',
@@ -18,7 +20,7 @@ export default function CreateAdminAccount() {
   const createMut = useMutation({
     mutationFn: () => authApi.createAdminAccount(form),
     onSuccess: () => {
-      toast.success('Admin created. Temporary credentials were sent to email.');
+      toast.success('Admin account created successfully.');
       queryClient.invalidateQueries({ queryKey: ['superadmin-admin-accounts'] });
       navigate('/admin/admin-accounts');
     },
@@ -27,7 +29,7 @@ export default function CreateAdminAccount() {
     },
   });
 
-  const canSubmit = form.fullName.trim() && form.email.trim() && form.phoneNumber.trim();
+  const canSubmit = form.username.trim() && form.password.trim() && form.fullName.trim();
 
   return (
     <div className="px-6 py-8 max-w-3xl mx-auto animate-fade-in">
@@ -35,7 +37,7 @@ export default function CreateAdminAccount() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Create Admin Account</h1>
           <p className="text-sm text-slate-500 mt-1">
-            Username will be the same as email. A temporary password will be sent to the admin email.
+            Set the admin username (ID number) and permanent password. Email is optional.
           </p>
         </div>
         <button
@@ -48,6 +50,33 @@ export default function CreateAdminAccount() {
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm space-y-4">
+        <div>
+          <label className="block text-xs font-medium text-slate-500 mb-1.5">Username</label>
+          <div className="relative">
+            <User className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              value={form.username}
+              onChange={(e) => setForm((prev) => ({ ...prev, username: e.target.value }))}
+              placeholder="Admin ID / username"
+              className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 outline-none transition"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-slate-500 mb-1.5">Password</label>
+          <div className="relative">
+            <KeyRound className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="password"
+              value={form.password}
+              onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
+              placeholder="Minimum 6 characters"
+              className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 outline-none transition"
+            />
+          </div>
+        </div>
+
         <div>
           <label className="block text-xs font-medium text-slate-500 mb-1.5">Name</label>
           <div className="relative">
@@ -62,7 +91,7 @@ export default function CreateAdminAccount() {
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-slate-500 mb-1.5">Email</label>
+          <label className="block text-xs font-medium text-slate-500 mb-1.5">Email (optional)</label>
           <div className="relative">
             <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
@@ -73,11 +102,10 @@ export default function CreateAdminAccount() {
               className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 outline-none transition"
             />
           </div>
-          <p className="text-[11px] text-slate-400 mt-1">Username will be set to this email address.</p>
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-slate-500 mb-1.5">Phone Number</label>
+          <label className="block text-xs font-medium text-slate-500 mb-1.5">Phone Number (optional)</label>
           <div className="relative">
             <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input

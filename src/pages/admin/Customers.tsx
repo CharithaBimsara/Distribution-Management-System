@@ -295,28 +295,30 @@ export default function AdminCustomers() {
             <div className="p-12 text-center"><Users className="w-12 h-12 text-slate-300 mx-auto mb-3" /><p className="text-slate-500">No customers found</p></div>
           ) : (
             <div className="overflow-x-auto">
-              <table className={`w-full table-fixed text-sm ${showCoordinatorCompactColumns ? 'min-w-[900px]' : 'min-w-[1320px]'}`}>
+              <table className="w-full table-fixed text-sm min-w-[1240px]">
                 <thead>
                   <tr className="bg-slate-50/80 border-b border-slate-200/80">
                     <th className="px-5 py-3.5 w-10">
-                      <input type="checkbox" checked={customers.length > 0 && selectedIds.size === customers.length} onChange={() => { if (selectedIds.size === customers.length) setSelectedIds(new Set()); else setSelectedIds(new Set(customers.map((c: any) => c.id))); }} className="shrink-0" />
+                      <input
+                        type="checkbox"
+                        checked={customers.length > 0 && selectedIds.size === customers.length}
+                        onChange={() => {
+                          if (selectedIds.size === customers.length) setSelectedIds(new Set());
+                          else setSelectedIds(new Set(customers.map((c: any) => c.id)));
+                        }}
+                        className="shrink-0"
+                      />
                     </th>
-                    <th className="w-40 text-left px-5 py-3.5 font-semibold text-slate-600 text-xs uppercase tracking-wider cursor-pointer select-none" onClick={() => handleSort('shopName')}>
+                    <th className="w-[14rem] text-left px-5 py-3.5 font-semibold text-slate-600 text-xs uppercase tracking-wider cursor-pointer select-none" onClick={() => handleSort('shopName')}>
                       <span className="flex items-center gap-1">Shop Name <SortIcon field="shopName" /></span>
                     </th>
-                    <th className="w-32 text-left px-5 py-3.5 font-semibold text-slate-600 text-xs uppercase tracking-wider">Sub-Region</th>
-                    <th className="w-24 text-center px-5 py-3.5 font-semibold text-slate-600 text-xs uppercase tracking-wider">Tax Type</th>
-                    <th className="w-36 text-left px-5 py-3.5 font-semibold text-slate-600 text-xs uppercase tracking-wider">Assigned Rep</th>
-                    {!showCoordinatorCompactColumns && <th className="w-32 text-left px-5 py-3.5 font-semibold text-slate-600 text-xs uppercase tracking-wider">Region</th>}
-                    {!showCoordinatorCompactColumns && <th className="w-44 text-left px-5 py-3.5 font-semibold text-slate-600 text-xs uppercase tracking-wider">Coordinator</th>}
-                    {!showCoordinatorCompactColumns && <th className="w-20 text-right px-5 py-3.5 font-semibold text-slate-600 text-xs uppercase tracking-wider">Orders</th>}
-                    {!showCoordinatorCompactColumns && (
-                      <th className="w-36 text-right px-5 py-3.5 font-semibold text-slate-600 text-xs uppercase tracking-wider cursor-pointer select-none" onClick={() => handleSort('totalOrderValue')}>
-                        <span className="flex items-center justify-end gap-1">Order Value <SortIcon field="totalOrderValue" /></span>
-                      </th>
-                    )}
-                    <th className="w-28 text-center px-5 py-3.5 font-semibold text-slate-600 text-xs uppercase tracking-wider">Status</th>
-                    <th className="w-32 text-left px-5 py-3.5 font-semibold text-slate-600 text-xs uppercase tracking-wider cursor-pointer select-none" onClick={() => handleSort('createdAt')}>
+                    <th className="w-[7rem] text-center px-5 py-3.5 font-semibold text-slate-600 text-xs uppercase tracking-wider">Tax Type</th>
+                    <th className="w-[9.5rem] text-left px-5 py-3.5 font-semibold text-slate-600 text-xs uppercase tracking-wider">Region</th>
+                    <th className="w-[9.5rem] text-left px-5 py-3.5 font-semibold text-slate-600 text-xs uppercase tracking-wider">Sub Region</th>
+                    <th className="w-[10.5rem] text-left px-5 py-3.5 font-semibold text-slate-600 text-xs uppercase tracking-wider">Coordinator</th>
+                    <th className="w-[9.5rem] text-left px-5 py-3.5 font-semibold text-slate-600 text-xs uppercase tracking-wider">Rep</th>
+                    <th className="w-[7.5rem] text-center px-5 py-3.5 font-semibold text-slate-600 text-xs uppercase tracking-wider">Status</th>
+                    <th className="w-[8rem] text-left px-5 py-3.5 font-semibold text-slate-600 text-xs uppercase tracking-wider cursor-pointer select-none" onClick={() => handleSort('createdAt')}>
                       <span className="flex items-center gap-1">Created <SortIcon field="createdAt" /></span>
                     </th>
                   </tr>
@@ -328,12 +330,15 @@ export default function AdminCustomers() {
                       onClick={(e) => handleRowClick(e, c)}
                       className={`hover:bg-slate-50/60 transition-all cursor-pointer ${selectedIds.has(c.id) ? 'bg-indigo-50/40' : ''}`}
                     >
-                      <td className="px-5 py-3.5" onClick={e => {
+                      <td
+                        className="px-5 py-3.5"
+                        onClick={e => {
                           e.stopPropagation();
                           if (!(e.target as HTMLElement).closest('input[type="checkbox"]')) {
                             toggleSelect(c.id);
                           }
-                        }}>
+                        }}
+                      >
                         <input
                           type="checkbox"
                           checked={selectedIds.has(c.id)}
@@ -345,17 +350,15 @@ export default function AdminCustomers() {
                       <td className="px-5 py-3.5">
                         <p className="font-semibold text-slate-900 truncate" title={c.shopName}>{c.shopName}</p>
                       </td>
-                      <td className="px-5 py-3.5 text-slate-600 text-sm truncate" title={c.subRegionName || '—'}>{c.subRegionName || '—'}</td>
                       <td className="px-5 py-3.5 text-center">
                         <span className={`inline-flex whitespace-nowrap px-2 py-0.5 rounded-full text-xs font-medium ${getCustomerTaxLabel(c) === 'Tax' ? 'bg-amber-50 text-amber-700' : 'bg-blue-50 text-blue-700'}`}>
                           {getCustomerTaxLabel(c)}
                         </span>
                       </td>
+                      <td className="px-5 py-3.5 text-slate-600 text-sm truncate" title={c.regionName || '—'}>{c.regionName || '—'}</td>
+                      <td className="px-5 py-3.5 text-slate-600 text-sm truncate" title={c.subRegionName || '—'}>{c.subRegionName || '—'}</td>
+                      <td className="px-5 py-3.5 text-slate-600 text-sm truncate" title={c.assignedCoordinatorName || '—'}>{c.assignedCoordinatorName || '—'}</td>
                       <td className="px-5 py-3.5 text-slate-600 text-sm truncate" title={c.assignedRepName || '—'}>{c.assignedRepName || '—'}</td>
-                      {!showCoordinatorCompactColumns && <td className="px-5 py-3.5 text-slate-600 text-sm truncate" title={c.regionName || '—'}>{c.regionName || '—'}</td>}
-                      {!showCoordinatorCompactColumns && <td className="px-5 py-3.5 text-slate-600 text-sm truncate" title={c.assignedCoordinatorName || '—'}>{c.assignedCoordinatorName || '—'}</td>}
-                      {!showCoordinatorCompactColumns && <td className="px-5 py-3.5 text-right font-medium text-slate-900">{c.totalOrders || 0}</td>}
-                      {!showCoordinatorCompactColumns && <td className="px-5 py-3.5 text-right font-semibold text-slate-900 whitespace-nowrap">{formatCurrency(c.totalOrderValue || 0)}</td>}
                       <td className="px-5 py-3.5 text-center"><StatusBadge status={c.approvalStatus || (c.isActive ? 'Active' : 'Inactive')} /></td>
                       <td className="px-5 py-3.5 text-xs text-slate-500 whitespace-nowrap">{c.createdAt ? formatDate(c.createdAt) : '—'}</td>
                     </tr>

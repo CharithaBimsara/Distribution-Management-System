@@ -15,6 +15,7 @@ export default function CoordinatorApprovals() {
   const isDesktop = useIsDesktop();
   const [page, setPage] = useState(1);
   const [approveTarget, setApproveTarget] = useState<RegistrationRequest | null>(null);
+  const [approvePassword, setApprovePassword] = useState('');
   const [rejectTarget, setRejectTarget] = useState<RegistrationRequest | null>(null);
   const [rejectReason, setRejectReason] = useState('');
 
@@ -24,12 +25,14 @@ export default function CoordinatorApprovals() {
   });
 
   const approveMut = useMutation({
-    mutationFn: ({ id }: { id: string }) => customerRegistrationApi.coordinatorReview(id, {
+    mutationFn: ({ id, password }: { id: string; password: string }) => customerRegistrationApi.coordinatorReview(id, {
       action: 'Approve',
+      password,
     }),
     onSuccess: () => {
       toast.success('Customer approved');
       setApproveTarget(null);
+      setApprovePassword('');
       queryClient.invalidateQueries({ queryKey: ['coordinator-registration-approvals'] });
       queryClient.invalidateQueries({ queryKey: ['coordinator-dashboard'] });
     },
@@ -52,9 +55,13 @@ export default function CoordinatorApprovals() {
   });
 
   const handleApprove = () => {
-    if (!approveTarget) return;
+    if (!approveTarget || !approvePassword.trim()) {
+      toast.error('Password is required to approve this customer');
+      return;
+    }
     approveMut.mutate({
       id: approveTarget.id,
+      password: approvePassword,
     });
   };
 
@@ -143,10 +150,20 @@ export default function CoordinatorApprovals() {
       <BottomSheet isOpen={!!approveTarget} onClose={() => setApproveTarget(null)} title={`Approve ${approveTarget?.customerName || ''}`}>
         {approveTarget && (
           <div className="space-y-4">
-            <p className="text-sm text-slate-500">Approve this customer. Sales rep ownership is managed through route assignment.</p>
+            <p className="text-sm text-slate-500">Approve this customer and set a permanent password. Sales rep ownership is managed through route assignment.</p>
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">Password</label>
+              <input
+                type="password"
+                value={approvePassword}
+                onChange={e => setApprovePassword(e.target.value)}
+                placeholder="Set permanent password"
+                className={inputCls}
+              />
+            </div>
             <div className="flex gap-2 pt-2">
-              <button onClick={() => setApproveTarget(null)} className="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50">Cancel</button>
-              <button onClick={handleApprove} disabled={approveMut.isPending}
+              <button onClick={() => { setApproveTarget(null); setApprovePassword(''); }} className="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50">Cancel</button>
+              <button onClick={handleApprove} disabled={approveMut.isPending || !approvePassword.trim()}
                 className="flex-1 px-4 py-2.5 bg-emerald-500 text-white rounded-xl text-sm font-semibold hover:bg-emerald-600 transition flex items-center justify-center gap-2 disabled:opacity-50">
                 {approveMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Approve
               </button>
