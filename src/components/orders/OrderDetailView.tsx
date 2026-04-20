@@ -99,17 +99,21 @@ export default function OrderDetailView({ order, backPath, summaryTitle = 'Order
                   <th className="px-5 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">MRP</th>
                   <th className="px-5 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Disc %</th>
                   <th className="px-5 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Disc Amt</th>
-                  <th className="px-5 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Tax</th>
-                  <th className="px-5 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Tax Amt</th>
+                  {isTaxCustomer && <th className="px-5 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Tax</th>}
+                  {isTaxCustomer && <th className="px-5 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Tax Amt</th>}
                   <th className="px-5 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Amount</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {order.items?.map((item: any, i: number) => {
-                  const gross = item.unitPrice * item.quantity;
+                  const qty = item.quantity || 0;
+                  const rate = item.unitPrice || 0;
+                  const gross = rate * qty;
                   const discPct = item.discountPercent ?? 0;
                   const discAmt = gross * (discPct / 100);
                   const taxAmt = item.taxAmount ?? 0;
+                  const taxPerUnit = qty ? taxAmt / qty : 0;
+                  const displayRate = isTaxCustomer ? rate : rate + taxPerUnit;
                   const taxable = gross - discAmt;
                   const taxPct = taxable > 0 ? (taxAmt / taxable) * 100 : 0;
                   return (
@@ -117,12 +121,12 @@ export default function OrderDetailView({ order, backPath, summaryTitle = 'Order
                       <td className="px-5 py-3 font-medium text-slate-900">{item.productName}</td>
                       <td className="px-5 py-3 text-xs text-slate-500">{item.productSKU || '—'}</td>
                       <td className="px-5 py-3 text-center text-slate-700">{item.quantity}</td>
-                      <td className="px-5 py-3 text-right text-slate-600">{formatCurrency(item.unitPrice)}</td>
+                      <td className="px-5 py-3 text-right text-slate-600">{formatCurrency(displayRate)}</td>
                       <td className="px-5 py-3 text-right text-slate-500">{item.mrp ? formatCurrency(item.mrp) : '—'}</td>
                       <td className="px-5 py-3 text-right text-slate-500">{discPct ? `${discPct}%` : '—'}</td>
                       <td className="px-5 py-3 text-right text-slate-500">{discAmt ? formatCurrency(discAmt) : '—'}</td>
-                      <td className="px-5 py-3 text-right text-slate-500">{taxPct ? `${taxPct.toFixed(2)}%` : '—'}</td>
-                      <td className="px-5 py-3 text-right text-slate-500">{taxAmt ? formatCurrency(taxAmt) : '—'}</td>
+                      {isTaxCustomer && <td className="px-5 py-3 text-right text-slate-500">{taxPct ? `${taxPct.toFixed(2)}%` : '—'}</td>}
+                      {isTaxCustomer && <td className="px-5 py-3 text-right text-slate-500">{taxAmt ? formatCurrency(taxAmt) : '—'}</td>}
                       <td className="px-5 py-3 text-right font-semibold text-slate-900">{formatCurrency(item.lineTotal)}</td>
                     </tr>
                   );
@@ -133,10 +137,14 @@ export default function OrderDetailView({ order, backPath, summaryTitle = 'Order
 
           <div className="sm:hidden divide-y divide-slate-100">
             {order.items?.map((item: any) => {
-              const gross = item.unitPrice * item.quantity;
+              const qty = item.quantity || 0;
+              const rate = item.unitPrice || 0;
+              const gross = rate * qty;
               const discPct = item.discountPercent ?? 0;
               const discAmt = gross * (discPct / 100);
               const taxAmt = item.taxAmount ?? 0;
+              const taxPerUnit = qty ? taxAmt / qty : 0;
+              const displayRate = isTaxCustomer ? rate : rate + taxPerUnit;
               return (
                 <div key={item.id} className="p-4 space-y-2">
                   <div className="flex items-center justify-between">
@@ -146,11 +154,11 @@ export default function OrderDetailView({ order, backPath, summaryTitle = 'Order
                   <div className="grid grid-cols-2 gap-2 text-xs text-slate-500">
                     <p>Item: {item.productSKU || '—'}</p>
                     <p className="text-right">Qty: {item.quantity}</p>
-                    <p>Rate: {formatCurrency(item.unitPrice)}</p>
+                    <p>Rate: {formatCurrency(displayRate)}</p>
                     <p className="text-right">MRP: {item.mrp ? formatCurrency(item.mrp) : '—'}</p>
                     <p>Disc %: {discPct ? `${discPct}%` : '—'}</p>
                     <p className="text-right">Disc Amt: {discAmt ? formatCurrency(discAmt) : '—'}</p>
-                    <p>Tax Amt: {taxAmt ? formatCurrency(taxAmt) : '—'}</p>
+                    {isTaxCustomer && <p>Tax Amt: {taxAmt ? formatCurrency(taxAmt) : '—'}</p>}
                     <p className="text-right">Amount: {formatCurrency(item.lineTotal)}</p>
                   </div>
                 </div>

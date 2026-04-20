@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { coordinatorGetQuotations, coordinatorApproveQuotation, coordinatorRejectQuotation } from '../../services/api/quotationApi';
+import { customersApi } from '../../services/api/customersApi';
 import { formatCurrency, formatRelative } from '../../utils/formatters';
 import { downloadQuotationPdf } from '../../utils/quotationPdf';
 import { FileText, Check, X, Loader2, Download } from 'lucide-react';
@@ -34,6 +35,17 @@ export default function CoordinatorQuotations() {
     queryKey: ['coordinator-quotations', page, statusFilter],
     queryFn: () => coordinatorGetQuotations(page, 20, statusFilter || undefined),
   });
+
+  const { data: customersData } = useQuery({
+    queryKey: ['coordinator-customers-for-quotation-tax'],
+    queryFn: () => customersApi.coordinatorGetAll({ page: 1, pageSize: 5000 }).then(r => r.data.data.items),
+  });
+
+  const getIsTax = (q: Quotation) => {
+    const cust = (customersData || []).find((c: any) => c.id === q.customerId);
+    if (!cust) return undefined;
+    return ((cust as any).customerType || '').toLowerCase().replace(/[-\s]/g, '') !== 'nontax';
+  };
 
   const approveMut = useMutation({
     mutationFn: ({ id, notes }: { id: string; notes?: string }) => coordinatorApproveQuotation(id, { notes }),
@@ -164,8 +176,8 @@ export default function CoordinatorQuotations() {
                                       <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">MRP</th>
                                       <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Disc %</th>
                                       <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Disc Amt</th>
-                                      <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Tax</th>
-                                      <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Tax Amt</th>
+                                      {getIsTax(q) !== false && <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Tax</th>}
+                                      {getIsTax(q) !== false && <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Tax Amt</th>}
                                       <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Amount</th>
                                       <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Request Price</th>
                                     </tr>
@@ -177,18 +189,21 @@ export default function CoordinatorQuotations() {
                                       const discPct = item.discountPercent || 0;
                                       const discAmt = (rate * qty * discPct) / 100;
                                       const taxAmt = item.taxAmount || 0;
+                                      const isTax = getIsTax(q);
+                                      const taxPerUnit = qty ? taxAmt / qty : 0;
+                                      const displayRate = isTax === false ? rate + taxPerUnit : rate;
                                       const amount = item.lineTotal ?? ((rate * qty) - discAmt + taxAmt);
                                       return (
                                         <tr key={item.id}>
                                           <td className="px-3 py-2.5 text-slate-800 max-w-[220px] truncate" title={item.productName || '-'}>{item.productName || '-'}</td>
                                           <td className="px-3 py-2.5 text-slate-600">{item.productSKU || '-'}</td>
                                           <td className="px-3 py-2.5 text-center text-slate-600">{qty}</td>
-                                          <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(rate)}</td>
+                                          <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(displayRate)}</td>
                                           <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(item.mrp ?? rate)}</td>
                                           <td className="px-3 py-2.5 text-right text-slate-700">{discPct}</td>
                                           <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(discAmt)}</td>
-                                          <td className="px-3 py-2.5 text-right text-slate-700">{item.taxCode || '-'}</td>
-                                          <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(taxAmt)}</td>
+                                          {isTax !== false && <td className="px-3 py-2.5 text-right text-slate-700">{item.taxCode || '-'}</td>}
+                                          {isTax !== false && <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(taxAmt)}</td>}
                                           <td className="px-3 py-2.5 text-right font-semibold text-slate-900">{formatCurrency(amount)}</td>
                                           <td className="px-3 py-2.5 text-right text-slate-700">{item.expectedPrice != null ? formatCurrency(item.expectedPrice) : '-'}</td>
                                         </tr>
@@ -207,7 +222,7 @@ export default function CoordinatorQuotations() {
                                 </div>
                                 <div className="flex gap-2 justify-end">
                                   <button
-                                    onClick={() => downloadQuotationPdf(q)}
+                                    onClick={() => downloadQuotationPdf(q, getIsTax(q))}
                                     className="px-4 py-2.5 border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-50 transition flex items-center justify-center gap-2"
                                   >
                                     <Download className="w-4 h-4" /> Download PDF
@@ -225,7 +240,7 @@ export default function CoordinatorQuotations() {
                             ) : (
                               <div className="flex justify-end">
                                 <button
-                                  onClick={() => downloadQuotationPdf(q)}
+                                  onClick={() => downloadQuotationPdf(q, getIsTax(q))}
                                   className="px-4 py-2.5 border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-50 transition flex items-center justify-center gap-2"
                                 >
                                   <Download className="w-4 h-4" /> Download PDF
@@ -333,8 +348,8 @@ export default function CoordinatorQuotations() {
                         <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">MRP</th>
                         <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Disc %</th>
                         <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Disc Amt</th>
-                        <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Tax</th>
-                        <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Tax Amt</th>
+                        {getIsTax(selected) !== false && <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Tax</th>}
+                        {getIsTax(selected) !== false && <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Tax Amt</th>}
                         <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Amount</th>
                         <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Request Price</th>
                       </tr>
@@ -346,18 +361,21 @@ export default function CoordinatorQuotations() {
                         const discPct = item.discountPercent || 0;
                         const discAmt = (rate * qty * discPct) / 100;
                         const taxAmt = item.taxAmount || 0;
+                        const isTax = getIsTax(selected);
+                        const taxPerUnit = qty ? taxAmt / qty : 0;
+                        const displayRate = isTax === false ? rate + taxPerUnit : rate;
                         const amount = item.lineTotal ?? ((rate * qty) - discAmt + taxAmt);
                         return (
                           <tr key={item.id}>
                             <td className="px-3 py-2.5 text-slate-800 max-w-[220px] truncate" title={item.productName || '-'}>{item.productName || '-'}</td>
                             <td className="px-3 py-2.5 text-slate-600">{item.productSKU || '-'}</td>
                             <td className="px-3 py-2.5 text-center text-slate-600">{qty}</td>
-                            <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(rate)}</td>
+                            <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(displayRate)}</td>
                             <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(item.mrp ?? rate)}</td>
                             <td className="px-3 py-2.5 text-right text-slate-700">{discPct}</td>
                             <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(discAmt)}</td>
-                            <td className="px-3 py-2.5 text-right text-slate-700">{item.taxCode || '-'}</td>
-                            <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(taxAmt)}</td>
+                            {isTax !== false && <td className="px-3 py-2.5 text-right text-slate-700">{item.taxCode || '-'}</td>}
+                            {isTax !== false && <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(taxAmt)}</td>}
                             <td className="px-3 py-2.5 text-right font-semibold text-slate-900">{formatCurrency(amount)}</td>
                             <td className="px-3 py-2.5 text-right text-slate-700">{item.expectedPrice != null ? formatCurrency(item.expectedPrice) : '-'}</td>
                           </tr>
@@ -377,7 +395,7 @@ export default function CoordinatorQuotations() {
                 </div>
                 <div className="flex gap-2 pt-2">
                   <button
-                    onClick={() => downloadQuotationPdf(selected)}
+                    onClick={() => downloadQuotationPdf(selected, getIsTax(selected))}
                     className="flex-1 px-4 py-2.5 border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-50 transition flex items-center justify-center gap-2"
                   >
                     <Download className="w-4 h-4" /> Download PDF
@@ -395,7 +413,7 @@ export default function CoordinatorQuotations() {
             ) : (
               <div className="pt-2">
                 <button
-                  onClick={() => downloadQuotationPdf(selected)}
+                  onClick={() => downloadQuotationPdf(selected, getIsTax(selected))}
                   className="w-full px-4 py-2.5 border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-50 transition flex items-center justify-center gap-2"
                 >
                   <Download className="w-4 h-4" /> Download PDF

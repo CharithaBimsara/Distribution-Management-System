@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
 export interface BottomSheetProps {
@@ -37,8 +38,8 @@ export default function BottomSheet({
 
   if (!visible) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-end xl:items-center xl:justify-center">
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-end xl:items-center xl:justify-center" style={{ pointerEvents: 'auto' }}>
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
       {/* Sheet — mobile/tablet: bottom slide-up; wide desktop: centered modal */}
@@ -64,6 +65,7 @@ export default function BottomSheet({
           {children}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

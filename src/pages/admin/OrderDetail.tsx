@@ -1,6 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ordersApi } from '../../services/api/ordersApi';
+import { customersApi } from '../../services/api/customersApi';
 import { formatCurrency, formatDate, statusColor } from '../../utils/formatters';
 import {
   ArrowLeft, FileDown, Package, XCircle, CheckCircle, RefreshCw,
@@ -31,6 +32,14 @@ export default function AdminOrderDetail() {
     queryFn: () => ordersApi.adminGetById(id || '').then(r => r.data.data),
     enabled: !!id,
   });
+
+  const { data: customerData } = useQuery({
+    queryKey: ['admin-customer', data?.customerId],
+    queryFn: () => customersApi.adminGetById(data!.customerId).then(r => r.data.data),
+    enabled: !!data?.customerId,
+  });
+
+  const isNonTaxCustomer = ((customerData?.customerType || '').toLowerCase().replace(/[-\s]/g, '') === 'nontax');
 
   const downloadReceipt = async () => {
     if (!data) return;
@@ -126,17 +135,32 @@ export default function AdminOrderDetail() {
       doc.rect(colMid, sectionY, 88, 30);
 
       const tableStartY = sectionY + 36;
-      const cols = ['Description','Item','Rate','Qty','Disc%','Disc Amt','Tax','Tax Amt','Amount'];
+      const cols = isNonTaxCustomer
+        ? ['Description','Item','Rate','Qty','Disc%','Disc Amt','Amount']
+        : ['Description','Item','Rate','Qty','Disc%','Disc Amt','Tax','Tax Amt','Amount'];
       const rows = data.items.map((item: any) => {
         const rate = item.unitPrice;
         const qty = item.quantity;
         const discPct = item.discountPercent ?? 0;
         const taxPerUnit = qty ? (item.taxAmount ?? 0) / qty : 0;
         const calc = calculateLine({ rate, qty, discountPercent: discPct, taxAmount: taxPerUnit });
+        const displayRate = isNonTaxCustomer ? rate + taxPerUnit : rate;
+        const rowGross = isNonTaxCustomer ? (rate * qty + (item.taxAmount ?? 0)) : calc.total;
+        if (isNonTaxCustomer) {
+          return [
+            item.productName,
+            item.productSKU || '',
+            formatCurrency(displayRate),
+            qty,
+            discPct ? `${discPct}%` : '-',
+            calc.discount ? formatCurrency(calc.discount) : '-',
+            formatCurrency(rowGross),
+          ];
+        }
         return [
           item.productName,
           item.productSKU || '',
-          formatCurrency(rate),
+          formatCurrency(displayRate),
           qty,
           discPct ? `${discPct}%` : '-',
           calc.discount ? formatCurrency(calc.discount) : '-',
@@ -145,7 +169,7 @@ export default function AdminOrderDetail() {
           formatCurrency(calc.total),
         ];
       });
-      while (rows.length < 8) rows.push(['','','','','','','','','']);
+      while (rows.length < 8) rows.push(Array(cols.length).fill(''));
 
       autoTable(doc, {
         head: [cols],
@@ -153,7 +177,17 @@ export default function AdminOrderDetail() {
         startY: tableStartY,
         styles: { fontSize: 7.5, cellPadding: 1.5, overflow: 'linebreak', valign: 'middle' },
         headStyles: { fillColor: BLUE, textColor: WHITE, fontStyle: 'bold', fontSize: 7.5 },
-        columnStyles: {
+        columnStyles: isNonTaxCustomer
+          ? {
+            0: { cellWidth: 55 },
+            1: { cellWidth: 15 },
+            2: { cellWidth: 22, halign: 'right' as const },
+            3: { cellWidth: 8, halign: 'center' as const },
+            4: { cellWidth: 10, halign: 'right' as const },
+            5: { cellWidth: 18, halign: 'right' as const },
+            6: { cellWidth: 28, halign: 'right' as const },
+          }
+          : {
           0: { cellWidth: 55 },                          
           1: { cellWidth: 15 },                          
           2: { cellWidth: 22, halign: 'right' },         
@@ -388,37 +422,50 @@ export default function AdminOrderDetail() {
                   <th className="px-5 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Unit Price</th>
                   <th className="px-5 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">MRP</th>
                   <th className="px-5 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Disc %</th>
-                  <th className="px-5 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Tax Amt</th>
+                  {!isNonTaxCustomer && <th className="px-5 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Tax Amt</th>}
                   <th className="px-5 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Line Total</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {order.items?.map((item: any, i: number) => (
+                {order.items?.map((item: any, i: number) => {
+                  const qty = item.quantity || 0;
+                  const rate = item.unitPrice || 0;
+                  const taxAmt = item.taxAmount || 0;
+                  const taxPerUnit = qty ? taxAmt / qty : 0;
+                  const displayRate = isNonTaxCustomer ? rate + taxPerUnit : rate;
+                  return (
                   <tr key={item.id} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}>
                     <td className="px-5 py-3 text-center text-xs text-slate-400 font-medium">{i + 1}</td>
                     <td className="px-5 py-3 font-medium text-slate-900">{item.productName}</td>
                     <td className="px-5 py-3 text-xs text-slate-400">{item.productSKU || '—'}</td>
                     <td className="px-5 py-3 text-center text-slate-700">{item.quantity}</td>
-                    <td className="px-5 py-3 text-right text-slate-600">{formatCurrency(item.unitPrice)}</td>
+                    <td className="px-5 py-3 text-right text-slate-600">{formatCurrency(displayRate)}</td>
                     <td className="px-5 py-3 text-right text-slate-400">{item.mrp ? formatCurrency(item.mrp) : <span className="text-slate-300">—</span>}</td>
                     <td className="px-5 py-3 text-right text-slate-500">{item.discountPercent ? `${item.discountPercent}%` : <span className="text-slate-300">—</span>}</td>
-                    <td className="px-5 py-3 text-right text-slate-500">{item.taxAmount ? formatCurrency(item.taxAmount) : <span className="text-slate-300">—</span>}</td>
+                    {!isNonTaxCustomer && <td className="px-5 py-3 text-right text-slate-500">{item.taxAmount ? formatCurrency(item.taxAmount) : <span className="text-slate-300">—</span>}</td>}
                     <td className="px-5 py-3 text-right font-semibold text-slate-900">{formatCurrency(item.lineTotal)}</td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
 
           {/* Mobile item cards */}
           <div className="sm:hidden divide-y divide-slate-100">
-            {order.items?.map((item: any, i: number) => (
+            {order.items?.map((item: any, i: number) => {
+              const qty = item.quantity || 0;
+              const rate = item.unitPrice || 0;
+              const taxAmt = item.taxAmount || 0;
+              const taxPerUnit = qty ? taxAmt / qty : 0;
+              const displayRate = isNonTaxCustomer ? rate + taxPerUnit : rate;
+              return (
               <div key={item.id} className="p-4 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3 min-w-0">
                   <span className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-bold text-slate-500 shrink-0">{i + 1}</span>
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-slate-900 truncate">{item.productName}</p>
-                    <p className="text-xs text-slate-400 mt-0.5">{item.productSKU && <span className="mr-2">{item.productSKU}</span>}x{item.quantity} @ {formatCurrency(item.unitPrice)}</p>
+                    <p className="text-xs text-slate-400 mt-0.5">{item.productSKU && <span className="mr-2">{item.productSKU}</span>}x{item.quantity} @ {formatCurrency(displayRate)}</p>
                   </div>
                 </div>
                 <div className="text-right shrink-0">
@@ -426,7 +473,8 @@ export default function AdminOrderDetail() {
                   {item.discountPercent > 0 && <p className="text-[10px] text-emerald-600">{item.discountPercent}% off</p>}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 

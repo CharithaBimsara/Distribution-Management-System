@@ -254,7 +254,7 @@ export default function CustomerQuotations() {
                                 </div>
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <button
-                                    onClick={() => downloadQuotationPdf(q)}
+                                    onClick={() => downloadQuotationPdf(q, isTaxCustomer)}
                                     className="px-4 py-2 bg-white text-slate-700 border border-slate-200 rounded-xl text-sm font-bold hover:bg-slate-50 active:scale-95 transition-all shadow-sm flex items-center gap-2"
                                   >
                                     <Download className="w-4 h-4 text-slate-400" /> Download PDF
@@ -307,6 +307,8 @@ export default function CustomerQuotations() {
                                   const rowGrossBase = rate * qty;
                                   const rowDiscount = item.discountAmount || ((rowGrossBase * discPct) / 100);
                                   const rowTax = item.taxAmount || 0;
+                                  const taxPerUnit = qty ? rowTax / qty : 0;
+                                  const displayRate = isTaxCustomer ? rate : rate + taxPerUnit;
 
                                   const rowGross = isTaxCustomer ? rowGrossBase : rowGrossBase + rowTax;
 
@@ -320,7 +322,7 @@ export default function CustomerQuotations() {
                                       <td className="px-4 py-3 font-mono text-xs text-slate-600">{item.productSKU || '-'}</td>
                                       <td className="px-4 py-3 font-bold text-slate-900 text-sm max-w-[200px] truncate" title={item.productName}>{item.productName}</td>
                                       <td className="px-4 py-3 text-center font-medium text-slate-700">{qty}</td>
-                                      <td className="px-4 py-3 text-right font-medium text-slate-700">{formatCurrency(rate)}</td>
+                                      <td className="px-4 py-3 text-right font-medium text-slate-700">{formatCurrency(displayRate)}</td>
                                       <td className="px-4 py-3 text-right font-medium text-slate-700">{discPct ? `${discPct}%` : '0.00'}</td>
                                       <td className="px-4 py-3 text-right font-medium text-emerald-600">{formatCurrency(rowDiscount)}</td>
                                       {isTaxCustomer && (
@@ -463,7 +465,7 @@ export default function CustomerQuotations() {
                     </button>
                   )}
                   <button
-                    onClick={(e) => { e.stopPropagation(); downloadQuotationPdf(q); }}
+                    onClick={(e) => { e.stopPropagation(); downloadQuotationPdf(q, isTaxCustomer); }}
                     className="flex-1 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-50 transition shadow-sm flex items-center justify-center gap-1.5"
                   >
                     <Download className="w-3.5 h-3.5" /> PDF
@@ -543,6 +545,8 @@ export default function CustomerQuotations() {
                         const rate = item.unitPrice || 0;
                         const qty = item.quantity || 0;
                         const rowTax = item.taxAmount || 0;
+                        const taxPerUnit = qty ? rowTax / qty : 0;
+                        const displayRate = isTaxCustomer ? rate : rate + taxPerUnit;
                         const rowGrossBase = rate * qty;
                         const rowGross = isTaxCustomer ? rowGrossBase : rowGrossBase + rowTax;
 
@@ -550,7 +554,7 @@ export default function CustomerQuotations() {
                           <tr key={item.id}>
                             <td className="px-4 py-3 font-bold text-slate-900 max-w-[200px] truncate">{item.productName}</td>
                             <td className="px-4 py-3 text-center font-medium text-slate-700">{qty}</td>
-                            <td className="px-4 py-3 text-right font-medium text-slate-700">{formatCurrency(rate)}</td>
+                            <td className="px-4 py-3 text-right font-medium text-slate-700">{formatCurrency(displayRate)}</td>
                             <td className="px-4 py-3 text-right font-bold text-orange-600">{item.expectedPrice != null ? formatCurrency(item.expectedPrice) : '-'}</td>
                             <td className="px-4 py-3 text-right font-bold text-slate-900">{formatCurrency(rowGross)}</td>
                           </tr>
@@ -584,7 +588,7 @@ export default function CustomerQuotations() {
 
               <div className="flex gap-2">
                 <button
-                  onClick={() => downloadQuotationPdf(selectedQuotation)}
+                  onClick={() => downloadQuotationPdf(selectedQuotation, isTaxCustomer)}
                   className="flex-1 py-3.5 bg-white border border-slate-200 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-50 flex items-center justify-center gap-2 active:scale-[0.98] transition-all shadow-sm"
                 >
                   <Download className="w-4 h-4 text-slate-400" /> Download PDF

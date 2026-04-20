@@ -391,19 +391,28 @@ export default function CoordinatorOrders() {
                                     </tr>
                                   </thead>
                                   <tbody className="divide-y divide-slate-100">
-                                    {order.items.map((item, i) => (
+                                    {order.items.map((item, i) => {
+                                      const qty = item.quantity || 0;
+                                      const rate = item.unitPrice || 0;
+                                      const taxAmt = item.taxAmount || 0;
+                                      const custData = customersData?.find((c: any) => c.id === order.customerId);
+                                      const isNonTax = (custData?.customerType || '').toLowerCase().replace(/[-\s]/g, '') === 'nontax';
+                                      const taxPerUnit = qty ? taxAmt / qty : 0;
+                                      const displayRate = isNonTax ? rate + taxPerUnit : rate;
+                                      return (
                                       <tr key={item.id} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
                                         <td className="px-4 py-2.5 text-center text-xs text-slate-400 font-medium">{i + 1}</td>
                                         <td className="px-4 py-2.5 font-medium text-slate-900">{item.productName}</td>
                                         <td className="px-4 py-2.5 text-slate-400 text-xs">{item.productSKU || ''}</td>
                                         <td className="px-4 py-2.5 text-center text-slate-700">{item.quantity}</td>
-                                        <td className="px-4 py-2.5 text-right text-slate-600">{formatCurrency(item.unitPrice)}</td>
+                                        <td className="px-4 py-2.5 text-right text-slate-600">{formatCurrency(displayRate)}</td>
                                         <td className="px-4 py-2.5 text-right text-slate-500">
-                                          {item.taxAmount ? formatCurrency(item.taxAmount) : <span className="text-slate-300">—</span>}
+                                          {!isNonTax && item.taxAmount ? formatCurrency(item.taxAmount) : <span className="text-slate-300">—</span>}
                                         </td>
                                         <td className="px-4 py-2.5 text-right font-semibold text-slate-900">{formatCurrency(item.lineTotal)}</td>
                                       </tr>
-                                    ))}
+                                      );
+                                    })}
                                   </tbody>
                                 </table>
                               </div>

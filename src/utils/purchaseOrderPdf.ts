@@ -120,12 +120,14 @@ export async function downloadPurchaseOrderPdf(order: Order & { isTaxCustomer?: 
     totalDiscount += calc.discount || 0;
     totalTax += isTax ? rowTax : 0;
 
+    const displayRate = isTax ? rate : rate + taxPerUnit;
+
     const rowData = [
       (index + 1).toString(),
       item.productSKU || '',
       item.productName || '',
       qty.toString(),
-      formatNumber(rate),
+      formatNumber(displayRate),
       discPct ? `${discPct}%` : '0.00',
       formatNumber(calc.discount || 0)
     ];

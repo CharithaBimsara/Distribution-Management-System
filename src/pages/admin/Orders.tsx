@@ -397,8 +397,10 @@ export default function AdminOrders() {
             const baseAmount = rate * qty;
             const rowDiscountAmount = baseAmount * (discPct / 100);
             const rowTaxAmount = it.taxAmount || 0;
+            const taxPerUnit = qty ? rowTaxAmount / qty : 0;
 
             const displayTotal = isNonTaxCustomer ? (baseAmount + rowTaxAmount) : baseAmount;
+            const displayRate = isNonTaxCustomer ? (rate + taxPerUnit) : rate;
 
             totalGrossAmount += isNonTaxCustomer ? (baseAmount + rowTaxAmount) : baseAmount;
             if (!isNonTaxCustomer) totalTaxAmount += rowTaxAmount;
@@ -406,7 +408,7 @@ export default function AdminOrders() {
 
             if (isNonTaxCustomer) {
               return [
-                i + 1, it.productSKU || '', it.productName, qty, formatAmt(rate), 
+                i + 1, it.productSKU || '', it.productName, qty, formatAmt(displayRate), 
                 formatAmt(discPct), formatAmt(rowDiscountAmount), formatAmt(displayTotal)
               ];
             } else {
@@ -766,6 +768,8 @@ export default function AdminOrders() {
                                           const baseAmount = rate * qty;
                                           const rowDiscountAmount = baseAmount * (discPct / 100);
                                           const rowTaxAmount = item.taxAmount || 0;
+                                          const taxPerUnit = qty ? rowTaxAmount / qty : 0;
+                                          const displayRate = isNonTaxCustomer ? rate + taxPerUnit : rate;
                                           const lineGross = isNonTaxCustomer ? (baseAmount + rowTaxAmount) : baseAmount;
 
                                           return (
@@ -774,7 +778,7 @@ export default function AdminOrders() {
                                               <td className="px-4 py-2.5 text-slate-400 text-xs">{item.productSKU || '—'}</td>
                                               <td className="px-4 py-2.5 font-medium text-slate-900">{item.productName}</td>
                                               <td className="px-4 py-2.5 text-center text-slate-700">{qty}</td>
-                                              <td className="px-4 py-2.5 text-right text-slate-600">{formatCurrency(rate)}</td>
+                                              <td className="px-4 py-2.5 text-right text-slate-600">{formatCurrency(displayRate)}</td>
                                               <td className="px-4 py-2.5 text-right text-slate-500">
                                                 {discPct ? `${discPct}%` : <span className="text-slate-300">—</span>}
                                               </td>

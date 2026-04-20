@@ -561,7 +561,7 @@ export default function CustomerProducts() {
 
                         {/* Rate */}
                         <td className="px-4 py-4 text-right text-sm font-medium text-slate-500">
-                          {prod ? formatCurrency(rate) : <span className="text-slate-300">—</span>}
+                          {prod ? formatCurrency(isNonTaxCustomer ? rate + taxAmt : rate) : <span className="text-slate-300">—</span>}
                         </td>
 
                         {/* MRP (Hidden on smaller screens to save space) */}

@@ -1,35 +1,40 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 
 type Props = {
   open: boolean;
   title?: string;
   description?: string;
+  message?: string;
   confirmLabel?: string;
   cancelLabel?: string;
   /**
    * Visual variant for the confirm button. Defaults to 'orange'.
-   * Supported: 'orange' | 'emerald' | 'indigo'
+   * Supported: 'orange' | 'emerald' | 'indigo' | 'red'
    */
-  confirmVariant?: 'orange' | 'emerald' | 'indigo';
+  confirmVariant?: 'orange' | 'emerald' | 'indigo' | 'red';
   onConfirm: () => void;
   onCancel: () => void;
 };
 
-export default function ConfirmModal({ open, title = 'Confirm', description, confirmLabel = 'Confirm', cancelLabel = 'Cancel', confirmVariant = 'orange', onConfirm, onCancel }: Props) {
+export default function ConfirmModal({ open, title = 'Confirm', description, message, confirmLabel = 'Confirm', cancelLabel = 'Cancel', confirmVariant = 'orange', onConfirm, onCancel }: Props) {
   if (!open) return null;
+
+  const desc = description || message || '';
 
   const confirmClass =
     confirmVariant === 'emerald'
       ? 'py-2.5 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700'
       : confirmVariant === 'indigo'
         ? 'py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700'
-        : 'py-2.5 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600';
+        : confirmVariant === 'red'
+          ? 'py-2.5 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700'
+          : 'py-2.5 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600';
 
-  return (
-    <div role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title" aria-describedby="confirm-modal-desc" className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
-      <div className="absolute inset-0 bg-black/40" onClick={onCancel} />
+  return createPortal(
+    <div role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title" aria-describedby="confirm-modal-desc" className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" style={{ pointerEvents: 'auto' }}>
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={onCancel} />
 
-      {/* Mobile: match app bottom-sheet header + handle. Desktop: centered modal with same header */}
       <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-2xl z-10 w-full sm:w-[92vw] sm:max-w-md max-h-[90vh] overflow-y-auto animate-slide-up sm:animate-none pb-safe">
         <div className="sticky top-0 bg-white pt-3 pb-2 px-6 border-b border-slate-100 z-10">
           <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-3" />
@@ -42,7 +47,7 @@ export default function ConfirmModal({ open, title = 'Confirm', description, con
         </div>
 
         <div className="p-6">
-          {description && <p id="confirm-modal-desc" className="text-sm text-slate-500">{description}</p>}
+          {desc && <p id="confirm-modal-desc" className="text-sm text-slate-500">{desc}</p>}
 
           <div className="mt-6 flex flex-col gap-3">
             <button onClick={onConfirm} className={`${confirmClass} w-full sm:w-auto`}>{confirmLabel}</button>
@@ -50,6 +55,7 @@ export default function ConfirmModal({ open, title = 'Confirm', description, con
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

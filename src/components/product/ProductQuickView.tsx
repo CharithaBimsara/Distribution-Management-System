@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import type { Product } from '../../types/product.types';
 import { formatCurrency } from '../../utils/formatters';
@@ -15,8 +16,8 @@ export default function ProductQuickView({ product, open, onClose, onAdd }: Prop
   const [isPopping, setIsPopping] = useState(false);
   if (!open || !product) return null;
 
-  return (
-    <div className="fixed inset-0 z-50">
+  return createPortal(
+    <div className="fixed inset-0 z-50" style={{ pointerEvents: 'auto' }}>
       <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
 
       {/* Desktop modal centered, mobile bottom sheet */}
@@ -49,6 +50,7 @@ export default function ProductQuickView({ product, open, onClose, onAdd }: Prop
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

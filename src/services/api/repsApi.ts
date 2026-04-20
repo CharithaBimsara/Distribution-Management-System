@@ -69,6 +69,12 @@ export const repsApi = {
   adminDeleteRoute: (routeId: string) =>
     api.delete<ApiResponse<string>>(`/admin/routes/${routeId}`),
 
+  adminRemoveCustomerFromRoute: (routeId: string, customerId: string) =>
+    api.delete<ApiResponse<string>>(`/admin/routes/${routeId}/customers/${customerId}`),
+
+  adminRemoveRepFromRoute: (routeId: string, repId: string) =>
+    api.delete<ApiResponse<string>>(`/admin/routes/${routeId}/reps/${repId}`),
+
   adminGetRouteProgress: () =>
     api.get<ApiResponse<RouteProgress[]>>('/admin/routes/progress/today'),
 

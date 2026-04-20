@@ -301,6 +301,8 @@ export default function CustomerOrders() {
                                   const rowGrossBase = rate * qty;
                                   const rowDiscount = (rowGrossBase * discPct) / 100;
                                   const rowTax = item.taxAmount || 0;
+                                  const taxPerUnit = qty ? rowTax / qty : 0;
+                                  const displayRate = isTaxCustomer ? rate : rate + taxPerUnit;
 
                                   const rowGross = isTaxCustomer ? rowGrossBase : rowGrossBase + rowTax;
 
@@ -314,7 +316,7 @@ export default function CustomerOrders() {
                                       <td className="px-4 py-3 font-mono text-xs text-slate-600">{item.productSKU || '-'}</td>
                                       <td className="px-4 py-3 font-bold text-slate-900 text-sm">{item.productName}</td>
                                       <td className="px-4 py-3 text-center font-medium text-slate-700">{qty}</td>
-                                      <td className="px-4 py-3 text-right font-medium text-slate-700">{formatCurrency(rate)}</td>
+                                      <td className="px-4 py-3 text-right font-medium text-slate-700">{formatCurrency(displayRate)}</td>
                                       <td className="px-4 py-3 text-right font-medium text-slate-700">{discPct ? `${discPct}%` : '0.00'}</td>
                                       <td className="px-4 py-3 text-right font-medium text-emerald-600">{formatCurrency(rowDiscount)}</td>
                                       {isTaxCustomer && (
@@ -509,6 +511,8 @@ export default function CustomerOrders() {
                     const rate = item.unitPrice || 0;
                     const qty = item.quantity || 0;
                     const rowTax = item.taxAmount || 0;
+                    const taxPerUnit = qty ? rowTax / qty : 0;
+                    const displayRate = isTaxCustomer ? rate : rate + taxPerUnit;
                     const rowGrossBase = rate * qty;
                     const rowGross = isTaxCustomer ? rowGrossBase : rowGrossBase + rowTax;
 
@@ -520,7 +524,7 @@ export default function CustomerOrders() {
                         </div>
                         <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
                           <span className="bg-slate-100 px-2 py-0.5 rounded-md">Qty: {item.quantity}</span>
-                          <span>Rate: {formatCurrency(rate)}</span>
+                          <span>Rate: {formatCurrency(displayRate)}</span>
                         </div>
                       </div>
                     )

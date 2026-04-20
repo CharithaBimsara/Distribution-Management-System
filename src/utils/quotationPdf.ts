@@ -15,11 +15,11 @@ function isTaxQuotation(quotation: Quotation) {
   }) || (quotation.taxAmount || 0) > 0;
 }
 
-function renderQuotationPage(doc: any, autoTable: any, quotation: Quotation) {
+function renderQuotationPage(doc: any, autoTable: any, quotation: Quotation, isTaxCustomer?: boolean) {
   const pageWidth = doc.internal.pageSize.getWidth();
   const DARK: [number, number, number] = [0, 0, 0];
   
-  const isTax = isTaxQuotation(quotation);
+  const isTax = isTaxCustomer !== undefined ? isTaxCustomer : isTaxQuotation(quotation);
   const title = isTax ? 'TAX QUOTATION' : 'QUOTATION';
 
   // --- HEADER SECTION ---
@@ -108,12 +108,14 @@ function renderQuotationPage(doc: any, autoTable: any, quotation: Quotation) {
     const rowGrossBase = rate * qty;
     const discAmt = (rowGrossBase * discPct) / 100;
     const taxAmt = item.taxAmount || 0;
+    const taxPerUnit = qty ? taxAmt / qty : 0;
     
-    const grossAmount = isTax ? (rowGrossBase + taxAmt) : rowGrossBase;
+    const grossAmount = isTax ? rowGrossBase : (rowGrossBase + taxAmt);
+    const displayRate = isTax ? rate : (rate + taxPerUnit);
 
-    totalGross += (isTax ? rowGrossBase + taxAmt : rowGrossBase);
+    totalGross += isTax ? rowGrossBase : (rowGrossBase + taxAmt);
     totalDiscount += discAmt;
-    totalTax += taxAmt;
+    totalTax += isTax ? taxAmt : 0;
 
     const reqPrice = item.expectedPrice != null && item.expectedPrice > 0 
         ? formatNumber(item.expectedPrice) 
@@ -124,7 +126,7 @@ function renderQuotationPage(doc: any, autoTable: any, quotation: Quotation) {
       item.productSKU || '',
       item.productName || '',
       qty.toString(),
-      formatNumber(rate),
+      formatNumber(displayRate),
       discPct ? `${discPct}%` : '0.00',
       formatNumber(discAmt)
     ];
@@ -186,11 +188,9 @@ function renderQuotationPage(doc: any, autoTable: any, quotation: Quotation) {
 
   // Totals Grid
   if (isTax) {
-    // totalGross already includes tax in this specific calculation mapping
-    const finalAmount = totalGross - totalDiscount; 
+    const finalAmount = totalGross - totalDiscount + totalTax; 
     
-    // Calculate base gross without tax for display
-    const baseGross = totalGross - totalTax;
+    const baseGross = totalGross;
 
     const totalsRows = [
       ['Total Gross', formatNumber(baseGross)],
@@ -227,17 +227,17 @@ function renderQuotationPage(doc: any, autoTable: any, quotation: Quotation) {
   }
 }
 
-export async function downloadQuotationPdf(quotation: Quotation) {
+export async function downloadQuotationPdf(quotation: Quotation, isTaxCustomer?: boolean) {
   const { jsPDF } = await import('jspdf');
   const autoTableModule = await import('jspdf-autotable');
   const autoTable = autoTableModule.default || (autoTableModule as any);
 
   const doc = new jsPDF();
-  renderQuotationPage(doc, autoTable, quotation);
+  renderQuotationPage(doc, autoTable, quotation, isTaxCustomer);
   doc.save(`${quotation.quotationNumber}.pdf`);
 }
 
-export async function downloadQuotationsPdf(quotations: Quotation[]) {
+export async function downloadQuotationsPdf(quotations: Quotation[], customerTaxMap?: Map<string, boolean>) {
   if (!quotations.length) return;
 
   const { jsPDF } = await import('jspdf');
@@ -248,21 +248,22 @@ export async function downloadQuotationsPdf(quotations: Quotation[]) {
 
   quotations.forEach((quotation, index) => {
     if (index > 0) doc.addPage();
-    renderQuotationPage(doc, autoTable, quotation);
+    const isTax = customerTaxMap?.get(quotation.customerId);
+    renderQuotationPage(doc, autoTable, quotation, isTax);
   });
 
   doc.save(`quotations-${Date.now()}.pdf`);
 }
 
 // Excel Download remains mostly the same, ensuring it maps the Request Price 
-export function downloadQuotationsExcel(quotations: Quotation[]) {
+export function downloadQuotationsExcel(quotations: Quotation[], customerTaxMap?: Map<string, boolean>) {
   if (!quotations.length) return;
 
   const wb = XLSX.utils.book_new();
 
   quotations.forEach((q) => {
     const rows: (string | number)[][] = [];
-    const withTax = isTaxQuotation(q);
+    const withTax = customerTaxMap?.has(q.customerId) ? (customerTaxMap.get(q.customerId) === true) : isTaxQuotation(q);
 
     rows.push(['QUOTATION', q.quotationNumber]);
     rows.push(['Status', q.status]);
@@ -285,8 +286,10 @@ export function downloadQuotationsExcel(quotations: Quotation[]) {
       const rowGrossBase = rate * qty;
       const discAmt = (rowGrossBase * discPct) / 100;
       const taxAmt = item.taxAmount || 0;
+      const taxPerUnit = qty ? taxAmt / qty : 0;
       
-      const grossAmount = withTax ? (rowGrossBase + taxAmt) : rowGrossBase;
+      const grossAmount = withTax ? rowGrossBase : (rowGrossBase + taxAmt);
+      const displayRate = withTax ? rate : (rate + taxPerUnit);
 
       const rowWithTax = [
         index + 1,
@@ -310,7 +313,7 @@ export function downloadQuotationsExcel(quotations: Quotation[]) {
           rowWithTax[1],
           rowWithTax[2],
           rowWithTax[3],
-          rowWithTax[4],
+          displayRate,
           rowWithTax[5],
           rowWithTax[6],
           rowWithTax[9],

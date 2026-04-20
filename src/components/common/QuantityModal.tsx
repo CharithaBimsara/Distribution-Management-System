@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 type Props = {
   open: boolean;
@@ -28,8 +29,8 @@ export default function QuantityModal({ open, title = 'Edit quantity', descripti
     onConfirm(n);
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ pointerEvents: 'auto' }}>
       <div className="absolute inset-0 bg-black/40" onClick={onCancel} />
       <div className="relative z-10 w-full max-w-md bg-white rounded-2xl p-4 sm:p-6 shadow-2xl">
         <h3 className="text-lg font-bold text-slate-900">{title}</h3>
@@ -53,6 +54,7 @@ export default function QuantityModal({ open, title = 'Edit quantity', descripti
           <button onClick={save} className="px-4 py-2 rounded-xl bg-orange-500 text-white text-sm font-semibold hover:bg-orange-600">{confirmLabel}</button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

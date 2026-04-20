@@ -204,6 +204,8 @@ export default function CustomerCheckout() {
                   const baseAmount = rate * qty;
                   const rowDiscountAmount = baseAmount * (discPct / 100);
                   const rowTaxAmount = item.taxRate != null ? (baseAmount - rowDiscountAmount) * item.taxRate : 0;
+                  const taxPerUnit = qty ? rowTaxAmount / qty : 0;
+                  const displayRate = isNonTaxCustomer ? rate + taxPerUnit : rate;
                   
                   // Display Total for each item
                   // If Non-Tax customer: rate * qty + tax
@@ -221,7 +223,7 @@ export default function CustomerCheckout() {
                           <p className="text-xs font-medium text-slate-500 mt-1 flex gap-2">
                             <span>Qty {item.quantity}</span>
                             <span>×</span>
-                            <span>{formatCurrency(item.unitPrice)}</span>
+                            <span>{formatCurrency(displayRate)}</span>
                             {item.discountPercent ? (
                               <span className="text-emerald-600 font-bold ml-1">({item.discountPercent}% OFF)</span>
                             ) : null}

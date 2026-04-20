@@ -42,6 +42,11 @@ export default function RepQuotations() {
 
   const quotations = data?.items || [];
   const customerNameById = new Map((customersData || []).map((c) => [c.id, c.shopName]));
+  const getIsTax = (q: Quotation) => {
+    const cust = (customersData || []).find((c) => c.id === q.customerId);
+    if (!cust) return undefined;
+    return (cust.customerType || '').toLowerCase().replace(/[-\s]/g, '') !== 'nontax';
+  };
   const totalPages = data ? Math.ceil(data.totalCount / data.pageSize) : 0;
 
   const getCustomerDisplayName = (quotation: Quotation) => {
@@ -169,8 +174,8 @@ export default function RepQuotations() {
                                         <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">MRP</th>
                                         <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Disc %</th>
                                         <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Disc Amt</th>
-                                        <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Tax</th>
-                                        <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Tax Amt</th>
+                                        {getIsTax(q) !== false && <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Tax</th>}
+                                        {getIsTax(q) !== false && <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Tax Amt</th>}
                                         <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Amount</th>
                                         <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Request Price</th>
                                       </tr>
@@ -182,6 +187,9 @@ export default function RepQuotations() {
                                         const discPct = item.discountPercent || 0;
                                         const discAmt = (rate * qty * discPct) / 100;
                                         const taxAmt = item.taxAmount || 0;
+                                        const isTax = getIsTax(q);
+                                        const taxPerUnit = qty ? taxAmt / qty : 0;
+                                        const displayRate = isTax === false ? rate + taxPerUnit : rate;
                                         const amount = item.lineTotal ?? (rate * qty - discAmt + taxAmt);
                                         return (
                                           <tr key={item.id}>
@@ -190,12 +198,12 @@ export default function RepQuotations() {
                                             </td>
                                             <td className="px-3 py-2.5 text-slate-600">{item.productSKU || '-'}</td>
                                             <td className="px-3 py-2.5 text-center text-slate-600">{qty}</td>
-                                            <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(rate)}</td>
+                                            <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(displayRate)}</td>
                                             <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(item.mrp ?? rate)}</td>
                                             <td className="px-3 py-2.5 text-right text-slate-700">{discPct}</td>
                                             <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(discAmt)}</td>
-                                            <td className="px-3 py-2.5 text-right text-slate-700">{item.taxCode || '-'}</td>
-                                            <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(taxAmt)}</td>
+                                            {isTax !== false && <td className="px-3 py-2.5 text-right text-slate-700">{item.taxCode || '-'}</td>}
+                                            {isTax !== false && <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(taxAmt)}</td>}
                                             <td className="px-3 py-2.5 text-right font-semibold text-slate-900">{formatCurrency(amount)}</td>
                                             <td className="px-3 py-2.5 text-right text-slate-700">
                                               {item.expectedPrice != null ? formatCurrency(item.expectedPrice) : '-'}
@@ -218,7 +226,7 @@ export default function RepQuotations() {
 
                               <div className="flex justify-end mt-4">
                                 <button
-                                  onClick={() => downloadQuotationPdf(q)}
+                                  onClick={() => downloadQuotationPdf(q, getIsTax(q))}
                                   className="px-4 py-2.5 border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-50 transition flex items-center gap-2"
                                 >
                                   <Download className="w-4 h-4" /> Download PDF
@@ -325,8 +333,8 @@ export default function RepQuotations() {
                         <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">MRP</th>
                         <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Disc %</th>
                         <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Disc Amt</th>
-                        <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Tax</th>
-                        <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Tax Amt</th>
+                        {getIsTax(selected) !== false && <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Tax</th>}
+                        {getIsTax(selected) !== false && <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Tax Amt</th>}
                         <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Amount</th>
                         <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Request Price</th>
                       </tr>
@@ -338,6 +346,9 @@ export default function RepQuotations() {
                         const discPct = item.discountPercent || 0;
                         const discAmt = (rate * qty * discPct) / 100;
                         const taxAmt = item.taxAmount || 0;
+                        const isTax = getIsTax(selected);
+                        const taxPerUnit = qty ? taxAmt / qty : 0;
+                        const displayRate = isTax === false ? rate + taxPerUnit : rate;
                         const amount = item.lineTotal ?? (rate * qty - discAmt + taxAmt);
                         return (
                           <tr key={item.id}>
@@ -346,12 +357,12 @@ export default function RepQuotations() {
                             </td>
                             <td className="px-3 py-2.5 text-slate-600">{item.productSKU || '-'}</td>
                             <td className="px-3 py-2.5 text-center text-slate-600">{qty}</td>
-                            <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(rate)}</td>
+                            <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(displayRate)}</td>
                             <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(item.mrp ?? rate)}</td>
                             <td className="px-3 py-2.5 text-right text-slate-700">{discPct}</td>
                             <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(discAmt)}</td>
-                            <td className="px-3 py-2.5 text-right text-slate-700">{item.taxCode || '-'}</td>
-                            <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(taxAmt)}</td>
+                            {isTax !== false && <td className="px-3 py-2.5 text-right text-slate-700">{item.taxCode || '-'}</td>}
+                            {isTax !== false && <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(taxAmt)}</td>}
                             <td className="px-3 py-2.5 text-right font-semibold text-slate-900">{formatCurrency(amount)}</td>
                             <td className="px-3 py-2.5 text-right text-slate-700">
                               {item.expectedPrice != null ? formatCurrency(item.expectedPrice) : '-'}
@@ -374,7 +385,7 @@ export default function RepQuotations() {
             )}
 
             <button
-              onClick={() => downloadQuotationPdf(selected)}
+              onClick={() => downloadQuotationPdf(selected, getIsTax(selected))}
               className="w-full px-4 py-2.5 border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-50 transition flex items-center justify-center gap-2"
             >
               <Download className="w-4 h-4" /> Download PDF
