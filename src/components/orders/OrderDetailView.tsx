@@ -12,20 +12,24 @@ type Props = {
   order: Order;
   backPath: string;
   summaryTitle?: string;
+  isTaxCustomer?: boolean;
   children?: ReactNode;
 };
 
-export default function OrderDetailView({ order, backPath, summaryTitle = 'Order Summary', children }: Props) {
+export default function OrderDetailView({ order, backPath, summaryTitle = 'Order Summary', isTaxCustomer: isTaxProp, children }: Props) {
   const navigate = useNavigate();
 
   const { data: customerProfile } = useQuery({
     queryKey: ['customer-profile-for-order-tax-mode'],
     queryFn: () => customersApi.customerGetProfile().then((r) => r.data.data),
     staleTime: 5 * 60 * 1000,
+    enabled: isTaxProp === undefined,
   });
 
   const isTaxCustomer =
-    (customerProfile?.customerType || '').toLowerCase().replace(/[-\s]/g, '') === 'tax';
+    isTaxProp !== undefined
+      ? isTaxProp
+      : (customerProfile?.customerType || '').toLowerCase().replace(/[-\s]/g, '') === 'tax';
 
   return (
     <div className="animate-fade-in pb-16">
@@ -89,45 +93,41 @@ export default function OrderDetailView({ order, backPath, summaryTitle = 'Order
           </div>
 
           <div className="hidden sm:block overflow-x-auto">
-            <table className="w-full min-w-[980px] text-sm">
+            <table className="w-full min-w-[780px] text-sm">
               <thead>
                 <tr className="bg-slate-50/80 border-b border-slate-100">
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Description</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Item</th>
-                  <th className="px-5 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wide">Qty</th>
-                  <th className="px-5 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Rate</th>
-                  <th className="px-5 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">MRP</th>
-                  <th className="px-5 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Disc %</th>
-                  <th className="px-5 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Disc Amt</th>
-                  {isTaxCustomer && <th className="px-5 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Tax</th>}
-                  {isTaxCustomer && <th className="px-5 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Tax Amt</th>}
-                  <th className="px-5 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Amount</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wide w-9">#</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Item Code</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Item Description</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wide">Qty</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Rate</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Disc %</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Disc Amt</th>
+                  {isTaxCustomer && <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Tax Code</th>}
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Line Gross</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {order.items?.map((item: any, i: number) => {
                   const qty = item.quantity || 0;
                   const rate = item.unitPrice || 0;
-                  const gross = rate * qty;
                   const discPct = item.discountPercent ?? 0;
-                  const discAmt = gross * (discPct / 100);
+                  const discAmt = (rate * qty * discPct) / 100;
                   const taxAmt = item.taxAmount ?? 0;
                   const taxPerUnit = qty ? taxAmt / qty : 0;
                   const displayRate = isTaxCustomer ? rate : rate + taxPerUnit;
-                  const taxable = gross - discAmt;
-                  const taxPct = taxable > 0 ? (taxAmt / taxable) * 100 : 0;
+                  const lineGross = isTaxCustomer ? rate * qty : rate * qty + taxAmt;
                   return (
                     <tr key={item.id} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}>
+                      <td className="px-4 py-3 text-center text-xs text-slate-400 font-medium">{i + 1}</td>
+                      <td className="px-4 py-3 text-xs text-slate-500 font-mono">{item.productSKU || '—'}</td>
                       <td className="px-5 py-3 font-medium text-slate-900">{item.productName}</td>
-                      <td className="px-5 py-3 text-xs text-slate-500">{item.productSKU || '—'}</td>
-                      <td className="px-5 py-3 text-center text-slate-700">{item.quantity}</td>
-                      <td className="px-5 py-3 text-right text-slate-600">{formatCurrency(displayRate)}</td>
-                      <td className="px-5 py-3 text-right text-slate-500">{item.mrp ? formatCurrency(item.mrp) : '—'}</td>
-                      <td className="px-5 py-3 text-right text-slate-500">{discPct ? `${discPct}%` : '—'}</td>
-                      <td className="px-5 py-3 text-right text-slate-500">{discAmt ? formatCurrency(discAmt) : '—'}</td>
-                      {isTaxCustomer && <td className="px-5 py-3 text-right text-slate-500">{taxPct ? `${taxPct.toFixed(2)}%` : '—'}</td>}
-                      {isTaxCustomer && <td className="px-5 py-3 text-right text-slate-500">{taxAmt ? formatCurrency(taxAmt) : '—'}</td>}
-                      <td className="px-5 py-3 text-right font-semibold text-slate-900">{formatCurrency(item.lineTotal)}</td>
+                      <td className="px-4 py-3 text-center text-slate-700">{item.quantity}</td>
+                      <td className="px-4 py-3 text-right text-slate-600">{formatCurrency(displayRate)}</td>
+                      <td className="px-4 py-3 text-right text-slate-500">{discPct ? `${discPct}%` : '—'}</td>
+                      <td className="px-4 py-3 text-right text-slate-500">{discAmt ? formatCurrency(discAmt) : '—'}</td>
+                      {isTaxCustomer && <td className="px-4 py-3 text-center font-bold text-[10px] text-slate-500">{item.taxCode || '—'}</td>}
+                      <td className="px-4 py-3 text-right font-semibold text-slate-900">{formatCurrency(item.lineTotal ?? lineGross)}</td>
                     </tr>
                   );
                 })}
@@ -136,30 +136,31 @@ export default function OrderDetailView({ order, backPath, summaryTitle = 'Order
           </div>
 
           <div className="sm:hidden divide-y divide-slate-100">
-            {order.items?.map((item: any) => {
+            {order.items?.map((item: any, i: number) => {
               const qty = item.quantity || 0;
               const rate = item.unitPrice || 0;
-              const gross = rate * qty;
               const discPct = item.discountPercent ?? 0;
-              const discAmt = gross * (discPct / 100);
+              const discAmt = (rate * qty * discPct) / 100;
               const taxAmt = item.taxAmount ?? 0;
               const taxPerUnit = qty ? taxAmt / qty : 0;
               const displayRate = isTaxCustomer ? rate : rate + taxPerUnit;
+              const lineGross = isTaxCustomer ? rate * qty : rate * qty + taxAmt;
               return (
                 <div key={item.id} className="p-4 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-semibold text-slate-900 truncate">{item.productName}</p>
-                    <p className="text-sm font-bold text-slate-900">{formatCurrency(item.lineTotal)}</p>
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-bold text-slate-500 shrink-0">{i + 1}</span>
+                    <div className="flex-1 flex items-center justify-between min-w-0">
+                      <p className="text-sm font-semibold text-slate-900 truncate">{item.productName}</p>
+                      <p className="text-sm font-bold text-slate-900 ml-2 shrink-0">{formatCurrency(item.lineTotal ?? lineGross)}</p>
+                    </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 text-xs text-slate-500">
-                    <p>Item: {item.productSKU || '—'}</p>
+                  <div className="grid grid-cols-2 gap-2 text-xs text-slate-500 pl-7">
+                    <p>Code: <span className="font-mono">{item.productSKU || '—'}</span></p>
                     <p className="text-right">Qty: {item.quantity}</p>
                     <p>Rate: {formatCurrency(displayRate)}</p>
-                    <p className="text-right">MRP: {item.mrp ? formatCurrency(item.mrp) : '—'}</p>
-                    <p>Disc %: {discPct ? `${discPct}%` : '—'}</p>
-                    <p className="text-right">Disc Amt: {discAmt ? formatCurrency(discAmt) : '—'}</p>
-                    {isTaxCustomer && <p>Tax Amt: {taxAmt ? formatCurrency(taxAmt) : '—'}</p>}
-                    <p className="text-right">Amount: {formatCurrency(item.lineTotal)}</p>
+                    <p className="text-right">Disc %: {discPct ? `${discPct}%` : '—'}</p>
+                    <p>Disc Amt: {discAmt ? formatCurrency(discAmt) : '—'}</p>
+                    {isTaxCustomer && <p className="text-right">Tax Code: {item.taxCode || '—'}</p>}
                   </div>
                 </div>
               );

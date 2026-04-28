@@ -169,21 +169,20 @@ export default function CoordinatorQuotations() {
                                 <table className="w-full text-[11px] min-w-[980px]">
                                   <thead>
                                     <tr className="bg-slate-50">
-                                      <th className="px-3 py-2 text-left font-semibold text-slate-500 uppercase">Description</th>
-                                      <th className="px-3 py-2 text-left font-semibold text-slate-500 uppercase">Item</th>
+                                      <th className="px-3 py-2 text-center font-semibold text-slate-500 uppercase w-8">#</th>
+                                      <th className="px-3 py-2 text-left font-semibold text-slate-500 uppercase">Item Code</th>
+                                      <th className="px-3 py-2 text-left font-semibold text-slate-500 uppercase">Item Description</th>
                                       <th className="px-3 py-2 text-center font-semibold text-slate-500 uppercase">Qty</th>
                                       <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Rate</th>
-                                      <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">MRP</th>
                                       <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Disc %</th>
                                       <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Disc Amt</th>
                                       {getIsTax(q) !== false && <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Tax</th>}
-                                      {getIsTax(q) !== false && <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Tax Amt</th>}
-                                      <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Amount</th>
+                                      <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Line Gross</th>
                                       <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Request Price</th>
                                     </tr>
                                   </thead>
                                   <tbody className="divide-y divide-slate-100">
-                                    {q.items.map((item: any) => {
+                                    {q.items.map((item: any, idx: number) => {
                                       const rate = item.unitPrice || 0;
                                       const qty = item.quantity || 0;
                                       const discPct = item.discountPercent || 0;
@@ -192,19 +191,18 @@ export default function CoordinatorQuotations() {
                                       const isTax = getIsTax(q);
                                       const taxPerUnit = qty ? taxAmt / qty : 0;
                                       const displayRate = isTax === false ? rate + taxPerUnit : rate;
-                                      const amount = item.lineTotal ?? ((rate * qty) - discAmt + taxAmt);
+                                      const lineGross = isTax === false ? (rate * qty + taxAmt) : rate * qty;
                                       return (
                                         <tr key={item.id}>
+                                          <td className="px-3 py-2.5 text-center text-slate-400">{idx + 1}</td>
+                                          <td className="px-3 py-2.5 text-slate-400 text-xs font-mono">{item.productSKU || '-'}</td>
                                           <td className="px-3 py-2.5 text-slate-800 max-w-[220px] truncate" title={item.productName || '-'}>{item.productName || '-'}</td>
-                                          <td className="px-3 py-2.5 text-slate-600">{item.productSKU || '-'}</td>
                                           <td className="px-3 py-2.5 text-center text-slate-600">{qty}</td>
                                           <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(displayRate)}</td>
-                                          <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(item.mrp ?? rate)}</td>
-                                          <td className="px-3 py-2.5 text-right text-slate-700">{discPct}</td>
-                                          <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(discAmt)}</td>
-                                          {isTax !== false && <td className="px-3 py-2.5 text-right text-slate-700">{item.taxCode || '-'}</td>}
-                                          {isTax !== false && <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(taxAmt)}</td>}
-                                          <td className="px-3 py-2.5 text-right font-semibold text-slate-900">{formatCurrency(amount)}</td>
+                                          <td className="px-3 py-2.5 text-right text-slate-700">{discPct ? `${discPct}%` : '-'}</td>
+                                          <td className="px-3 py-2.5 text-right text-slate-700">{discAmt ? formatCurrency(discAmt) : '-'}</td>
+                                          {isTax !== false && <td className="px-3 py-2.5 text-right text-slate-700">{taxAmt ? formatCurrency(taxAmt) : '-'}</td>}
+                                          <td className="px-3 py-2.5 text-right font-semibold text-slate-900">{formatCurrency(item.lineTotal ?? lineGross)}</td>
                                           <td className="px-3 py-2.5 text-right text-slate-700">{item.expectedPrice != null ? formatCurrency(item.expectedPrice) : '-'}</td>
                                         </tr>
                                       );
@@ -341,21 +339,20 @@ export default function CoordinatorQuotations() {
                   <table className="w-full text-[11px] min-w-[980px]">
                     <thead>
                       <tr className="bg-slate-50">
-                        <th className="px-3 py-2 text-left font-semibold text-slate-500 uppercase">Description</th>
-                        <th className="px-3 py-2 text-left font-semibold text-slate-500 uppercase">Item</th>
+                        <th className="px-3 py-2 text-center font-semibold text-slate-500 uppercase w-8">#</th>
+                        <th className="px-3 py-2 text-left font-semibold text-slate-500 uppercase">Item Code</th>
+                        <th className="px-3 py-2 text-left font-semibold text-slate-500 uppercase">Item Description</th>
                         <th className="px-3 py-2 text-center font-semibold text-slate-500 uppercase">Qty</th>
                         <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Rate</th>
-                        <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">MRP</th>
                         <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Disc %</th>
                         <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Disc Amt</th>
                         {getIsTax(selected) !== false && <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Tax</th>}
-                        {getIsTax(selected) !== false && <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Tax Amt</th>}
-                        <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Amount</th>
+                        <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Line Gross</th>
                         <th className="px-3 py-2 text-right font-semibold text-slate-500 uppercase">Request Price</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {selected.items.map((item: any) => {
+                      {selected.items.map((item: any, idx: number) => {
                         const rate = item.unitPrice || 0;
                         const qty = item.quantity || 0;
                         const discPct = item.discountPercent || 0;
@@ -364,19 +361,18 @@ export default function CoordinatorQuotations() {
                         const isTax = getIsTax(selected);
                         const taxPerUnit = qty ? taxAmt / qty : 0;
                         const displayRate = isTax === false ? rate + taxPerUnit : rate;
-                        const amount = item.lineTotal ?? ((rate * qty) - discAmt + taxAmt);
+                        const lineGross = isTax === false ? (rate * qty + taxAmt) : rate * qty;
                         return (
                           <tr key={item.id}>
+                            <td className="px-3 py-2.5 text-center text-slate-400">{idx + 1}</td>
+                            <td className="px-3 py-2.5 text-slate-400 text-xs font-mono">{item.productSKU || '-'}</td>
                             <td className="px-3 py-2.5 text-slate-800 max-w-[220px] truncate" title={item.productName || '-'}>{item.productName || '-'}</td>
-                            <td className="px-3 py-2.5 text-slate-600">{item.productSKU || '-'}</td>
                             <td className="px-3 py-2.5 text-center text-slate-600">{qty}</td>
                             <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(displayRate)}</td>
-                            <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(item.mrp ?? rate)}</td>
-                            <td className="px-3 py-2.5 text-right text-slate-700">{discPct}</td>
-                            <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(discAmt)}</td>
-                            {isTax !== false && <td className="px-3 py-2.5 text-right text-slate-700">{item.taxCode || '-'}</td>}
-                            {isTax !== false && <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(taxAmt)}</td>}
-                            <td className="px-3 py-2.5 text-right font-semibold text-slate-900">{formatCurrency(amount)}</td>
+                            <td className="px-3 py-2.5 text-right text-slate-700">{discPct ? `${discPct}%` : '-'}</td>
+                            <td className="px-3 py-2.5 text-right text-slate-700">{discAmt ? formatCurrency(discAmt) : '-'}</td>
+                            {isTax !== false && <td className="px-3 py-2.5 text-right text-slate-700">{taxAmt ? formatCurrency(taxAmt) : '-'}</td>}
+                            <td className="px-3 py-2.5 text-right font-semibold text-slate-900">{formatCurrency(item.lineTotal ?? lineGross)}</td>
                             <td className="px-3 py-2.5 text-right text-slate-700">{item.expectedPrice != null ? formatCurrency(item.expectedPrice) : '-'}</td>
                           </tr>
                         );

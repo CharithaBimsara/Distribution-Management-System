@@ -46,6 +46,7 @@ export interface OrderItem {
   unitPrice: number;
   mrp?: number;
   discountPercent: number;
+  taxCode?: string;
   taxAmount: number;
   lineTotal: number;
 }

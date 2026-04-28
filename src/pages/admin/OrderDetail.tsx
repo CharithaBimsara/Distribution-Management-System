@@ -415,15 +415,15 @@ export default function AdminOrderDetail() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-slate-50/80 border-b border-slate-100">
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide w-9">#</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Product</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">SKU</th>
+                  <th className="px-5 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wide w-9">#</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Item Code</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Item Description</th>
                   <th className="px-5 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wide">Qty</th>
-                  <th className="px-5 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Unit Price</th>
-                  <th className="px-5 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">MRP</th>
+                  <th className="px-5 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Rate</th>
                   <th className="px-5 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Disc %</th>
-                  {!isNonTaxCustomer && <th className="px-5 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Tax Amt</th>}
-                  <th className="px-5 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Line Total</th>
+                  <th className="px-5 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Disc Amt</th>
+                  {!isNonTaxCustomer && <th className="px-5 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Tax</th>}
+                  <th className="px-5 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Line Gross</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
@@ -431,19 +431,22 @@ export default function AdminOrderDetail() {
                   const qty = item.quantity || 0;
                   const rate = item.unitPrice || 0;
                   const taxAmt = item.taxAmount || 0;
+                  const discPct = item.discountPercent ?? 0;
+                  const discAmt = (rate * qty * discPct) / 100;
                   const taxPerUnit = qty ? taxAmt / qty : 0;
                   const displayRate = isNonTaxCustomer ? rate + taxPerUnit : rate;
+                  const lineGross = isNonTaxCustomer ? rate * qty + taxAmt : rate * qty;
                   return (
                   <tr key={item.id} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}>
                     <td className="px-5 py-3 text-center text-xs text-slate-400 font-medium">{i + 1}</td>
+                    <td className="px-5 py-3 text-xs text-slate-500 font-mono">{item.productSKU || '—'}</td>
                     <td className="px-5 py-3 font-medium text-slate-900">{item.productName}</td>
-                    <td className="px-5 py-3 text-xs text-slate-400">{item.productSKU || '—'}</td>
                     <td className="px-5 py-3 text-center text-slate-700">{item.quantity}</td>
                     <td className="px-5 py-3 text-right text-slate-600">{formatCurrency(displayRate)}</td>
-                    <td className="px-5 py-3 text-right text-slate-400">{item.mrp ? formatCurrency(item.mrp) : <span className="text-slate-300">—</span>}</td>
-                    <td className="px-5 py-3 text-right text-slate-500">{item.discountPercent ? `${item.discountPercent}%` : <span className="text-slate-300">—</span>}</td>
-                    {!isNonTaxCustomer && <td className="px-5 py-3 text-right text-slate-500">{item.taxAmount ? formatCurrency(item.taxAmount) : <span className="text-slate-300">—</span>}</td>}
-                    <td className="px-5 py-3 text-right font-semibold text-slate-900">{formatCurrency(item.lineTotal)}</td>
+                    <td className="px-5 py-3 text-right text-slate-500">{discPct ? `${discPct}%` : '—'}</td>
+                    <td className="px-5 py-3 text-right text-slate-500">{discAmt ? formatCurrency(discAmt) : '—'}</td>
+                    {!isNonTaxCustomer && <td className="px-5 py-3 text-right text-slate-500">{taxAmt ? formatCurrency(taxAmt) : '—'}</td>}
+                    <td className="px-5 py-3 text-right font-semibold text-slate-900">{formatCurrency(item.lineTotal ?? lineGross)}</td>
                   </tr>
                   );
                 })}

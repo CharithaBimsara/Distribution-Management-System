@@ -143,49 +143,50 @@ export default function CustomerOrders() {
 
       {/* Filters Bar */}
       <div className="sticky top-14 md:top-16 z-20 px-4 lg:px-0">
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm px-4 py-3 flex flex-wrap items-center gap-3">
-          <div className="relative flex-1 min-w-[200px] group">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-orange-500 transition-colors" />
-            <input
-              type="text"
-              placeholder="Search by order number..."
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-              className="w-full pl-9 pr-8 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm placeholder-slate-400 focus:bg-white focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none transition-all"
-            />
-            {search && (
-              <button onClick={() => { setSearch(''); setPage(1); }} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                <X className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <select
-              value={status}
-              onChange={(e) => {
-                setStatus(e.target.value as OrderStatus | '');
-                setPage(1);
-              }}
-              className="flex-1 sm:flex-none px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 outline-none focus:ring-1 focus:ring-orange-500 focus:border-orange-500 transition cursor-pointer"
-            >
-              {STATUS_FILTERS.map((f) => (
-                <option key={f.label} value={f.value}>{f.label}</option>
-              ))}
-            </select>
-
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm px-4 py-3 space-y-3">
+          {/* Search + Clear row */}
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1 group">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-orange-500 transition-colors" />
+              <input
+                type="text"
+                placeholder="Search by order number..."
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                className="w-full pl-9 pr-8 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm placeholder-slate-400 focus:bg-white focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none transition-all"
+              />
+              {search && (
+                <button onClick={() => { setSearch(''); setPage(1); }} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
             {hasActiveFilters && (
               <button
                 onClick={() => { setSearch(''); setStatus(''); setPage(1); }}
-                className="flex items-center justify-center w-10 h-10 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700 transition"
+                className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-orange-50 border border-orange-100 text-orange-600 text-xs font-bold hover:bg-orange-100 transition flex-shrink-0"
                 title="Clear Filters"
               >
-                <RefreshCcw className="w-4 h-4" />
+                <RefreshCcw className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Clear</span>
               </button>
             )}
+          </div>
+          {/* Status pills */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-0.5 scrollbar-hide">
+            {STATUS_FILTERS.map((f) => (
+              <button
+                key={f.label}
+                onClick={() => { setStatus(f.value); setPage(1); }}
+                className={`flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all ${
+                  status === f.value
+                    ? 'bg-orange-500 text-white shadow-sm shadow-orange-200'
+                    : 'bg-slate-100 text-slate-600 hover:bg-orange-50 hover:text-orange-700'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
           </div>
         </div>
       </div>
@@ -317,12 +318,12 @@ export default function CustomerOrders() {
                                       <td className="px-4 py-3 font-bold text-slate-900 text-sm">{item.productName}</td>
                                       <td className="px-4 py-3 text-center font-medium text-slate-700">{qty}</td>
                                       <td className="px-4 py-3 text-right font-medium text-slate-700">{formatCurrency(displayRate)}</td>
-                                      <td className="px-4 py-3 text-right font-medium text-slate-700">{discPct ? `${discPct}%` : '0.00'}</td>
-                                      <td className="px-4 py-3 text-right font-medium text-emerald-600">{formatCurrency(rowDiscount)}</td>
+                                      <td className="px-4 py-3 text-right font-medium text-slate-700">{discPct ? `${discPct}%` : '—'}</td>
+                                      <td className="px-4 py-3 text-right font-medium text-emerald-600">{discPct ? formatCurrency(rowDiscount) : '—'}</td>
                                       {isTaxCustomer && (
                                         <>
-                                          <td className="px-4 py-3 text-center font-bold text-[10px] text-slate-500">{'V18'}</td>
-                                          <td className="px-4 py-3 text-right font-medium text-slate-600">{formatCurrency(rowTax)}</td>
+                                          <td className="px-4 py-3 text-center font-bold text-[10px] text-slate-500">{item.taxCode || '—'}</td>
+                                          <td className="px-4 py-3 text-right font-medium text-slate-600">{rowTax ? formatCurrency(rowTax) : '—'}</td>
                                         </>
                                       )}
                                       <td className="px-4 py-3 text-right font-bold text-slate-900">{formatCurrency(rowGross)}</td>

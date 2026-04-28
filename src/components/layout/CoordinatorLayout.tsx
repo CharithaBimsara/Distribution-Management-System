@@ -307,7 +307,7 @@ export default function CoordinatorLayout() {
 
         {/* Page Content */}
         <main className="flex-1 overflow-y-auto pb-20 lg:pb-0">
-          <div className="lg:p-6 lg:max-w-6xl lg:mx-auto">
+          <div className="lg:p-6 w-full">
             <Outlet />
           </div>
         </main>

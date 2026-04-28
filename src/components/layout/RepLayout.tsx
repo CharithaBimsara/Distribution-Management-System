@@ -314,7 +314,7 @@ export default function RepLayout() {
 
         {/* Page Content */}
         <main className="flex-1 overflow-y-auto pb-[calc(env(safe-area-inset-bottom,0px)+86px)] md:pb-[calc(env(safe-area-inset-bottom,0px)+92px)] lg:pb-0">
-          <div className="px-3 pt-3 md:px-4 md:pt-4 w-full max-w-[1240px] mx-auto lg:px-6 lg:pt-5 lg:pb-6">
+          <div className="px-3 pt-3 md:px-4 md:pt-4 w-full lg:px-6 lg:pt-5 lg:pb-6">
             <Outlet />
           </div>
         </main>

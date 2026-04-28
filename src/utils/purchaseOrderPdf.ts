@@ -98,7 +98,7 @@ export async function downloadPurchaseOrderPdf(order: Order & { isTaxCustomer?: 
   const tableStartY = sectionY + 28;
   
   const baseCols = ['No', 'Item Code', 'Item Description', 'Qty', 'Rate', 'Disc %', 'Disc Amt'];
-  const cols = isTax ? [...baseCols, 'Tax Code', 'Tax Amt', 'Gross Amount'] : [...baseCols, 'Gross Amount'];
+  const cols = isTax ? [...baseCols, 'Tax', 'Line Gross'] : [...baseCols, 'Line Gross'];
 
   let totalGross = 0;
   let totalDiscount = 0;
@@ -128,13 +128,12 @@ export async function downloadPurchaseOrderPdf(order: Order & { isTaxCustomer?: 
       item.productName || '',
       qty.toString(),
       formatNumber(displayRate),
-      discPct ? `${discPct}%` : '0.00',
-      formatNumber(calc.discount || 0)
+      discPct ? `${discPct.toFixed(2)}%` : '—',
+      discPct ? formatNumber(calc.discount || 0) : '—'
     ];
 
     if (isTax) {
-      rowData.push(item.taxType || 'V18');
-      rowData.push(formatNumber(rowTax));
+      rowData.push((item as any).taxCode || '—');
     }
 
     rowData.push(formatNumber(rowGross));
@@ -159,11 +158,10 @@ export async function downloadPurchaseOrderPdf(order: Order & { isTaxCustomer?: 
       4: { cellWidth: 18, halign: 'right' },
       5: { cellWidth: 12, halign: 'right' },
       6: { cellWidth: 18, halign: 'right' },
-      // මෙතන තමයි වෙනස් කළේ: isTax true නම් 7, 8 සහ 9 වෙනි තීරු තුනටම හැඩය දුන්නා
+      // isTax: 9 cols (Tax + Line Gross); non-tax: 8 cols (Line Gross)
       ...(isTax ? { 
-        7: { cellWidth: 14, halign: 'center' }, 
-        8: { cellWidth: 18, halign: 'right' }, 
-        9: { cellWidth: 22, halign: 'right' } 
+        7: { cellWidth: 20, halign: 'right' }, 
+        8: { cellWidth: 22, halign: 'right' } 
       } : { 
         7: { cellWidth: 28, halign: 'right' } 
       })

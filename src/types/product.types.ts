@@ -15,6 +15,7 @@ export interface Product {
   taxCode?: string;
   taxAmount?: number;
   totalAmount?: number;
+  uom?: string;
   createdAt: string;
 }
 
@@ -54,6 +55,7 @@ export interface CreateProductRequest {
   taxCode?: string;
   taxAmount?: number;
   totalAmount?: number;
+  uom?: string;
 }
 
 export interface UpdateProductRequest extends Partial<CreateProductRequest> {}

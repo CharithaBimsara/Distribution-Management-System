@@ -386,7 +386,7 @@ export default function CoordinatorOrders() {
                                       <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">SKU</th>
                                       <th className="px-4 py-2 text-center text-xs font-semibold text-slate-500 uppercase tracking-wide">Qty</th>
                                       <th className="px-4 py-2 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Rate</th>
-                                      <th className="px-4 py-2 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Tax Amt</th>
+                                      <th className="px-4 py-2 text-center text-xs font-semibold text-slate-500 uppercase tracking-wide">Tax</th>
                                       <th className="px-4 py-2 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">Line Total</th>
                                     </tr>
                                   </thead>
@@ -406,8 +406,8 @@ export default function CoordinatorOrders() {
                                         <td className="px-4 py-2.5 text-slate-400 text-xs">{item.productSKU || ''}</td>
                                         <td className="px-4 py-2.5 text-center text-slate-700">{item.quantity}</td>
                                         <td className="px-4 py-2.5 text-right text-slate-600">{formatCurrency(displayRate)}</td>
-                                        <td className="px-4 py-2.5 text-right text-slate-500">
-                                          {!isNonTax && item.taxAmount ? formatCurrency(item.taxAmount) : <span className="text-slate-300">—</span>}
+                                        <td className="px-4 py-2.5 text-center text-slate-500">
+                                          {!isNonTax ? (item.taxCode || <span className="text-slate-300">—</span>) : <span className="text-slate-300">—</span>}
                                         </td>
                                         <td className="px-4 py-2.5 text-right font-semibold text-slate-900">{formatCurrency(item.lineTotal)}</td>
                                       </tr>

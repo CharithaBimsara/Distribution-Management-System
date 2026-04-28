@@ -1,6 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ordersApi } from '../../services/api/ordersApi';
+import { customersApi } from '../../services/api/customersApi';
 import toast from 'react-hot-toast';
 import { useEffect, useRef } from 'react';
 import OrderDetailView from '../../components/orders/OrderDetailView';
@@ -24,6 +25,16 @@ export default function RepOrderDetail() {
     enabled: !!id,
   });
 
+  const { data: customerData } = useQuery({
+    queryKey: ['rep-order-customer-type', data?.customerId],
+    queryFn: () => customersApi.repGetById(data!.customerId).then(r => r.data.data),
+    enabled: !!data?.customerId,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const isTaxCustomer =
+    (customerData?.customerType || '').toLowerCase().replace(/[-\s]/g, '') === 'tax';
+
   const cancelMut = useMutation({
     mutationFn: (orderId: string) => ordersApi.repCancel(orderId, 'Rep cancelled'),
     onSuccess: () => { toast.success('Order cancelled'); qc.invalidateQueries({ queryKey: ['rep-orders'] }); navigate('/rep/orders'); },
@@ -41,7 +52,7 @@ export default function RepOrderDetail() {
 
   return (
     <div ref={rootRef}>
-      <OrderDetailView order={order} backPath="/rep/orders" summaryTitle="Rep Order Summary">
+      <OrderDetailView order={order} backPath="/rep/orders" summaryTitle="Rep Order Summary" isTaxCustomer={isTaxCustomer}>
         {order.status === 'Pending' && (
           <button onClick={() => cancelMut.mutate(order.id)} className="w-full max-w-sm py-3 border-2 border-red-200 text-red-600 rounded-xl text-sm font-semibold hover:bg-red-50 active:scale-[0.98] transition-all">
             Cancel Order

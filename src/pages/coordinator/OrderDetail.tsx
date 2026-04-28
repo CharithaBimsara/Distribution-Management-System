@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { CheckCircle, Loader2 } from 'lucide-react';
 import { ordersApi } from '../../services/api/ordersApi';
+import { customersApi } from '../../services/api/customersApi';
 import OrderDetailView from '../../components/orders/OrderDetailView';
 
 export default function CoordinatorOrderDetail() {
@@ -14,6 +15,16 @@ export default function CoordinatorOrderDetail() {
     queryFn: () => ordersApi.coordinatorGetById(id || '').then(r => r.data.data),
     enabled: !!id,
   });
+
+  const { data: customerData } = useQuery({
+    queryKey: ['coordinator-order-customer-type', data?.customerId],
+    queryFn: () => customersApi.coordinatorGetById(data!.customerId).then(r => r.data.data),
+    enabled: !!data?.customerId,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const isTaxCustomer =
+    (customerData?.customerType || '').toLowerCase().replace(/[-\s]/g, '') === 'tax';
 
   const approveMut = useMutation({
     mutationFn: (orderId: string) => ordersApi.coordinatorApprove(orderId),
@@ -43,7 +54,7 @@ export default function CoordinatorOrderDetail() {
   }
 
   return (
-    <OrderDetailView order={data} backPath="/coordinator/orders" summaryTitle="Coordinator Order Summary">
+    <OrderDetailView order={data} backPath="/coordinator/orders" summaryTitle="Coordinator Order Summary" isTaxCustomer={isTaxCustomer}>
       {data.status === 'Pending' ? (
         <button
           onClick={() => approveMut.mutate(data.id)}

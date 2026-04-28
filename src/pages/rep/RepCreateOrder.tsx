@@ -5,9 +5,9 @@ import { customersApi } from '../../services/api/customersApi';
 import { ordersApi } from '../../services/api/ordersApi';
 import { productsApi } from '../../services/api/productsApi';
 import { formatCurrency } from '../../utils/formatters';
-import { calculateLine } from '../../utils/calculations';
 import { orderDraftUtils } from '../../utils/orderDraft';
 import { ArrowLeft, User, Package, ShoppingCart, Trash2, CheckCircle, MapPin, ChevronRight, Download, Eye, Plus } from 'lucide-react';
+import { downloadPurchaseOrderPdf } from '../../utils/purchaseOrderPdf';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
@@ -51,126 +51,10 @@ export default function RepCreateOrder() {
     }));
   });
 
-  /* ── PDF Receipt (preserved) ── */
-  const downloadReceipt = async () => {
+  /* ── PDF Receipt ── */
+  const downloadReceipt = () => {
     if (!createdOrder) return;
-    try {
-      const { jsPDF } = await import('jspdf');
-      const autoTableModule = await import('jspdf-autotable');
-      const autoTable = autoTableModule.default || (autoTableModule as any);
-      const doc = new jsPDF();
-      const pageWidth = doc.internal.pageSize.getWidth();
-      const BLUE = [31, 73, 125] as [number, number, number];
-      const WHITE: [number, number, number] = [255, 255, 255];
-      const DARK: [number, number, number] = [0, 0, 0];
-      const LIGHT_GRAY: [number, number, number] = [242, 242, 242];
-      doc.setFontSize(14); doc.setFont('helvetica', 'bold'); doc.setTextColor(...DARK);
-      doc.text('Janasiri Distribution', 14, 16);
-      doc.setFontSize(8); doc.setFont('helvetica', 'normal');
-      doc.text('[Street Address]', 14, 21); doc.text('[City, ST ZIP]', 14, 25);
-      doc.text('Phone: (000) 000-0000', 14, 29); doc.text('Fax: (000) 000-0000', 14, 33);
-      doc.text('Website:', 14, 37);
-      doc.setFontSize(20); doc.setFont('helvetica', 'bold'); doc.setTextColor(...BLUE);
-      doc.text('PURCHASE ORDER', pageWidth - 14, 16, { align: 'right' });
-      const dateValue = new Date(createdOrder.orderDate).toLocaleDateString();
-      let poValue = String(createdOrder.orderNumber || createdOrder.id || '').replace(/[^\u0000-\u007F]/g, '');
-      if (poValue.length > 14) poValue = poValue.substring(0, 14) + '...';
-      doc.setFontSize(9); doc.setFont('helvetica', 'bold'); doc.setTextColor(...DARK);
-      doc.text('DATE', pageWidth - 60, 23.5); doc.text('PO #', pageWidth - 60, 30);
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setDrawColor(180, 180, 180);
-      doc.rect(pageWidth - 48, 19, 34, 5.5, 'S'); doc.text(dateValue, pageWidth - 15, 23.5, { align: 'right' });
-      doc.rect(pageWidth - 48, 25.5, 34, 5.5, 'S'); doc.text(poValue, pageWidth - 15, 30, { align: 'right' });
-      const sectionY = 44; const colMid = pageWidth / 2 + 2;
-      doc.setFillColor(...BLUE); doc.rect(14, sectionY, 88, 6, 'F');
-      doc.setTextColor(...WHITE); doc.setFont('helvetica', 'bold'); doc.setFontSize(9);
-      doc.text('VENDOR', 16, sectionY + 4.2);
-      doc.setFillColor(...BLUE); doc.rect(colMid, sectionY, 88, 6, 'F');
-      doc.setTextColor(...WHITE); doc.text('SHIP TO', colMid + 2, sectionY + 4.2);
-      const vY = sectionY + 10; doc.setTextColor(...DARK); doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5);
-      doc.text('[Company Name]', 16, vY); doc.text('[Contact or Department]', 16, vY + 5);
-      doc.text('[Street Address]', 16, vY + 10); doc.text('[City, ST ZIP]', 16, vY + 15);
-      doc.text('Phone: (000) 000-0000', 16, vY + 20);
-      const sY = sectionY + 10;
-      doc.text(createdOrder.customerName || '[Name]', colMid + 2, sY);
-      doc.text('[Company Name]', colMid + 2, sY + 5);
-      doc.text(createdOrder.deliveryAddress || '[Street Address]', colMid + 2, sY + 10);
-      doc.text('[City, ST ZIP]', colMid + 2, sY + 15); doc.text('[Phone]', colMid + 2, sY + 20);
-      doc.setDrawColor(180, 180, 180); doc.rect(14, sectionY, 88, 30); doc.rect(colMid, sectionY, 88, 30);
-      const tableStartY = sectionY + 36;
-      const cols = isNonTaxCustomer
-        ? ['Description','Item','Rate','Qty','Disc%','Disc Amt','Amount']
-        : ['Description','Item','Rate','Qty','Disc%','Disc Amt','Tax','Tax Amt','Amount'];
-      const pdfRows = createdOrder.items.map((it: any) => {
-        const rate = it.unitPrice; const qty = it.quantity; const discPct = it.discountPercent ?? 0;
-        const taxPerUnit = qty ? (it.taxAmount ?? 0) / qty : 0;
-        const calc = calculateLine({ rate, qty, discountPercent: discPct, taxAmount: taxPerUnit });
-        const displayRate = isNonTaxCustomer ? rate + taxPerUnit : rate;
-        const rowGross = isNonTaxCustomer ? (rate * qty + (it.taxAmount ?? 0)) : calc.total;
-        if (isNonTaxCustomer) {
-          return [it.productName, it.productSKU || '', formatCurrency(displayRate), qty,
-            discPct ? `${discPct}%` : '-', calc.discount ? formatCurrency(calc.discount) : '-',
-            formatCurrency(rowGross)];
-        }
-        return [it.productName, it.productSKU || '', formatCurrency(displayRate), qty,
-          discPct ? `${discPct}%` : '-', calc.discount ? formatCurrency(calc.discount) : '-',
-          '-', calc.tax ? formatCurrency(calc.tax) : '-', formatCurrency(calc.total)];
-      });
-      while (pdfRows.length < 8) pdfRows.push(Array(cols.length).fill(''));
-      autoTable(doc, {
-        head: [cols], body: pdfRows, startY: tableStartY,
-        styles: { fontSize: 7.5, cellPadding: 1.5, overflow: 'linebreak', valign: 'middle' },
-        headStyles: { fillColor: BLUE, textColor: WHITE, fontStyle: 'bold', fontSize: 7.5 },
-        columnStyles: isNonTaxCustomer
-          ? { 0: { cellWidth: 55 }, 1: { cellWidth: 15 }, 2: { cellWidth: 22, halign: 'right' },
-            3: { cellWidth: 8, halign: 'center' }, 4: { cellWidth: 10, halign: 'right' },
-            5: { cellWidth: 18, halign: 'right' }, 6: { cellWidth: 28, halign: 'right' } }
-          : { 0: { cellWidth: 55 }, 1: { cellWidth: 15 }, 2: { cellWidth: 22, halign: 'right' },
-            3: { cellWidth: 8, halign: 'center' }, 4: { cellWidth: 10, halign: 'right' },
-            5: { cellWidth: 18, halign: 'right' }, 6: { cellWidth: 8, halign: 'center' },
-            7: { cellWidth: 18, halign: 'right' }, 8: { cellWidth: 28, halign: 'right' } },
-        alternateRowStyles: { fillColor: [255,255,255] }, tableLineColor: [180,180,180], tableLineWidth: 0.2,
-        tableWidth: 'auto',
-        didDrawCell: (data: any) => { const { cell } = data;
-          if (cell.section==='body'||cell.section==='head') {
-            doc.setDrawColor(180,180,180); doc.setLineWidth(0.2); doc.rect(cell.x,cell.y,cell.width,cell.height); } }
-      });
-      const afterTableY = (doc as any).lastAutoTable.finalY;
-      const totalsX = pageWidth - 80; const totalsStartY = afterTableY + 4;
-      const grand = createdOrder.items.reduce((s: number, i: any) => s + (i.lineTotal ?? i.unitPrice * i.quantity), 0);
-      const tax = 0; const shipping = 0; const other = 0; const totalFinal = grand + tax + shipping + other;
-      const totalsRows = [['SUBTOTAL', formatCurrency(grand)], ['TAX', tax ? formatCurrency(tax) : '-'],
-        ['SHIPPING', shipping ? formatCurrency(shipping) : '-'], ['OTHER', other ? formatCurrency(other) : '-']];
-      const rowH = 6; const boxRight = pageWidth - 14; const boxW = boxRight - totalsX;
-      doc.setFontSize(8.5); doc.setDrawColor(180, 180, 180);
-      totalsRows.forEach(([label, val], i) => {
-        const y = totalsStartY + i * rowH;
-        doc.setFillColor(...LIGHT_GRAY); doc.rect(totalsX, y - 4, boxW / 2, rowH, 'FD');
-        doc.setFillColor(...WHITE); doc.rect(totalsX + boxW / 2, y - 4, boxW / 2, rowH, 'FD');
-        doc.setFont('helvetica', 'bold'); doc.setTextColor(...DARK); doc.text(label, totalsX + 2, y);
-        doc.setFont('helvetica', 'normal'); doc.text(val, boxRight - 2, y, { align: 'right' });
-      });
-      const totalRowY = totalsStartY + totalsRows.length * rowH;
-      doc.setFillColor(...BLUE); doc.rect(totalsX, totalRowY - 4, boxW, rowH + 1, 'F');
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(...WHITE);
-      doc.text('TOTAL', totalsX + 2, totalRowY); doc.text(formatCurrency(totalFinal), boxRight - 2, totalRowY, { align: 'right' });
-      const commentsBoxX = 14; const commentsBoxY = afterTableY + 4;
-      const commentsBoxW = totalsX - 18; const commentsBoxH = totalsRows.length * 6 + 10;
-      doc.setFillColor(...LIGHT_GRAY); doc.setTextColor(...DARK);
-      doc.rect(commentsBoxX, commentsBoxY, commentsBoxW, 6, 'F'); doc.setDrawColor(180, 180, 180);
-      doc.rect(commentsBoxX, commentsBoxY, commentsBoxW, commentsBoxH);
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
-      doc.text('Comments or Special Instructions', commentsBoxX + 2, commentsBoxY + 4);
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
-      if (createdOrder.deliveryNotes) {
-        const splitNotes = doc.splitTextToSize(createdOrder.deliveryNotes, commentsBoxW - 4);
-        doc.text(splitNotes, commentsBoxX + 2, commentsBoxY + 11);
-      }
-      const footerY = Math.max(afterTableY + 38, commentsBoxY + commentsBoxH + 8);
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(100, 100, 100);
-      doc.text('If you have any questions about this purchase order, please contact:', pageWidth / 2, footerY, { align: 'center' });
-      doc.text(`${createdOrder.customerName || '[Name]'}, [Phone #, E-mail]`, pageWidth / 2, footerY + 5, { align: 'center' });
-      doc.save(`order-${createdOrder.orderNumber||createdOrder.id}.pdf`);
-    } catch (e) { console.error('receipt generation error', e); }
+    downloadPurchaseOrderPdf({ ...createdOrder, isTaxCustomer: !isNonTaxCustomer });
   };
 
   /* ── Effects ── */
@@ -415,7 +299,6 @@ export default function RepCreateOrder() {
                     <th className="text-right px-3 py-3 font-semibold text-[10px] uppercase tracking-wider whitespace-nowrap">Disc %</th>
                     <th className="text-right px-3 py-3 font-semibold text-[10px] uppercase tracking-wider whitespace-nowrap">Disc Amt</th>
                     {!isNonTaxCustomer && <th className="text-right px-3 py-3 font-semibold text-[10px] uppercase tracking-wider whitespace-nowrap">Tax</th>}
-                    {!isNonTaxCustomer && <th className="text-right px-3 py-3 font-semibold text-[10px] uppercase tracking-wider whitespace-nowrap">Tax Amt</th>}
                     <th className="text-right px-3 py-3 font-semibold text-[10px] uppercase tracking-wider whitespace-nowrap">Amount</th>
                     <th className="w-12"></th>
                   </tr>
@@ -455,7 +338,6 @@ export default function RepCreateOrder() {
                         <td className="px-3 py-2 text-right text-slate-500 whitespace-nowrap">{p && discPct > 0 ? `${discPct}%` : ''}</td>
                         <td className="px-3 py-2 text-right text-slate-500 whitespace-nowrap">{p && discAmt > 0 ? formatCurrency(discAmt) : ''}</td>
                         {!isNonTaxCustomer && <td className="px-3 py-2 text-right text-slate-400 whitespace-nowrap">{p?.taxCode || ''}</td>}
-                        {!isNonTaxCustomer && <td className="px-3 py-2 text-right text-slate-500 whitespace-nowrap">{p && taxAmt > 0 ? formatCurrency(taxAmt) : ''}</td>}
                         <td className="px-3 py-2 text-right font-bold text-slate-900 whitespace-nowrap">{p ? formatCurrency(grossAmount) : ''}</td>
                         <td className="px-2 py-2 text-center">
                           <button onClick={() => removeDesktopRow(row.id)}

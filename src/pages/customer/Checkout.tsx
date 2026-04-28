@@ -175,14 +175,20 @@ export default function CustomerCheckout() {
       
       {/* Page Header */}
       <div className="px-4 lg:px-0 mb-6">
-        <div className="max-w-6xl mx-auto">
-          <h1 className="text-2xl font-bold text-slate-900">Checkout</h1>
-          <p className="text-sm text-slate-500 mt-1">Review your items and confirm the order</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">Checkout</h1>
+            <p className="text-sm text-slate-500 mt-1">Review your items and confirm the order</p>
+          </div>
+          <div className="text-right hidden sm:block">
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">{items.length} Items</p>
+            <p className="text-lg font-black text-orange-600">{formatCurrency(finalAmount)}</p>
+          </div>
         </div>
       </div>
 
       {/* Main Content */}
-      <div className="max-w-6xl mx-auto px-4 lg:px-0">
+      <div className="px-4 lg:px-0">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
           {/* Left Column: Order Items */}
@@ -196,7 +202,7 @@ export default function CustomerCheckout() {
               </div>
 
               <div className="divide-y divide-slate-100 p-2">
-                {items.map(item => {
+                {items.map((item, itemIdx) => {
                   const rate = item.unitPrice;
                   const qty = item.quantity;
                   const discPct = item.discountPercent || 0;
@@ -213,10 +219,10 @@ export default function CustomerCheckout() {
                   const displayTotal = isNonTaxCustomer ? (baseAmount + rowTaxAmount) : baseAmount;
 
                   return (
-                    <div key={item.productId} className="px-4 py-4 flex items-center justify-between gap-4 hover:bg-slate-50 rounded-2xl transition">
-                      <div className="flex items-center gap-4 min-w-0">
-                        <div className="w-12 h-12 rounded-xl bg-slate-50 flex items-center justify-center border border-slate-100 flex-shrink-0">
-                          <Package className="w-6 h-6 text-slate-400" />
+                    <div key={item.productId} className="px-4 py-3.5 flex items-center justify-between gap-4 hover:bg-orange-50/30 rounded-xl transition">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center flex-shrink-0 shadow-sm">
+                          <span className="text-xs font-black text-white">{itemIdx + 1}</span>
                         </div>
                         <div className="min-w-0">
                           <p className="text-sm font-bold text-slate-900 truncate">{item.productName}</p>
@@ -225,7 +231,7 @@ export default function CustomerCheckout() {
                             <span>×</span>
                             <span>{formatCurrency(displayRate)}</span>
                             {item.discountPercent ? (
-                              <span className="text-emerald-600 font-bold ml-1">({item.discountPercent}% OFF)</span>
+                              <span className="text-orange-500 font-bold ml-1">({item.discountPercent}% OFF)</span>
                             ) : null}
                           </p>
                         </div>
@@ -258,9 +264,9 @@ export default function CustomerCheckout() {
                 </div>
               )}
               
-              <div className="flex justify-between items-center text-sm font-bold text-emerald-600 pb-5 border-b border-slate-100">
-                <span className="uppercase tracking-widest text-xs">Total Discount</span>
-                <span>-{formatCurrency(totalDiscountAmount)}</span>
+              <div className="flex justify-between items-center text-sm font-bold pb-5 border-b border-slate-100">
+                <span className="uppercase tracking-widest text-xs text-orange-500">Total Discount</span>
+                <span className="text-orange-500">-{formatCurrency(totalDiscountAmount)}</span>
               </div>
 
               <div className="flex justify-between items-center pt-1">

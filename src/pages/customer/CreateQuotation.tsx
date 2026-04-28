@@ -394,18 +394,17 @@ export default function CustomerCreateQuotation() {
             <table className="w-full table-auto text-[11px] text-black font-normal bg-white rounded-xl shadow-sm border border-gray-200" style={{ borderCollapse: 'separate', borderSpacing: 0, minWidth: '950px' }}>
               <thead>
                 <tr className="bg-gray-50">
-                  <th className="text-left px-3 py-3 font-bold text-black text-[10px] uppercase tracking-widest border-b border-gray-300 rounded-tl-xl" style={{ minWidth: 260 }}>
-                    Description
+                  <th className="text-center px-2 py-3 font-bold text-black text-[10px] uppercase tracking-widest border-b border-gray-300 rounded-tl-xl w-8">#</th>
+                  <th className="text-left px-3 py-3 font-bold text-black text-[10px] uppercase tracking-widest border-b border-gray-300 whitespace-nowrap">Item Code</th>
+                  <th className="text-left px-3 py-3 font-bold text-black text-[10px] uppercase tracking-widest border-b border-gray-300" style={{ minWidth: 260 }}>
+                    Item Description
                   </th>
-                  <th className="text-left px-3 py-3 font-bold text-black text-[10px] uppercase tracking-widest border-b border-gray-300 whitespace-nowrap">Item / SKU</th>
                   <th className="text-center px-3 py-3 font-bold text-black text-[10px] uppercase tracking-widest border-b border-gray-300 whitespace-nowrap">Qty</th>
                   <th className="text-right px-3 py-3 font-bold text-black text-[10px] uppercase tracking-widest border-b border-gray-300 whitespace-nowrap">Rate</th>
-                  <th className="text-right px-3 py-3 font-bold text-black text-[10px] uppercase tracking-widest border-b border-gray-300 whitespace-nowrap">MRP</th>
                   <th className="text-right px-3 py-3 font-bold text-black text-[10px] uppercase tracking-widest border-b border-gray-300 whitespace-nowrap">Disc %</th>
                   <th className="text-right px-3 py-3 font-bold text-black text-[10px] uppercase tracking-widest border-b border-gray-300 whitespace-nowrap">Disc Amt</th>
-                  {!isNonTaxCustomer && <th className="text-right px-3 py-3 font-bold text-black text-[10px] uppercase tracking-widest border-b border-gray-300 whitespace-nowrap">Tax</th>}
-                  {!isNonTaxCustomer && <th className="text-right px-3 py-3 font-bold text-black text-[10px] uppercase tracking-widest border-b border-gray-300 whitespace-nowrap">Tax Amt</th>}
-                  <th className="text-right px-3 py-3 font-bold text-black text-[10px] uppercase tracking-widest border-b border-gray-300 whitespace-nowrap">Gross Amount</th>
+                  {!isNonTaxCustomer && <th className="text-center px-3 py-3 font-bold text-black text-[10px] uppercase tracking-widest border-b border-gray-300 whitespace-nowrap">Tax</th>}
+                  <th className="text-right px-3 py-3 font-bold text-black text-[10px] uppercase tracking-widest border-b border-gray-300 whitespace-nowrap">Line Gross</th>
                   <th className="text-right px-3 py-3 font-bold text-black text-[10px] uppercase tracking-widest border-b border-gray-300 whitespace-nowrap bg-orange-50/30">Req. Price</th>
                   <th className="text-center px-1.5 py-3 font-bold text-black text-[10px] uppercase tracking-widest border-b border-gray-300 rounded-tr-xl whitespace-nowrap w-[56px]">Action</th>
                 </tr>
@@ -442,7 +441,18 @@ export default function CustomerCreateQuotation() {
                           : (isEven ? 'bg-gray-50/50 hover:bg-gray-100/50' : 'bg-white hover:bg-gray-50')
                       }`}
                     >
-                      {/* Description */}
+                      {/* # */}
+                      <td className="px-2 py-2 border-b border-gray-100 text-center text-[10px] text-black">{rowIndex + 1}</td>
+
+                      {/* Item Code (SKU) */}
+                      <td className="px-3 py-2 border-b border-gray-100 whitespace-nowrap">
+                        {prod?.sku
+                          ? <span className="font-mono text-[10px] text-black">{prod.sku}</span>
+                          : <span className="text-black">—</span>
+                        }
+                      </td>
+
+                      {/* Item Description */}
                       <td className="px-2 py-2 border-b border-gray-100 whitespace-normal" style={{ minWidth: 260 }}>
                         <ProductDropdown
                           rowId={row.id}
@@ -461,14 +471,6 @@ export default function CustomerCreateQuotation() {
                         />
                       </td>
 
-                      {/* SKU */}
-                      <td className="px-3 py-2 border-b border-gray-100 whitespace-nowrap">
-                        {prod?.sku
-                          ? <span className="font-mono text-[10px] text-black">{prod.sku}</span>
-                          : <span className="text-black">—</span>
-                        }
-                      </td>
-
                       {/* Qty */}
                       <td className="px-1.5 py-2 border-b border-gray-100 text-center w-[56px]">
                         <input
@@ -480,12 +482,7 @@ export default function CustomerCreateQuotation() {
 
                       {/* Rate */}
                       <td className="px-3 py-2 border-b border-gray-100 text-right whitespace-nowrap text-black font-bold">
-                        {prod ? formatCurrency(rate) : <span className="text-black">—</span>}
-                      </td>
-
-                      {/* MRP */}
-                      <td className="px-3 py-2 border-b border-gray-100 text-right whitespace-nowrap text-black font-bold">
-                        {prod?.mrp != null ? formatCurrency(prod.mrp) : <span className="text-black">—</span>}
+                        {prod ? formatCurrency(isNonTaxCustomer ? rate + taxAmt : rate) : <span className="text-black">—</span>}
                       </td>
 
                       {/* Disc % */}
@@ -498,21 +495,14 @@ export default function CustomerCreateQuotation() {
                         {prod ? formatCurrency(discAmt) : <span className="text-black">—</span>}
                       </td>
 
-                      {/* Tax Code */}
+                      {/* Tax code — tax customers only */}
                       {!isNonTaxCustomer && (
-                        <td className="px-3 py-2 border-b border-gray-100 text-right whitespace-nowrap text-black font-bold">
-                          {prod?.taxCode ? prod.taxCode : <span className="text-black">—</span>}
+                        <td className="px-3 py-2 border-b border-gray-100 text-center whitespace-nowrap text-black font-bold">
+                          {prod ? (prod.taxCode || <span className="text-black">—</span>) : <span className="text-black">—</span>}
                         </td>
                       )}
 
-                      {/* Tax Amt */}
-                      {!isNonTaxCustomer && (
-                        <td className="px-3 py-2 border-b border-gray-100 text-right whitespace-nowrap text-black font-bold">
-                          {prod ? formatCurrency(taxAmt) : <span className="text-black">—</span>}
-                        </td>
-                      )}
-
-                      {/* Gross Amount */}
+                      {/* Line Gross */}
                       <td className="px-3 py-2 border-b border-gray-100 text-right whitespace-nowrap text-black font-bold">
                         {prod ? formatCurrency(grossAmount) : <span className="text-black">—</span>}
                       </td>

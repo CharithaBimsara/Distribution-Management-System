@@ -449,49 +449,51 @@ export default function CustomerProducts() {
       </div>
 
       <div className="px-4 lg:px-0">
-        <div className="max-w-screen-xl mx-auto overflow-visible space-y-5">
+        <div className="overflow-visible space-y-5">
 
-          {/* Separate Header Box */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between px-6 py-5 border border-slate-200 bg-white rounded-3xl shadow-sm gap-4">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-orange-50 flex items-center justify-center border border-orange-100">
-                <Store className="w-6 h-6 text-orange-600" />
+          {/* Header */}
+          <div className="relative overflow-hidden bg-gradient-to-r from-orange-500 to-amber-500 rounded-2xl p-6 shadow-lg shadow-orange-200/50">
+            <div className="absolute -right-12 -top-12 w-48 h-48 rounded-full bg-white/10 blur-3xl pointer-events-none" />
+            <div className="absolute bottom-0 left-1/3 w-32 h-32 rounded-full bg-amber-400/20 blur-2xl pointer-events-none" />
+            <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0">
+                  <Store className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-extrabold text-white tracking-tight">Quick Order Entry</h2>
+                  <p className="text-xs text-orange-100 mt-0.5">Search and select products row by row</p>
+                </div>
               </div>
-              <div>
-                <h2 className="text-base font-bold text-slate-900">
-                  Quick Order Entry
-                </h2>
-                <p className="text-xs font-medium text-slate-500 mt-0.5">Search and select items row by row</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 w-full sm:w-auto">
               <button
                 onClick={goToCreateOrder}
                 disabled={quickCount === 0}
-                className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-orange-600 text-white rounded-xl text-sm font-bold shadow-md shadow-orange-600/20 hover:bg-orange-700 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-white text-orange-600 rounded-xl text-sm font-bold shadow-md hover:bg-orange-50 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
               >
                 <ShoppingCart className="w-4 h-4" />
                 Proceed to Checkout
+                {quickCount > 0 && (
+                  <span className="bg-orange-500 text-white rounded-full w-5 h-5 text-[10px] flex items-center justify-center font-black">{quickCount}</span>
+                )}
               </button>
             </div>
           </div>
 
           {/* Table Container */}
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="overflow-x-auto scrollbar-hide">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200">
-                    <th className="px-4 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-widest w-1/4 min-w-[220px]">Description</th>
-                    <th className="px-4 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-widest">Item / SKU</th>
+                  <tr className="bg-orange-50/60 border-b border-orange-100">
+                    <th className="px-3 py-4 text-center text-xs font-bold text-slate-500 uppercase tracking-widest w-10">#</th>
+                    <th className="px-4 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-widest">Item Code</th>
+                    <th className="px-4 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-widest w-1/4 min-w-[220px]">Item Description</th>
                     <th className="px-3 py-4 text-center text-xs font-bold text-slate-500 uppercase tracking-widest">Qty</th>
                     <th className="px-4 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-widest">Rate</th>
-                    <th className="px-4 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-widest hidden lg:table-cell">MRP</th>
                     <th className="px-4 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-widest">Disc %</th>
                     <th className="px-4 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-widest">Disc Amt</th>
-                    {!isNonTaxCustomer && <th className="px-4 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-widest hidden xl:table-cell">Tax</th>}
-                    {!isNonTaxCustomer && <th className="px-4 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-widest hidden xl:table-cell">Tax Amt</th>}
-                    <th className="px-4 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-widest">Gross Amount</th>
+                    {!isNonTaxCustomer && <th className="px-4 py-4 text-center text-xs font-bold text-slate-500 uppercase tracking-widest">Tax</th>}
+                    <th className="px-4 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-widest">Line Gross</th>
                     <th className="px-3 py-4 text-center text-xs font-bold text-slate-500 uppercase tracking-widest w-[60px]">Action</th>
                   </tr>
                 </thead>
@@ -523,7 +525,20 @@ export default function CustomerProducts() {
                           prod ? 'bg-white hover:bg-slate-50/80' : 'bg-slate-50/30 hover:bg-slate-50'
                         }`}
                       >
-                        {/* Description */}
+                        {/* # */}
+                        <td className="px-3 py-4 text-center text-xs text-slate-400 font-medium">
+                          {rowIndex + 1}
+                        </td>
+
+                        {/* Item Code (SKU) */}
+                        <td className="px-4 py-4">
+                          {prod?.sku
+                            ? <span className="font-medium text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-md">{prod.sku}</span>
+                            : <span className="text-slate-300">—</span>
+                          }
+                        </td>
+
+                        {/* Item Description (product dropdown) */}
                         <td className="px-3 py-2 w-1/4 min-w-[220px]">
                           <ProductDropdown
                             rowId={row.id}
@@ -542,14 +557,6 @@ export default function CustomerProducts() {
                           />
                         </td>
 
-                        {/* SKU */}
-                        <td className="px-4 py-4">
-                          {prod?.sku
-                            ? <span className="font-medium text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-md">{prod.sku}</span>
-                            : <span className="text-slate-300">—</span>
-                          }
-                        </td>
-
                         {/* Qty */}
                         <td className="px-3 py-4 text-center">
                           <input
@@ -564,11 +571,6 @@ export default function CustomerProducts() {
                           {prod ? formatCurrency(isNonTaxCustomer ? rate + taxAmt : rate) : <span className="text-slate-300">—</span>}
                         </td>
 
-                        {/* MRP (Hidden on smaller screens to save space) */}
-                        <td className="px-4 py-4 text-right text-sm font-medium text-slate-500 hidden lg:table-cell">
-                          {prod?.mrp != null ? formatCurrency(prod.mrp) : <span className="text-slate-300">—</span>}
-                        </td>
-
                         {/* Disc % */}
                         <td className="px-4 py-4 text-right text-sm font-bold text-emerald-600">
                           {prod && discPct > 0 ? `${discPct}%` : <span className="text-slate-300">—</span>}
@@ -579,22 +581,15 @@ export default function CustomerProducts() {
                           {prod && discAmt > 0 ? formatCurrency(discAmt) : <span className="text-slate-300">—</span>}
                         </td>
 
-                        {/* Tax Code (Hidden on smaller screens to save space) */}
+                        {/* Tax code — tax customers only */}
                         {!isNonTaxCustomer && (
-                          <td className="px-4 py-4 text-right text-sm font-medium text-slate-500 hidden xl:table-cell">
-                            {prod?.taxCode ? prod.taxCode : <span className="text-slate-300">—</span>}
+                          <td className="px-4 py-4 text-center text-sm font-medium text-slate-500">
+                            {prod?.taxCode || <span className="text-slate-300">—</span>}
                           </td>
                         )}
 
-                        {/* Tax Amt (Hidden on smaller screens to save space) */}
-                        {!isNonTaxCustomer && (
-                          <td className="px-4 py-4 text-right text-sm font-medium text-slate-500 hidden xl:table-cell">
-                            {prod && taxAmt > 0 ? formatCurrency(taxAmt) : <span className="text-slate-300">—</span>}
-                          </td>
-                        )}
-
-                        {/* Gross Amount */}
-                        <td className="px-4 py-4 text-right text-sm font-bold text-black-600">
+                        {/* Line Gross */}
+                        <td className="px-4 py-4 text-right text-sm font-bold text-slate-900">
                           {prod ? formatCurrency(grossAmount) : <span className="text-slate-300">—</span>}
                         </td>
 
@@ -618,28 +613,34 @@ export default function CustomerProducts() {
 
           {/* Order Summary (Right Aligned) */}
           <div className="flex justify-end mt-4">
-            <div className="w-full md:w-[380px] bg-white rounded-3xl border border-slate-200 shadow-sm p-6 space-y-4">
-              <div className="flex justify-between items-center text-sm font-bold text-slate-500">
-                <span className="uppercase tracking-widest text-xs">Total Gross</span>
-                <span className="text-slate-800">{formatCurrency(totalGrossAmount)}</span>
+            <div className="w-full md:w-[380px] bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-3">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Order Summary</p>
+              <div className="flex justify-between items-center">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Gross</span>
+                <span className="text-sm font-bold text-slate-800">{formatCurrency(totalGrossAmount)}</span>
               </div>
-              
               {!isNonTaxCustomer && (
-                <div className="flex justify-between items-center text-sm font-bold text-slate-500">
-                  <span className="uppercase tracking-widest text-xs">Total Tax</span>
-                  <span className="text-slate-800">{formatCurrency(totalTaxAmount)}</span>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Tax</span>
+                  <span className="text-sm font-bold text-slate-800">{formatCurrency(totalTaxAmount)}</span>
                 </div>
               )}
-              
-              <div className="flex justify-between items-center text-sm font-bold text-emerald-600 pb-4 border-b border-slate-100">
-                <span className="uppercase tracking-widest text-xs">Total Discount</span>
-                <span>-{formatCurrency(totalDiscountAmount)}</span>
+              <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+                <span className="text-xs font-bold text-orange-500 uppercase tracking-wider">Discount</span>
+                <span className="text-sm font-bold text-orange-500">-{formatCurrency(totalDiscountAmount)}</span>
               </div>
-
-              <div className="flex justify-between items-center pt-2">
-                <span className="text-sm font-black text-orange-700 uppercase tracking-widest">Grand Total</span>
-                <span className="text-2xl font-black text-orange-700">{formatCurrency(finalAmount)}</span>
+              <div className="flex justify-between items-center pt-1">
+                <span className="text-sm font-black text-slate-900 uppercase tracking-wider">Grand Total</span>
+                <span className="text-2xl font-black text-orange-600">{formatCurrency(finalAmount)}</span>
               </div>
+              <button
+                onClick={goToCreateOrder}
+                disabled={quickCount === 0}
+                className="w-full mt-2 flex items-center justify-center gap-2 px-4 py-3 bg-orange-600 text-white rounded-xl text-sm font-bold hover:bg-orange-700 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm shadow-orange-200"
+              >
+                <ShoppingCart className="w-4 h-4" />
+                Checkout
+              </button>
             </div>
           </div>
 
@@ -647,7 +648,7 @@ export default function CustomerProducts() {
 
         {/* Loading Skeleton */}
         {isLoading && (
-          <div className="mt-5 max-w-screen-xl mx-auto bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden p-2">
+          <div className="mt-5 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden p-2">
             {Array.from({ length: 5 }).map((_, i) => (
               <div key={i} className="flex items-center gap-4 px-6 py-5 border-b border-slate-100 last:border-b-0 animate-pulse">
                 <div className="flex-1 space-y-2.5">
@@ -663,7 +664,7 @@ export default function CustomerProducts() {
 
         {/* Empty State */}
         {!isLoading && !allProducts.length && (
-          <div className="text-center py-24 mt-5 max-w-screen-xl mx-auto bg-white rounded-3xl border border-slate-200 shadow-sm">
+          <div className="text-center py-24 mt-5 bg-white rounded-2xl border border-slate-200 shadow-sm">
             <div className="w-20 h-20 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-5">
               <Package className="w-10 h-10 text-slate-300" />
             </div>

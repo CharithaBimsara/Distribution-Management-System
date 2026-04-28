@@ -93,7 +93,7 @@ function renderQuotationPage(doc: any, autoTable: any, quotation: Quotation, isT
   
   const baseCols = ['No', 'Item Code', 'Item Description', 'Qty', 'Rate', 'Disc %', 'Disc Amt'];
   const cols = isTax 
-    ? [...baseCols, 'Tax Code', 'Tax Amt', 'Gross Amount', 'Req. Price'] 
+    ? [...baseCols, 'Tax', 'Line Gross', 'Req. Price'] 
     : [...baseCols, 'Line Gross', 'Req. Price'];
 
   let totalGross = 0;
@@ -127,13 +127,12 @@ function renderQuotationPage(doc: any, autoTable: any, quotation: Quotation, isT
       item.productName || '',
       qty.toString(),
       formatNumber(displayRate),
-      discPct ? `${discPct}%` : '0.00',
-      formatNumber(discAmt)
+      discPct ? `${discPct}%` : '—',
+      discAmt ? formatNumber(discAmt) : '—'
     ];
 
     if (isTax) {
-      rowData.push(item.taxCode || 'V18');
-      rowData.push(formatNumber(taxAmt));
+      rowData.push(item.taxCode || '—');
     }
 
     rowData.push(formatNumber(grossAmount));
@@ -162,9 +161,8 @@ function renderQuotationPage(doc: any, autoTable: any, quotation: Quotation, isT
       6: { cellWidth: 16, halign: 'right' },
       ...(isTax ? { 
         7: { cellWidth: 14, halign: 'center' }, 
-        8: { cellWidth: 16, halign: 'right' }, 
-        9: { cellWidth: 20, halign: 'right' },
-        10: { cellWidth: 20, halign: 'right' }
+        8: { cellWidth: 22, halign: 'right' },
+        9: { cellWidth: 22, halign: 'right' }
       } : { 
         7: { cellWidth: 24, halign: 'right' },
         8: { cellWidth: 24, halign: 'right' }
@@ -275,7 +273,7 @@ export function downloadQuotationsExcel(quotations: Quotation[], customerTaxMap?
     rows.push([]);
 
     rows.push(withTax
-      ? ['No', 'Item Code', 'Item Description', 'Qty', 'Rate', 'Disc %', 'Disc Amt', 'Tax Code', 'Tax Amt', 'Gross Amount', 'Req. Price']
+      ? ['No', 'Item Code', 'Item Description', 'Qty', 'Rate', 'Disc %', 'Disc Amt', 'Tax', 'Line Gross', 'Req. Price']
       : ['No', 'Item Code', 'Item Description', 'Qty', 'Rate', 'Disc %', 'Disc Amt', 'Line Gross', 'Req. Price']);
 
     (q.items || []).forEach((item, index) => {
@@ -299,7 +297,6 @@ export function downloadQuotationsExcel(quotations: Quotation[], customerTaxMap?
         rate,
         discPct,
         discAmt,
-        item.taxCode || '-',
         taxAmt,
         grossAmount,
         item.expectedPrice ?? 0,
@@ -316,17 +313,17 @@ export function downloadQuotationsExcel(quotations: Quotation[], customerTaxMap?
           displayRate,
           rowWithTax[5],
           rowWithTax[6],
+          rowWithTax[8],
           rowWithTax[9],
-          rowWithTax[10],
         ]);
       }
     });
 
     rows.push([]);
     if (withTax) {
-      rows.push(['', '', '', '', '', '', '', '', 'Subtotal', q.subTotal || 0]);
-      rows.push(['', '', '', '', '', '', '', '', 'Tax', q.taxAmount || 0]);
-      rows.push(['', '', '', '', '', '', '', '', 'Total Estimate', q.totalAmount || 0]);
+      rows.push(['', '', '', '', '', '', '', 'Subtotal', q.subTotal || 0]);
+      rows.push(['', '', '', '', '', '', '', 'Tax', q.taxAmount || 0]);
+      rows.push(['', '', '', '', '', '', '', 'Total Estimate', q.totalAmount || 0]);
     } else {
       rows.push(['', '', '', '', '', '', 'Subtotal', q.subTotal || 0]);
       rows.push(['', '', '', '', '', '', 'Total Estimate', q.totalAmount || 0]);
@@ -342,7 +339,6 @@ export function downloadQuotationsExcel(quotations: Quotation[], customerTaxMap?
           { wch: 12 },
           { wch: 10 },
           { wch: 12 },
-          { wch: 10 },
           { wch: 12 },
           { wch: 14 },
           { wch: 14 },

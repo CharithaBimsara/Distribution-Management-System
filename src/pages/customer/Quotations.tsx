@@ -326,10 +326,7 @@ export default function CustomerQuotations() {
                                       <td className="px-4 py-3 text-right font-medium text-slate-700">{discPct ? `${discPct}%` : '0.00'}</td>
                                       <td className="px-4 py-3 text-right font-medium text-emerald-600">{formatCurrency(rowDiscount)}</td>
                                       {isTaxCustomer && (
-                                        <>
-                                          <td className="px-4 py-3 text-center font-bold text-[10px] text-slate-500">{item.taxCode || 'V18'}</td>
-                                          <td className="px-4 py-3 text-right font-medium text-slate-600">{formatCurrency(rowTax)}</td>
-                                        </>
+                                        <td className="px-4 py-3 text-center font-medium text-slate-600">{(item as any).taxCode || '—'}</td>
                                       )}
                                       <td className="px-4 py-3 text-right font-bold text-slate-900">{formatCurrency(rowGross)}</td>
                                       <td className="px-4 py-3 text-right font-bold text-orange-600">{item.expectedPrice != null ? formatCurrency(item.expectedPrice) : '-'}</td>
@@ -347,20 +344,17 @@ export default function CustomerQuotations() {
                                       <table className="w-full text-sm min-w-[900px]">
                                         <thead>
                                           <tr className="bg-slate-50 border-b border-slate-200">
-                                            <th className="px-4 py-2.5 text-center text-[10px] font-bold text-slate-500 uppercase tracking-widest">No</th>
+                                            <th className="px-4 py-2.5 text-center text-[10px] font-bold text-slate-500 uppercase tracking-widest">#</th>
                                             <th className="px-4 py-2.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-widest">Item Code</th>
-                                            <th className="px-4 py-2.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-widest">Description</th>
+                                            <th className="px-4 py-2.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-widest">Item Description</th>
                                             <th className="px-4 py-2.5 text-center text-[10px] font-bold text-slate-500 uppercase tracking-widest">Qty</th>
                                             <th className="px-4 py-2.5 text-right text-[10px] font-bold text-slate-500 uppercase tracking-widest">Rate</th>
                                             <th className="px-4 py-2.5 text-right text-[10px] font-bold text-slate-500 uppercase tracking-widest">Disc %</th>
                                             <th className="px-4 py-2.5 text-right text-[10px] font-bold text-slate-500 uppercase tracking-widest">Disc Amt</th>
                                             {isTaxCustomer && (
-                                              <>
-                                                <th className="px-4 py-2.5 text-center text-[10px] font-bold text-slate-500 uppercase tracking-widest">Tax Code</th>
-                                                <th className="px-4 py-2.5 text-right text-[10px] font-bold text-slate-500 uppercase tracking-widest">Tax Amt</th>
-                                              </>
+                                              <th className="px-4 py-2.5 text-right text-[10px] font-bold text-slate-500 uppercase tracking-widest">Tax</th>
                                             )}
-                                            <th className="px-4 py-2.5 text-right text-[10px] font-bold text-slate-500 uppercase tracking-widest">Gross Amount</th>
+                                            <th className="px-4 py-2.5 text-right text-[10px] font-bold text-slate-500 uppercase tracking-widest">Line Gross</th>
                                             <th className="px-4 py-2.5 text-right text-[10px] font-bold text-slate-500 uppercase tracking-widest text-orange-600 bg-orange-50/50">Request Price</th>
                                           </tr>
                                         </thead>

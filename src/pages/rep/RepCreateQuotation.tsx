@@ -219,16 +219,15 @@ export default function RepCreateQuotation() {
               <table className="w-full text-xs">
                 <thead>
                   <tr className="bg-slate-50 text-slate-500">
-                    <th className="text-left px-4 py-3 font-semibold text-[10px] uppercase tracking-wider min-w-[280px]">Product</th>
-                    <th className="text-left px-3 py-3 font-semibold text-[10px] uppercase tracking-wider whitespace-nowrap">SKU</th>
+                    <th className="text-center px-3 py-3 font-semibold text-[10px] uppercase tracking-wider w-8">#</th>
+                    <th className="text-left px-3 py-3 font-semibold text-[10px] uppercase tracking-wider whitespace-nowrap">Item Code</th>
+                    <th className="text-left px-4 py-3 font-semibold text-[10px] uppercase tracking-wider min-w-[280px]">Item Description</th>
                     <th className="text-center px-3 py-3 font-semibold text-[10px] uppercase tracking-wider w-20">Qty</th>
                     <th className="text-right px-3 py-3 font-semibold text-[10px] uppercase tracking-wider whitespace-nowrap">Rate</th>
-                    <th className="text-right px-3 py-3 font-semibold text-[10px] uppercase tracking-wider whitespace-nowrap">MRP</th>
                     <th className="text-right px-3 py-3 font-semibold text-[10px] uppercase tracking-wider whitespace-nowrap">Disc %</th>
                     <th className="text-right px-3 py-3 font-semibold text-[10px] uppercase tracking-wider whitespace-nowrap">Disc Amt</th>
                     {!isNonTaxCustomer && <th className="text-right px-3 py-3 font-semibold text-[10px] uppercase tracking-wider whitespace-nowrap">Tax</th>}
-                    {!isNonTaxCustomer && <th className="text-right px-3 py-3 font-semibold text-[10px] uppercase tracking-wider whitespace-nowrap">Tax Amt</th>}
-                    <th className="text-right px-3 py-3 font-semibold text-[10px] uppercase tracking-wider whitespace-nowrap">Amount</th>
+                    <th className="text-right px-3 py-3 font-semibold text-[10px] uppercase tracking-wider whitespace-nowrap">Line Gross</th>
                     <th className="text-right px-3 py-3 font-semibold text-[10px] uppercase tracking-wider whitespace-nowrap">Request Price</th>
                     <th className="w-12"></th>
                   </tr>
@@ -248,6 +247,11 @@ export default function RepCreateQuotation() {
                     }
                     return (
                       <tr key={row.id} className="group hover:bg-slate-50/50 transition-colors">
+                        {/* # */}
+                        <td className="px-3 py-2 text-center text-[10px] text-slate-400">{quotationRows.indexOf(row) + 1}</td>
+                        {/* Item Code (SKU) */}
+                        <td className="px-3 py-2 text-slate-500 font-mono text-[10px] whitespace-nowrap">{p?.sku || ''}</td>
+                        {/* Item Description (dropdown) */}
                         <td className="px-3 py-2 min-w-[280px]">
                           <ProductDropdown rowId={row.id}
                             value={rowSearches[row.id] !== undefined ? rowSearches[row.id] : (p?.name || '')}
@@ -256,19 +260,23 @@ export default function RepCreateQuotation() {
                             onSelect={(product) => { updateQuotationRow(row.id, { product }); setRowSearches(prev => ({ ...prev, [row.id]: product.name })); }}
                           />
                         </td>
-                        <td className="px-3 py-2 text-slate-500 font-mono text-[10px] whitespace-nowrap">{p?.sku || ''}</td>
+                        {/* Qty */}
                         <td className="px-2 py-2 text-center">
                           <input type="number" min={1} value={row.qty} disabled={!p}
                             onChange={(e) => updateQuotationRow(row.id, { qty: Math.max(1, Number(e.target.value) || 1) })}
                             className="w-16 text-center text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 transition disabled:opacity-40" />
                         </td>
+                        {/* Rate */}
                         <td className="px-3 py-2 text-right text-slate-700 whitespace-nowrap">{p && calcInput ? formatCurrency(isNonTaxCustomer ? calcInput.rate + taxAmt : calcInput.rate) : ''}</td>
-                        <td className="px-3 py-2 text-right text-slate-400 whitespace-nowrap">{p?.mrp != null ? formatCurrency(p.mrp) : ''}</td>
+                        {/* Disc % */}
                         <td className="px-3 py-2 text-right text-slate-500 whitespace-nowrap">{p && calcInput && calcInput.discountPercent > 0 ? `${calcInput.discountPercent}%` : ''}</td>
+                        {/* Disc Amt */}
                         <td className="px-3 py-2 text-right text-slate-500 whitespace-nowrap">{p && discAmt > 0 ? formatCurrency(discAmt) : ''}</td>
-                        {!isNonTaxCustomer && <td className="px-3 py-2 text-right text-slate-400 whitespace-nowrap">{p?.taxCode || ''}</td>}
-                        {!isNonTaxCustomer && <td className="px-3 py-2 text-right text-slate-500 whitespace-nowrap">{p && taxAmt > 0 ? formatCurrency(taxAmt) : ''}</td>}
+                        {/* Tax code — tax customers only */}
+                        {!isNonTaxCustomer && <td className="px-3 py-2 text-center text-slate-500 whitespace-nowrap">{p?.taxCode || ''}</td>}
+                        {/* Line Gross */}
                         <td className="px-3 py-2 text-right font-bold text-slate-900 whitespace-nowrap">{p ? formatCurrency(grossAmount) : ''}</td>
+                        {/* Request Price */}
                         <td className="px-2 py-2">
                           <input type="number" min={0} step={0.01} value={row.requestPrice ?? ''} disabled={!p}
                             onChange={(e) => updateQuotationRow(row.id, { requestPrice: e.target.value === '' ? undefined : Number(e.target.value) })}

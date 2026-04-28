@@ -318,7 +318,7 @@ export default function CustomerLayout() {
 
         {/* Page Content */}
         <main className="flex-1 overflow-y-auto pb-20 lg:pb-0">
-          <div className="lg:px-6 lg:py-6 lg:max-w-7xl lg:mx-auto w-full">
+          <div className="lg:px-6 lg:py-6 w-full">
             <Outlet />
           </div>
         </main>

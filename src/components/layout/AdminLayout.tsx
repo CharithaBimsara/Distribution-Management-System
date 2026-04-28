@@ -16,17 +16,17 @@ import { useAutoCollapseSidebar } from '../../hooks/useAutoCollapseSidebar';
 
 const baseNavItems = [
   { to: '/admin', icon: LayoutDashboard, label: 'Dashboard', end: true },
-  { to: '/admin/products', icon: Package, label: 'Products' },
+  { to: '/admin/quotations', icon: FileText, label: 'Quotations' },
   { to: '/admin/orders', icon: ShoppingCart, label: 'Orders' },
+  { to: '/admin/products', icon: Package, label: 'Products' },
+  { to: '/admin/special-offers', icon: Gift, label: 'Special Offers' },
   { to: '/admin/customers', icon: Users, label: 'Customers' },
   { to: '/admin/reps', icon: UserCheck, label: 'Sales Reps' },
-  { to: '/admin/routes', icon: MapPin, label: 'Route Manage' },
   { to: '/admin/coordinators', icon: Shield, label: 'Coordinators' },
   { to: '/admin/regions', icon: MapPin, label: 'Regions' },
-  { to: '/admin/quotations', icon: FileText, label: 'Quotations' },
+  { to: '/admin/routes', icon: MapPin, label: 'Route Manage' },
   { to: '/admin/reports', icon: BarChart3, label: 'Reports' },
   { to: '/admin/support', icon: MessageSquare, label: 'Support' },
-  { to: '/admin/special-offers', icon: Gift, label: 'Special Offers' },
   { to: '/admin/settings', icon: Settings, label: 'Settings' },
 ];
 
@@ -302,7 +302,7 @@ export default function AdminLayout() {
         </header>
 
         <main className="flex-1 overflow-y-auto p-4 lg:p-6">
-          <div className="lg:max-w-7xl lg:mx-auto w-full">
+          <div className="w-full">
             <Outlet />
           </div>
         </main>
