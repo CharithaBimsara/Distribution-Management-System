@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useEffect, useRef, useState } from 'react';
-import { calculateLine } from '../../utils/calculations';
+import { taxCodeToRate } from '../../utils/calculations';
 import { ORDER_STATUSES } from '../../types/order.types';
 import type { OrderStatus } from '../../types/order.types';
 
@@ -142,10 +142,13 @@ export default function AdminOrderDetail() {
         const rate = item.unitPrice;
         const qty = item.quantity;
         const discPct = item.discountPercent ?? 0;
-        const taxPerUnit = qty ? (item.taxAmount ?? 0) / qty : 0;
-        const calc = calculateLine({ rate, qty, discountPercent: discPct, taxAmount: taxPerUnit });
-        const displayRate = isNonTaxCustomer ? rate + taxPerUnit : rate;
-        const rowGross = isNonTaxCustomer ? (rate * qty + (item.taxAmount ?? 0)) : calc.total;
+        const lineTaxRate = taxCodeToRate(item.taxCode);
+        const allIncRate = Math.round(rate * (1 + lineTaxRate) * 100) / 100;
+        const discAmt = isNonTaxCustomer ? allIncRate * qty * discPct / 100 : rate * qty * discPct / 100;
+        const rowNet = rate * qty - rate * qty * discPct / 100;
+        const rowTax = isNonTaxCustomer ? 0 : rowNet * lineTaxRate;
+        const displayRate = isNonTaxCustomer ? allIncRate : rate;
+        const rowGross = isNonTaxCustomer ? allIncRate * qty : rowNet + rowTax;
         if (isNonTaxCustomer) {
           return [
             item.productName,
@@ -153,7 +156,7 @@ export default function AdminOrderDetail() {
             formatCurrency(displayRate),
             qty,
             discPct ? `${discPct}%` : '-',
-            calc.discount ? formatCurrency(calc.discount) : '-',
+            discAmt ? formatCurrency(discAmt) : '-',
             formatCurrency(rowGross),
           ];
         }
@@ -163,10 +166,10 @@ export default function AdminOrderDetail() {
           formatCurrency(displayRate),
           qty,
           discPct ? `${discPct}%` : '-',
-          calc.discount ? formatCurrency(calc.discount) : '-',
-          '-',
-          calc.tax ? formatCurrency(calc.tax) : '-',
-          formatCurrency(calc.total),
+          discAmt ? formatCurrency(discAmt) : '-',
+          item.taxCode || '-',
+          rowTax ? formatCurrency(rowTax) : '-',
+          formatCurrency(rowNet + rowTax),
         ];
       });
       while (rows.length < 8) rows.push(Array(cols.length).fill(''));
@@ -430,12 +433,12 @@ export default function AdminOrderDetail() {
                 {order.items?.map((item: any, i: number) => {
                   const qty = item.quantity || 0;
                   const rate = item.unitPrice || 0;
-                  const taxAmt = item.taxAmount || 0;
                   const discPct = item.discountPercent ?? 0;
-                  const discAmt = (rate * qty * discPct) / 100;
-                  const taxPerUnit = qty ? taxAmt / qty : 0;
-                  const displayRate = isNonTaxCustomer ? rate + taxPerUnit : rate;
-                  const lineGross = isNonTaxCustomer ? rate * qty + taxAmt : rate * qty;
+                  const lineTaxRate = taxCodeToRate(item.taxCode);
+                  const allIncRate = Math.round(rate * (1 + lineTaxRate) * 100) / 100;
+                  const displayRate = isNonTaxCustomer ? allIncRate : rate;
+                  const lineGross = isNonTaxCustomer ? allIncRate * qty : rate * qty;
+                  const discAmt = isNonTaxCustomer ? (allIncRate * qty * discPct) / 100 : (rate * qty * discPct) / 100;
                   return (
                   <tr key={item.id} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}>
                     <td className="px-5 py-3 text-center text-xs text-slate-400 font-medium">{i + 1}</td>
@@ -445,8 +448,8 @@ export default function AdminOrderDetail() {
                     <td className="px-5 py-3 text-right text-slate-600">{formatCurrency(displayRate)}</td>
                     <td className="px-5 py-3 text-right text-slate-500">{discPct ? `${discPct}%` : '—'}</td>
                     <td className="px-5 py-3 text-right text-slate-500">{discAmt ? formatCurrency(discAmt) : '—'}</td>
-                    {!isNonTaxCustomer && <td className="px-5 py-3 text-right text-slate-500">{taxAmt ? formatCurrency(taxAmt) : '—'}</td>}
-                    <td className="px-5 py-3 text-right font-semibold text-slate-900">{formatCurrency(item.lineTotal ?? lineGross)}</td>
+                    {!isNonTaxCustomer && <td className="px-5 py-3 text-center text-slate-500">{item.taxCode || '—'}</td>}
+                    <td className="px-5 py-3 text-right font-semibold text-slate-900">{formatCurrency(lineGross)}</td>
                   </tr>
                   );
                 })}
@@ -459,9 +462,10 @@ export default function AdminOrderDetail() {
             {order.items?.map((item: any, i: number) => {
               const qty = item.quantity || 0;
               const rate = item.unitPrice || 0;
-              const taxAmt = item.taxAmount || 0;
-              const taxPerUnit = qty ? taxAmt / qty : 0;
-              const displayRate = isNonTaxCustomer ? rate + taxPerUnit : rate;
+              const lineTaxRate = taxCodeToRate(item.taxCode);
+              const allIncRate = Math.round(rate * (1 + lineTaxRate) * 100) / 100;
+              const displayRate = isNonTaxCustomer ? allIncRate : rate;
+              const computedLineGross = isNonTaxCustomer ? allIncRate * qty : rate * qty;
               return (
               <div key={item.id} className="p-4 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3 min-w-0">
@@ -472,7 +476,7 @@ export default function AdminOrderDetail() {
                   </div>
                 </div>
                 <div className="text-right shrink-0">
-                  <p className="font-semibold text-slate-900">{formatCurrency(item.lineTotal)}</p>
+                  <p className="font-semibold text-slate-900">{formatCurrency(computedLineGross)}</p>
                   {item.discountPercent > 0 && <p className="text-[10px] text-emerald-600">{item.discountPercent}% off</p>}
                 </div>
               </div>
@@ -488,16 +492,33 @@ export default function AdminOrderDetail() {
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Order Summary</h3>
             <div className="space-y-2 text-sm">
-              <div className="flex justify-between text-slate-600"><span>Subtotal</span><span>{formatCurrency(order.subTotal)}</span></div>
-              {order.discountAmount > 0 && (
-                <div className="flex justify-between text-emerald-600"><span>Discount</span><span>- {formatCurrency(order.discountAmount)}</span></div>
-              )}
-              {order.taxAmount > 0 && (
-                <div className="flex justify-between text-slate-600"><span>Tax</span><span>{formatCurrency(order.taxAmount)}</span></div>
-              )}
-              <div className="flex justify-between font-bold text-base pt-3 border-t border-slate-100 text-indigo-700">
-                <span>Total</span><span>{formatCurrency(order.totalAmount)}</span>
-              </div>
+              {(() => {
+                let calcSub = 0, calcDisc = 0, calcTax = 0;
+                (order.items || []).forEach((item: any) => {
+                  const r = item.unitPrice || 0, q = item.quantity || 0, d = item.discountPercent || 0;
+                  const ltr = taxCodeToRate(item.taxCode);
+                  const allIncR = Math.round(r * (1 + ltr) * 100) / 100;
+                  const base = r * q, net = base - base * d / 100;
+                  calcSub += isNonTaxCustomer ? allIncR * q : base;
+                  calcDisc += isNonTaxCustomer ? (allIncR * q * d / 100) : (base * d / 100);
+                  if (!isNonTaxCustomer) calcTax += net * ltr;
+                });
+                const calcTotal = calcSub - calcDisc + calcTax;
+                return (
+                  <>
+                    <div className="flex justify-between text-slate-600"><span>Subtotal</span><span>{formatCurrency(calcSub)}</span></div>
+                    {calcDisc > 0 && (
+                      <div className="flex justify-between text-emerald-600"><span>Discount</span><span>- {formatCurrency(calcDisc)}</span></div>
+                    )}
+                    {calcTax > 0 && (
+                      <div className="flex justify-between text-slate-600"><span>Tax</span><span>{formatCurrency(calcTax)}</span></div>
+                    )}
+                    <div className="flex justify-between font-bold text-base pt-3 border-t border-slate-100 text-indigo-700">
+                      <span>Total</span><span>{formatCurrency(calcTotal)}</span>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           </div>
 

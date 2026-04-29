@@ -14,6 +14,8 @@ export interface OrderDraftItem {
   discountPercent?: number;
   taxCode?: string;
   taxAmount?: number;
+  /** pre-computed all-inclusive price per unit (base + tax) stored on product as totalAmount */
+  allIncPrice?: number;
   /** total for this line as shown when added (price×qty ± discounts/taxes) */
   lineTotal?: number;
 }

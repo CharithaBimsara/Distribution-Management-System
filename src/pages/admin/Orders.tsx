@@ -6,6 +6,7 @@ import { ordersApi } from '../../services/api/ordersApi';
 import { repsApi } from '../../services/api/repsApi';
 import { customersApi } from '../../services/api/customersApi';
 import { formatCurrency, formatDate } from '../../utils/formatters';
+import { taxCodeToRate } from '../../utils/calculations';
 import { getShopName } from '../../utils/shopName';
 import {
   ShoppingCart, CheckCircle, XCircle, ChevronRight,
@@ -309,14 +310,14 @@ export default function AdminOrders() {
             const qty = it.quantity || 0;
             const discPct = it.discountPercent || 0;
             const baseAmount = rate * qty;
-            const rowDiscountAmount = baseAmount * (discPct / 100);
-            const rowTaxAmount = it.taxAmount || 0;
+            const rowTaxRate = taxCodeToRate(it.taxCode);
+            const allIncRate = Math.round(rate * (1 + rowTaxRate) * 100) / 100;
+            const displayRate = isNonTaxCustomer ? allIncRate : rate;
+            const displayTotal = isNonTaxCustomer ? allIncRate * qty : baseAmount;
+            const rowDiscountAmount = isNonTaxCustomer ? (allIncRate * qty * discPct) / 100 : (baseAmount * (discPct / 100));
+            const rowTaxAmount = isNonTaxCustomer ? 0 : (rate * qty - baseAmount * (discPct / 100)) * rowTaxRate;
 
-            const taxPerUnit = qty ? rowTaxAmount / qty : 0;
-            const displayRate = isNonTaxCustomer ? (rate + taxPerUnit) : rate;
-            const displayTotal = isNonTaxCustomer ? (baseAmount + rowTaxAmount) : baseAmount;
-
-            totalGrossAmount += isNonTaxCustomer ? (baseAmount + rowTaxAmount) : baseAmount;
+            totalGrossAmount += displayTotal;
             if (!isNonTaxCustomer) totalTaxAmount += rowTaxAmount;
             totalDiscountAmount += rowDiscountAmount;
 
@@ -445,16 +446,15 @@ export default function AdminOrders() {
             const rate = it.unitPrice || 0;
             const qty = it.quantity || 0;
             const discPct = it.discountPercent || 0;
-            
             const baseAmount = rate * qty;
-            const rowDiscountAmount = baseAmount * (discPct / 100);
-            const rowTaxAmount = it.taxAmount || 0;
-            const taxPerUnit = qty ? rowTaxAmount / qty : 0;
+            const rowTaxRate = taxCodeToRate(it.taxCode);
+            const allIncRate = Math.round(rate * (1 + rowTaxRate) * 100) / 100;
+            const displayRate = isNonTaxCustomer ? allIncRate : rate;
+            const displayTotal = isNonTaxCustomer ? allIncRate * qty : baseAmount;
+            const rowDiscountAmount = isNonTaxCustomer ? (allIncRate * qty * discPct) / 100 : (baseAmount * (discPct / 100));
+            const rowTaxAmount = isNonTaxCustomer ? 0 : (baseAmount - baseAmount * (discPct / 100)) * rowTaxRate;
 
-            const displayTotal = isNonTaxCustomer ? (baseAmount + rowTaxAmount) : baseAmount;
-            const displayRate = isNonTaxCustomer ? (rate + taxPerUnit) : rate;
-
-            totalGrossAmount += isNonTaxCustomer ? (baseAmount + rowTaxAmount) : baseAmount;
+            totalGrossAmount += displayTotal;
             if (!isNonTaxCustomer) totalTaxAmount += rowTaxAmount;
             totalDiscountAmount += rowDiscountAmount;
 
@@ -887,12 +887,15 @@ export default function AdminOrders() {
               const isNonTaxCustomer = (customer?.customerType || (order as any).customerType || '').toLowerCase().replace(/[-\s]/g, '') === 'nontax';
               let mobGross = 0, mobTax = 0, mobDisc = 0;
               order.items?.forEach(item => {
-                const base = (item.unitPrice || 0) * (item.quantity || 0);
-                const rDisc = base * ((item.discountPercent || 0) / 100);
-                const rTax = item.taxAmount || 0;
-                mobGross += isNonTaxCustomer ? (base + rTax) : base;
-                if (!isNonTaxCustomer) mobTax += rTax;
-                mobDisc += rDisc;
+                const r = item.unitPrice || 0;
+                const q = item.quantity || 0;
+                const d = item.discountPercent || 0;
+                const base = r * q;
+                const rTaxRate = taxCodeToRate(item.taxCode);
+                const allIncR = Math.round(r * (1 + rTaxRate) * 100) / 100;
+                mobGross += isNonTaxCustomer ? allIncR * q : base;
+                if (!isNonTaxCustomer) mobTax += (base - base * d / 100) * rTaxRate;
+                mobDisc += isNonTaxCustomer ? allIncR * q * d / 100 : base * d / 100;
               });
               const mobTotal = isNonTaxCustomer ? mobGross - mobDisc : mobGross + mobTax - mobDisc;
               return (
@@ -926,9 +929,11 @@ export default function AdminOrders() {
                   {expandedOrderId === order.id && !selectionMode && (
                     <div className="bg-blue-50/30 px-4 py-3 border-b border-blue-100 space-y-2.5">
                       {order.items?.map((item) => {
-                        const base = (item.unitPrice || 0) * (item.quantity || 0);
-                        const rTax = item.taxAmount || 0;
-                        const lineGross = isNonTaxCustomer ? (base + rTax) : base;
+                        const r = item.unitPrice || 0;
+                        const q = item.quantity || 0;
+                        const rTaxRate = taxCodeToRate(item.taxCode);
+                        const allIncR = Math.round(r * (1 + rTaxRate) * 100) / 100;
+                        const lineGross = isNonTaxCustomer ? allIncR * q : r * q;
                         return (
                           <div key={item.id} className="flex justify-between text-xs bg-white rounded-lg p-2.5 shadow-sm">
                             <div><span className="font-medium text-slate-800">{item.productName}</span><span className="text-slate-400 ml-2">×{item.quantity}</span></div>
@@ -1032,9 +1037,11 @@ export default function AdminOrders() {
                   const qty = item.quantity || 0;
                   const discPct = item.discountPercent || 0;
                   const baseAmount = rate * qty;
-                  const rowDiscountAmount = baseAmount * (discPct / 100);
-                  const rowTaxAmount = item.taxAmount || 0;
-                  displayTotalGross += isNonTaxCustomer ? (baseAmount + rowTaxAmount) : baseAmount;
+                  const rowTaxRate = taxCodeToRate(item.taxCode);
+                  const allIncRate = Math.round(rate * (1 + rowTaxRate) * 100) / 100;
+                  const rowDiscountAmount = isNonTaxCustomer ? (allIncRate * qty * discPct) / 100 : (baseAmount * (discPct / 100));
+                  const rowTaxAmount = isNonTaxCustomer ? 0 : (baseAmount - baseAmount * (discPct / 100)) * rowTaxRate;
+                  displayTotalGross += isNonTaxCustomer ? allIncRate * qty : baseAmount;
                   if (!isNonTaxCustomer) displayTotalTax += rowTaxAmount;
                   displayTotalDiscount += rowDiscountAmount;
                 });
@@ -1149,11 +1156,11 @@ export default function AdminOrders() {
                                       const qty = item.quantity || 0;
                                       const discPct = item.discountPercent || 0;
                                       const baseAmount = rate * qty;
-                                      const rowDiscountAmount = baseAmount * (discPct / 100);
-                                      const rowTaxAmount = item.taxAmount || 0;
-                                      const taxPerUnit = qty ? rowTaxAmount / qty : 0;
-                                      const displayRate = isNonTaxCustomer ? rate + taxPerUnit : rate;
-                                      const lineGross = isNonTaxCustomer ? (baseAmount + rowTaxAmount) : baseAmount;
+                                      const rowTaxRate = taxCodeToRate(item.taxCode);
+                                      const allIncRate = Math.round(rate * (1 + rowTaxRate) * 100) / 100;
+                                      const displayRate = isNonTaxCustomer ? allIncRate : rate;
+                                      const lineGross = isNonTaxCustomer ? allIncRate * qty : baseAmount;
+                                      const rowDiscountAmount = isNonTaxCustomer ? (allIncRate * qty * discPct) / 100 : (baseAmount * (discPct / 100));
                                       return (
                                         <tr key={item.id} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
                                           <td className="px-4 py-2.5 text-center text-xs text-slate-400 font-medium border border-slate-200">{i + 1}</td>
@@ -1164,7 +1171,7 @@ export default function AdminOrders() {
                                           <td className="px-4 py-2.5 text-right text-slate-500 border border-slate-200">{discPct ? `${discPct}%` : <span className="text-slate-300">—</span>}</td>
                                           <td className="px-4 py-2.5 text-right text-slate-500 border border-slate-200">{rowDiscountAmount ? formatCurrency(rowDiscountAmount) : <span className="text-slate-300">—</span>}</td>
                                           {!isNonTaxCustomer && <td className="px-4 py-2.5 text-center text-slate-500 border border-slate-200">{item.taxCode || <span className="text-slate-300">—</span>}</td>}
-                                          <td className="px-4 py-2.5 text-right font-semibold text-slate-900 border border-slate-200">{formatCurrency(item.lineTotal ?? lineGross)}</td>
+                                          <td className="px-4 py-2.5 text-right font-semibold text-slate-900 border border-slate-200">{formatCurrency(lineGross)}</td>
                                         </tr>
                                       );
                                     })}

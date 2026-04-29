@@ -5,6 +5,7 @@ import { adminApproveQuotation, adminGetQuotations, adminRejectQuotation } from 
 import { repsApi } from '../../services/api/repsApi';
 import { customersApi } from '../../services/api/customersApi';
 import { formatCurrency, formatDate } from '../../utils/formatters';
+import { taxCodeToRate } from '../../utils/calculations';
 import { downloadQuotationPdf, downloadQuotationsExcel, downloadQuotationsPdf } from '../../utils/quotationPdf';
 import type { Quotation } from '../../types/quotation.types';
 import { QUOTATION_STATUSES } from '../../types/quotation.types';
@@ -488,14 +489,27 @@ export default function AdminQuotations() {
                   </div>
                   <ChevronRight className={`shrink-0 w-4 h-4 text-slate-300 transition-transform duration-200 ${expandedId === q.id && !selectionMode ? 'rotate-90 text-blue-400' : ''}`} />
                 </div>
-                {expandedId === q.id && !selectionMode && (
+                {expandedId === q.id && !selectionMode && (() => {
+                  const isTaxM = getIsTax(q);
+                  let mSubtotal = 0, mTax = 0, mDiscount = 0;
+                  (q.items || []).forEach(item => {
+                    const r = item.unitPrice || 0, qt = item.quantity || 0, dp = item.discountPercent || 0;
+                    const ltr = taxCodeToRate(item.taxCode);
+                    const allIncR = Math.round(r * (1 + ltr) * 100) / 100;
+                    const base = r * qt, net = base - base * dp / 100;
+                    mSubtotal += isTaxM !== false ? base : allIncR * qt;
+                    mTax += isTaxM !== false ? net * ltr : 0;
+                    mDiscount += isTaxM !== false ? base * dp / 100 : allIncR * qt * dp / 100;
+                  });
+                  const mTotal = mSubtotal + mTax - mDiscount;
+                  return (
                   <div className="bg-blue-50/30 px-4 py-3 border-b border-blue-100 space-y-2.5">
                     {q.items?.map(item => {
-                      const isTax = getIsTax(q);
                       const rate = item.unitPrice || 0;
                       const qty = item.quantity || 0;
-                      const taxAmt = item.taxAmount || 0;
-                      const lineGross = isTax === false ? (rate * qty + taxAmt) : rate * qty;
+                      const lineTaxRate = taxCodeToRate(item.taxCode);
+                      const allIncRate = Math.round(rate * (1 + lineTaxRate) * 100) / 100;
+                      const lineGross = isTaxM === false ? allIncRate * qty : rate * qty;
                       return (
                         <div key={item.id} className="flex justify-between text-xs bg-white rounded-lg p-2.5 shadow-sm">
                           <div><span className="font-medium text-slate-800">{item.productName}</span><span className="text-slate-400 ml-2">×{item.quantity}</span></div>
@@ -504,10 +518,10 @@ export default function AdminQuotations() {
                       );
                     })}
                     <div className="text-xs space-y-1 bg-white border border-slate-100 rounded-xl p-3">
-                      <div className="flex justify-between text-slate-500"><span>Subtotal</span><span>{formatCurrency(q.subTotal || 0)}</span></div>
-                      <div className="flex justify-between text-slate-500"><span>Tax</span><span>{formatCurrency(q.taxAmount || 0)}</span></div>
-                      <div className="flex justify-between text-emerald-600"><span>Discount</span><span>-{formatCurrency(q.discountAmount || 0)}</span></div>
-                      <div className="flex justify-between font-bold text-indigo-700 pt-1.5 border-t border-slate-100"><span>Total</span><span>{formatCurrency(q.totalAmount)}</span></div>
+                      <div className="flex justify-between text-slate-500"><span>Subtotal</span><span>{formatCurrency(mSubtotal)}</span></div>
+                      {isTaxM !== false && <div className="flex justify-between text-slate-500"><span>Tax</span><span>{formatCurrency(mTax)}</span></div>}
+                      <div className="flex justify-between text-emerald-600"><span>Discount</span><span>-{formatCurrency(mDiscount)}</span></div>
+                      <div className="flex justify-between font-bold text-indigo-700 pt-1.5 border-t border-slate-100"><span>Total</span><span>{formatCurrency(mTotal)}</span></div>
                     </div>
                     <div className="flex gap-2">
                       <button onClick={e => { e.stopPropagation(); exportQuotations('pdf', false, q); }} className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium rounded-lg bg-indigo-50 text-indigo-700 active:scale-95">
@@ -528,7 +542,8 @@ export default function AdminQuotations() {
                       </div>
                     )}
                   </div>
-                )}
+                  );
+                })()}
               </div>
             ))}
             {!selectionMode && (
@@ -584,6 +599,17 @@ export default function AdminQuotations() {
             <tbody>
               {sortedItems.map(q => {
                 const isTax = getIsTax(q);
+                let calcSubtotal = 0, calcTotalTax = 0, calcTotalDiscount = 0;
+                (q.items || []).forEach(item => {
+                  const r = item.unitPrice || 0, qt = item.quantity || 0, dp = item.discountPercent || 0;
+                  const ltr = taxCodeToRate(item.taxCode);
+                  const allIncR = Math.round(r * (1 + ltr) * 100) / 100;
+                  const base = r * qt, net = base - base * dp / 100;
+                  calcSubtotal += isTax !== false ? base : allIncR * qt;
+                  calcTotalTax += isTax !== false ? net * ltr : 0;
+                  calcTotalDiscount += isTax !== false ? base * dp / 100 : allIncR * qt * dp / 100;
+                });
+                const calcGrandTotal = calcSubtotal + calcTotalTax - calcTotalDiscount;
                 return (
                   <Fragment key={q.id}>
                     <tr
@@ -684,11 +710,11 @@ export default function AdminQuotations() {
                                       const rate = item.unitPrice || 0;
                                       const qty = item.quantity || 0;
                                       const discPct = item.discountPercent || 0;
-                                      const discAmt = rate * qty * discPct / 100;
-                                      const taxAmt = item.taxAmount || 0;
-                                      const taxPerUnit = qty ? taxAmt / qty : 0;
-                                      const displayRate = isTax === false ? rate + taxPerUnit : rate;
-                                      const lineGross = isTax === false ? (rate * qty + taxAmt) : rate * qty;
+                                      const lineTaxRate = taxCodeToRate(item.taxCode);
+                                      const allIncRate = Math.round(rate * (1 + lineTaxRate) * 100) / 100;
+                                      const displayRate = isTax === false ? allIncRate : rate;
+                                      const lineGross = isTax === false ? allIncRate * qty : rate * qty;
+                                      const discAmt = isTax === false ? allIncRate * qty * discPct / 100 : rate * qty * discPct / 100;
                                       return (
                                         <tr key={item.id} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
                                           <td className="px-4 py-2.5 text-center text-xs text-slate-400 font-medium border border-slate-200">{i + 1}</td>
@@ -699,7 +725,7 @@ export default function AdminQuotations() {
                                           <td className="px-4 py-2.5 text-right text-slate-500 border border-slate-200">{discPct ? `${discPct}%` : <span className="text-slate-300">—</span>}</td>
                                           <td className="px-4 py-2.5 text-right text-slate-500 border border-slate-200">{discAmt ? formatCurrency(discAmt) : <span className="text-slate-300">—</span>}</td>
                                           {isTax !== false && <td className="px-4 py-2.5 text-center text-slate-500 border border-slate-200">{item.taxCode || <span className="text-slate-300">—</span>}</td>}
-                                          <td className="px-4 py-2.5 text-right font-semibold text-slate-900 border border-slate-200">{formatCurrency(item.lineTotal ?? lineGross)}</td>
+                                          <td className="px-4 py-2.5 text-right font-semibold text-slate-900 border border-slate-200">{formatCurrency(lineGross)}</td>
                                           <td className="px-4 py-2.5 text-right text-slate-500 border border-slate-200">{item.expectedPrice != null ? formatCurrency(item.expectedPrice) : <span className="text-slate-300">—</span>}</td>
                                         </tr>
                                       );
@@ -711,10 +737,10 @@ export default function AdminQuotations() {
 
                             <div className="flex justify-end">
                               <div className="w-64 space-y-2 text-sm bg-white border border-slate-100 rounded-xl p-5 shadow-sm">
-                                <div className="flex justify-between font-medium text-slate-500"><span>Subtotal</span><span>{formatCurrency(q.subTotal || 0)}</span></div>
-                                <div className="flex justify-between font-medium text-slate-500"><span>Total Tax</span><span>{formatCurrency(q.taxAmount || 0)}</span></div>
-                                <div className="flex justify-between font-medium text-emerald-600"><span>Total Discount</span><span>-{formatCurrency(q.discountAmount || 0)}</span></div>
-                                <div className="flex justify-between items-center font-bold text-sm pt-3 border-t border-slate-200 text-indigo-700 whitespace-nowrap gap-2"><span>Grand Total</span><span>{formatCurrency(q.totalAmount)}</span></div>
+                                <div className="flex justify-between font-medium text-slate-500"><span>Subtotal</span><span>{formatCurrency(calcSubtotal)}</span></div>
+                                {isTax !== false && <div className="flex justify-between font-medium text-slate-500"><span>Total Tax</span><span>{formatCurrency(calcTotalTax)}</span></div>}
+                                <div className="flex justify-between font-medium text-emerald-600"><span>Total Discount</span><span>-{formatCurrency(calcTotalDiscount)}</span></div>
+                                <div className="flex justify-between items-center font-bold text-sm pt-3 border-t border-slate-200 text-indigo-700 whitespace-nowrap gap-2"><span>Grand Total</span><span>{formatCurrency(calcGrandTotal)}</span></div>
                               </div>
                             </div>
                           </div>

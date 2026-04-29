@@ -113,6 +113,7 @@ export default function RepSelectProducts() {
       discountPercent: product.discountPercent,
       taxCode: product.taxCode,
       taxAmount: product.taxAmount,
+      allIncPrice: product.totalAmount || undefined,
       lineTotal: calculateLine({ rate: product.sellingPrice || 0, qty: 1, discountPercent: product.discountPercent, taxAmount: product.taxAmount }).total,
     };
     orderDraftUtils.addItem(item);
@@ -137,6 +138,7 @@ export default function RepSelectProducts() {
         discountPercent: prod.discountPercent,
         taxCode: prod.taxCode,
         taxAmount: prod.taxAmount,
+        allIncPrice: prod.totalAmount || undefined,
         lineTotal: calculateLine({ rate: prod.sellingPrice || 0, qty: row.qty, discountPercent: prod.discountPercent, taxAmount: prod.taxAmount }).total,
       });
     }

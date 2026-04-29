@@ -18,6 +18,7 @@ import { coordinatorGetReps } from '../../services/api/coordinatorApi';
 import type { Order, OrderStatus } from '../../types/order.types';
 import { ORDER_STATUSES } from '../../types/order.types';
 import { formatCurrency, formatDate } from '../../utils/formatters';
+import { taxCodeToRate } from '../../utils/calculations';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
 import MobileTileList from '../../components/common/MobileTileList';
 import StatusBadge from '../../components/common/StatusBadge';
@@ -394,11 +395,12 @@ export default function CoordinatorOrders() {
                                     {order.items.map((item, i) => {
                                       const qty = item.quantity || 0;
                                       const rate = item.unitPrice || 0;
-                                      const taxAmt = item.taxAmount || 0;
                                       const custData = customersData?.find((c: any) => c.id === order.customerId);
                                       const isNonTax = (custData?.customerType || '').toLowerCase().replace(/[-\s]/g, '') === 'nontax';
-                                      const taxPerUnit = qty ? taxAmt / qty : 0;
-                                      const displayRate = isNonTax ? rate + taxPerUnit : rate;
+                                      const lineTaxRate = taxCodeToRate(item.taxCode);
+                                      const allIncRate = Math.round(rate * (1 + lineTaxRate) * 100) / 100;
+                                      const displayRate = isNonTax ? allIncRate : rate;
+                                      const lineTotal = isNonTax ? allIncRate * qty : (item.lineTotal || rate * qty);
                                       return (
                                       <tr key={item.id} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
                                         <td className="px-4 py-2.5 text-center text-xs text-slate-400 font-medium">{i + 1}</td>
@@ -409,7 +411,7 @@ export default function CoordinatorOrders() {
                                         <td className="px-4 py-2.5 text-center text-slate-500">
                                           {!isNonTax ? (item.taxCode || <span className="text-slate-300">—</span>) : <span className="text-slate-300">—</span>}
                                         </td>
-                                        <td className="px-4 py-2.5 text-right font-semibold text-slate-900">{formatCurrency(item.lineTotal)}</td>
+                                        <td className="px-4 py-2.5 text-right font-semibold text-slate-900">{formatCurrency(lineTotal)}</td>
                                       </tr>
                                       );
                                     })}
@@ -418,30 +420,48 @@ export default function CoordinatorOrders() {
                               </div>
                             )}
 
+                            {(() => {
+                              const custDataSummary = customersData?.find((c: any) => c.id === order.customerId);
+                              const isNonTaxSummary = (custDataSummary?.customerType || '').toLowerCase().replace(/[-\s]/g, '') === 'nontax';
+                              let calcSubtotal = 0, calcDiscount = 0, calcTax = 0;
+                              (order.items || []).forEach(item => {
+                                const r = item.unitPrice || 0, q = item.quantity || 0, d = item.discountPercent || 0;
+                                const ltr = taxCodeToRate(item.taxCode);
+                                const allIncR = Math.round(r * (1 + ltr) * 100) / 100;
+                                const base = r * q;
+                                const net = base - base * d / 100;
+                                calcSubtotal += isNonTaxSummary ? allIncR * q : base;
+                                calcDiscount += isNonTaxSummary ? (allIncR * q * d / 100) : (base * d / 100);
+                                if (!isNonTaxSummary) calcTax += net * ltr;
+                              });
+                              const calcTotal = calcSubtotal - calcDiscount + calcTax;
+                              return (
                             <div className="flex justify-end">
                               <div className="w-60 space-y-1.5 text-sm bg-white border border-slate-100 rounded-xl p-4">
                                 <div className="flex justify-between text-slate-500">
                                   <span>Subtotal</span>
-                                  <span>{formatCurrency(order.subTotal)}</span>
+                                  <span>{formatCurrency(calcSubtotal)}</span>
                                 </div>
-                                {order.discountAmount > 0 && (
+                                {calcDiscount > 0 && (
                                   <div className="flex justify-between text-slate-500">
                                     <span>Discount</span>
-                                    <span className="text-emerald-600">{formatCurrency(order.discountAmount)}</span>
+                                    <span className="text-emerald-600">{formatCurrency(calcDiscount)}</span>
                                   </div>
                                 )}
-                                {order.taxAmount > 0 && (
+                                {calcTax > 0 && (
                                   <div className="flex justify-between text-slate-500">
                                     <span>Tax</span>
-                                    <span>{formatCurrency(order.taxAmount)}</span>
+                                    <span>{formatCurrency(calcTax)}</span>
                                   </div>
                                 )}
                                 <div className="flex justify-between font-bold text-base pt-2.5 border-t border-slate-200 text-indigo-700">
                                   <span>Total</span>
-                                  <span>{formatCurrency(order.totalAmount)}</span>
+                                  <span>{formatCurrency(calcTotal)}</span>
                                 </div>
                               </div>
                             </div>
+                              );
+                            })()}
                           </div>
                         </td>
                       </tr>
@@ -512,39 +532,65 @@ export default function CoordinatorOrders() {
 
               {expandedOrderId === order.id && (
                 <div className="mt-3 pt-3 border-t border-blue-100 space-y-3 animate-fade-in">
-                  {order.items?.map((item) => (
+                  {order.items?.map((item) => {
+                    const custDataItem = customersData?.find((c: any) => c.id === order.customerId);
+                    const isNonTaxItem = (custDataItem?.customerType || '').toLowerCase().replace(/[-\s]/g, '') === 'nontax';
+                    const itemRate = item.unitPrice || 0;
+                    const itemQty = item.quantity || 0;
+                    const itemTaxRate = taxCodeToRate(item.taxCode);
+                    const allIncItemRate = Math.round(itemRate * (1 + itemTaxRate) * 100) / 100;
+                    const displayLineTotal = isNonTaxItem ? allIncItemRate * itemQty : (item.lineTotal || itemRate * itemQty);
+                    return (
                     <div key={item.id} className="flex justify-between text-xs bg-slate-50 rounded-lg p-2.5">
                       <div>
                         <span className="font-medium text-slate-800">{item.productName}</span>
                         <span className="text-slate-400 ml-1">{item.quantity}</span>
                         {item.productSKU && <span className="text-slate-400 ml-1 text-[10px]">({item.productSKU})</span>}
                       </div>
-                      <span className="font-semibold">{formatCurrency(item.lineTotal)}</span>
+                      <span className="font-semibold">{formatCurrency(displayLineTotal)}</span>
                     </div>
-                  ))}
+                    );
+                  })}
 
+                  {(() => {
+                    const custDataM = customersData?.find((c: any) => c.id === order.customerId);
+                    const isNonTaxM = (custDataM?.customerType || '').toLowerCase().replace(/[-\s]/g, '') === 'nontax';
+                    let calcSubM = 0, calcDiscM = 0, calcTaxM = 0;
+                    (order.items || []).forEach(item => {
+                      const r = item.unitPrice || 0, q = item.quantity || 0, d = item.discountPercent || 0;
+                        const rTaxRateM = taxCodeToRate(item.taxCode);
+                        const allIncRM = Math.round(r * (1 + rTaxRateM) * 100) / 100;
+                        const base = r * q;
+                        calcSubM += isNonTaxM ? allIncRM * q : base;
+                        calcDiscM += isNonTaxM ? (allIncRM * q * d / 100) : (base * d / 100);
+                        if (!isNonTaxM) calcTaxM += (base - base * d / 100) * rTaxRateM;
+                    });
+                    const calcTotalM = calcSubM - calcDiscM + calcTaxM;
+                    return (
                   <div className="text-xs space-y-1.5 bg-white border border-slate-100 rounded-xl p-3 mt-1">
                     <div className="flex justify-between text-slate-500">
                       <span>Subtotal</span>
-                      <span>{formatCurrency(order.subTotal)}</span>
+                      <span>{formatCurrency(calcSubM)}</span>
                     </div>
-                    {order.discountAmount > 0 && (
+                    {calcDiscM > 0 && (
                       <div className="flex justify-between text-emerald-600">
                         <span>Discount</span>
-                        <span>{formatCurrency(order.discountAmount)}</span>
+                        <span>{formatCurrency(calcDiscM)}</span>
                       </div>
                     )}
-                    {order.taxAmount > 0 && (
+                    {calcTaxM > 0 && (
                       <div className="flex justify-between text-slate-500">
                         <span>Tax</span>
-                        <span>{formatCurrency(order.taxAmount)}</span>
+                        <span>{formatCurrency(calcTaxM)}</span>
                       </div>
                     )}
                     <div className="flex justify-between font-bold text-indigo-700 pt-1.5 border-t border-slate-100">
                       <span>Total</span>
-                      <span>{formatCurrency(order.totalAmount)}</span>
+                      <span>{formatCurrency(calcTotalM)}</span>
                     </div>
                   </div>
+                    );
+                  })()}
 
                   <div className="flex flex-wrap gap-1.5 pt-0.5">
                     <button

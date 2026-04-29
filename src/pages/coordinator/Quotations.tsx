@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { coordinatorGetQuotations, coordinatorApproveQuotation, coordinatorRejectQuotation } from '../../services/api/quotationApi';
 import { customersApi } from '../../services/api/customersApi';
 import { formatCurrency, formatRelative } from '../../utils/formatters';
+import { taxCodeToRate } from '../../utils/calculations';
 import { downloadQuotationPdf } from '../../utils/quotationPdf';
 import { FileText, Check, X, Loader2, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -186,12 +187,14 @@ export default function CoordinatorQuotations() {
                                       const rate = item.unitPrice || 0;
                                       const qty = item.quantity || 0;
                                       const discPct = item.discountPercent || 0;
-                                      const discAmt = (rate * qty * discPct) / 100;
-                                      const taxAmt = item.taxAmount || 0;
                                       const isTax = getIsTax(q);
-                                      const taxPerUnit = qty ? taxAmt / qty : 0;
-                                      const displayRate = isTax === false ? rate + taxPerUnit : rate;
-                                      const lineGross = isTax === false ? (rate * qty + taxAmt) : rate * qty;
+                                      const lineTaxRate = taxCodeToRate(item.taxCode);
+                                      const allIncRate = Math.round(rate * (1 + lineTaxRate) * 100) / 100;
+                                      const rowNet = rate * qty * (1 - discPct / 100);
+                                      const lineGrossTax = isTax !== false ? rowNet * lineTaxRate : 0;
+                                      const displayRate = isTax === false ? allIncRate : rate;
+                                      const lineGross = isTax === false ? allIncRate * qty : rate * qty;
+                                      const discAmt = isTax === false ? (allIncRate * qty * discPct) / 100 : (rate * qty * discPct) / 100;
                                       return (
                                         <tr key={item.id}>
                                           <td className="px-3 py-2.5 text-center text-slate-400">{idx + 1}</td>
@@ -201,8 +204,8 @@ export default function CoordinatorQuotations() {
                                           <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(displayRate)}</td>
                                           <td className="px-3 py-2.5 text-right text-slate-700">{discPct ? `${discPct}%` : '-'}</td>
                                           <td className="px-3 py-2.5 text-right text-slate-700">{discAmt ? formatCurrency(discAmt) : '-'}</td>
-                                          {isTax !== false && <td className="px-3 py-2.5 text-right text-slate-700">{taxAmt ? formatCurrency(taxAmt) : '-'}</td>}
-                                          <td className="px-3 py-2.5 text-right font-semibold text-slate-900">{formatCurrency(item.lineTotal ?? lineGross)}</td>
+                                          {isTax !== false && <td className="px-3 py-2.5 text-right text-slate-700">{lineGrossTax ? formatCurrency(lineGrossTax) : '-'}</td>}
+                                          <td className="px-3 py-2.5 text-right font-semibold text-slate-900">{formatCurrency(lineGross)}</td>
                                           <td className="px-3 py-2.5 text-right text-slate-700">{item.expectedPrice != null ? formatCurrency(item.expectedPrice) : '-'}</td>
                                         </tr>
                                       );
@@ -290,12 +293,19 @@ export default function CoordinatorQuotations() {
               {q.items?.length > 0 && (
                 <div className="mt-3 bg-slate-50 rounded-xl p-3">
                   <p className="text-[11px] font-semibold text-slate-500 mb-1.5">{q.items.length} item(s)</p>
-                  {q.items.slice(0, 3).map(item => (
-                    <div key={item.id} className="flex justify-between text-[11px] text-slate-500 py-0.5">
-                      <span className="truncate flex-1">{item.productName} x{item.quantity}</span>
-                      <span className="ml-2 font-medium">{formatCurrency(item.lineTotal)}</span>
-                    </div>
-                  ))}
+                  {q.items.slice(0, 3).map(item => {
+                    const isTaxQ = getIsTax(q);
+                    const r = item.unitPrice || 0, qt = item.quantity || 0;
+                    const ltr = taxCodeToRate(item.taxCode);
+                    const allIncR = Math.round(r * (1 + ltr) * 100) / 100;
+                    const mobLineGross = isTaxQ === false ? allIncR * qt : r * qt;
+                    return (
+                      <div key={item.id} className="flex justify-between text-[11px] text-slate-500 py-0.5">
+                        <span className="truncate flex-1">{item.productName} x{item.quantity}</span>
+                        <span className="ml-2 font-medium">{formatCurrency(mobLineGross)}</span>
+                      </div>
+                    );
+                  })}
                   {q.items.length > 3 && <p className="text-[10px] text-slate-400 mt-1">+{q.items.length - 3} more</p>}
                 </div>
               )}
@@ -356,12 +366,14 @@ export default function CoordinatorQuotations() {
                         const rate = item.unitPrice || 0;
                         const qty = item.quantity || 0;
                         const discPct = item.discountPercent || 0;
-                        const discAmt = (rate * qty * discPct) / 100;
-                        const taxAmt = item.taxAmount || 0;
                         const isTax = getIsTax(selected);
-                        const taxPerUnit = qty ? taxAmt / qty : 0;
-                        const displayRate = isTax === false ? rate + taxPerUnit : rate;
-                        const lineGross = isTax === false ? (rate * qty + taxAmt) : rate * qty;
+                        const lineTaxRate = taxCodeToRate(item.taxCode);
+                        const allIncRate = Math.round(rate * (1 + lineTaxRate) * 100) / 100;
+                        const rowNet = rate * qty * (1 - discPct / 100);
+                        const lineGrossTax = isTax !== false ? rowNet * lineTaxRate : 0;
+                        const displayRate = isTax === false ? allIncRate : rate;
+                        const lineGross = isTax === false ? allIncRate * qty : rate * qty;
+                        const discAmt = isTax === false ? (allIncRate * qty * discPct) / 100 : (rate * qty * discPct) / 100;
                         return (
                           <tr key={item.id}>
                             <td className="px-3 py-2.5 text-center text-slate-400">{idx + 1}</td>
@@ -371,8 +383,8 @@ export default function CoordinatorQuotations() {
                             <td className="px-3 py-2.5 text-right text-slate-700">{formatCurrency(displayRate)}</td>
                             <td className="px-3 py-2.5 text-right text-slate-700">{discPct ? `${discPct}%` : '-'}</td>
                             <td className="px-3 py-2.5 text-right text-slate-700">{discAmt ? formatCurrency(discAmt) : '-'}</td>
-                            {isTax !== false && <td className="px-3 py-2.5 text-right text-slate-700">{taxAmt ? formatCurrency(taxAmt) : '-'}</td>}
-                            <td className="px-3 py-2.5 text-right font-semibold text-slate-900">{formatCurrency(item.lineTotal ?? lineGross)}</td>
+                            {isTax !== false && <td className="px-3 py-2.5 text-right text-slate-700">{lineGrossTax ? formatCurrency(lineGrossTax) : '-'}</td>}
+                            <td className="px-3 py-2.5 text-right font-semibold text-slate-900">{formatCurrency(lineGross)}</td>
                             <td className="px-3 py-2.5 text-right text-slate-700">{item.expectedPrice != null ? formatCurrency(item.expectedPrice) : '-'}</td>
                           </tr>
                         );

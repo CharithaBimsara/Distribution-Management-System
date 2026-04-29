@@ -1,6 +1,6 @@
 import type { Order } from '../types/order.types';
 import { formatCurrency } from './formatters';
-import { calculateLine } from './calculations';import { getShopNameOrPlaceholder } from './shopName';
+import { taxCodeToRate } from './calculations';import { getShopNameOrPlaceholder } from './shopName';
 // Table එක ඇතුලේ LKR කියන කෑල්ල නැතුව ලස්සනට ඉලක්කම් පෙන්නන්න හදපු function එකක්
 const formatNumber = (num: number) => {
   return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -103,24 +103,27 @@ export async function downloadPurchaseOrderPdf(order: Order & { isTaxCustomer?: 
   let totalGross = 0;
   let totalDiscount = 0;
   let totalTax = 0;
+  const taxCodes = new Set<string>();
 
   const rows = order.items.map((item: any, index: number) => {
     const rate = item.unitPrice || 0;
     const qty = item.quantity || 0;
     const discPct = item.discountPercent || 0;
-    const taxPerUnit = qty ? (item.taxAmount || 0) / qty : 0;
 
-    const calc = calculateLine({ rate, qty, discountPercent: discPct, taxAmount: taxPerUnit });
-
+    const rowTaxRate = taxCodeToRate((item as any).taxCode);
+    const allIncRate = Math.round(rate * (1 + rowTaxRate) * 100) / 100;
     const rowGrossBase = rate * qty;
-    const rowTax = calc.tax || 0;
-    const rowGross = isTax ? rowGrossBase : rowGrossBase + rowTax;
+    const rowDiscountAmt = isTax ? rowGrossBase * (discPct / 100) : allIncRate * qty * (discPct / 100);
+    const rowNet = rowGrossBase - rowGrossBase * (discPct / 100);
+    const rowTax = rowNet * rowTaxRate;
+    const rowGross = isTax ? rowGrossBase : allIncRate * qty;
 
     totalGross += rowGross;
-    totalDiscount += calc.discount || 0;
+    totalDiscount += rowDiscountAmt;
     totalTax += isTax ? rowTax : 0;
+    if (isTax && (item as any).taxCode) taxCodes.add((item as any).taxCode);
 
-    const displayRate = isTax ? rate : rate + taxPerUnit;
+    const displayRate = isTax ? rate : allIncRate;
 
     const rowData = [
       (index + 1).toString(),
@@ -129,7 +132,7 @@ export async function downloadPurchaseOrderPdf(order: Order & { isTaxCustomer?: 
       qty.toString(),
       formatNumber(displayRate),
       discPct ? `${discPct.toFixed(2)}%` : '—',
-      discPct ? formatNumber(calc.discount || 0) : '—'
+      discPct ? formatNumber(rowDiscountAmt) : '—'
     ];
 
     if (isTax) {
@@ -179,12 +182,15 @@ export async function downloadPurchaseOrderPdf(order: Order & { isTaxCustomer?: 
 
   // Right side Totals Box
   if (isTax) {
-    const finalAmount = totalGross - totalDiscount + totalTax;
-    
+    const netAmount = totalGross - totalDiscount;
+    const finalAmount = netAmount + totalTax;
+    const vatLabel = 'Total Tax Amount';
+
     const totalsRows = [
-      ['Total Gross', formatNumber(totalGross)],
-      ['Total Tax', formatNumber(totalTax)],
-      ['Total Discount', formatNumber(totalDiscount)],
+      ['Gross Amount', formatNumber(totalGross)],
+      ['Discount Amount', formatNumber(totalDiscount)],
+      ['Net Amount', formatNumber(netAmount)],
+      [vatLabel, formatNumber(totalTax)],
       ['Total Invoice Value', formatCurrency(finalAmount)],
     ];
 
@@ -192,17 +198,17 @@ export async function downloadPurchaseOrderPdf(order: Order & { isTaxCustomer?: 
       const y = afterTableY + (i * rowH);
       doc.rect(totalsX, y, boxW * 0.55, rowH);
       doc.rect(totalsX + (boxW * 0.55), y, boxW * 0.45, rowH);
-      doc.setFont('helvetica', i === 3 ? 'bold' : 'normal'); 
+      doc.setFont('helvetica', i === 4 ? 'bold' : 'normal');
       doc.text(label, totalsX + 2, y + 4);
       doc.text(val, totalsX + boxW - 2, y + 4, { align: 'right' });
     });
   } else {
     // Non-Tax Layout
     const finalAmount = totalGross - totalDiscount;
-    
+
     const totalsRows = [
-      ['Total Gross', formatNumber(totalGross)],
-      ['Total Discount', formatNumber(totalDiscount)],
+      ['Gross Amount', formatNumber(totalGross)],
+      ['Discount Amount', formatNumber(totalDiscount)],
       ['Total Invoice Value', formatCurrency(finalAmount)],
     ];
 
@@ -210,7 +216,7 @@ export async function downloadPurchaseOrderPdf(order: Order & { isTaxCustomer?: 
       const y = afterTableY + (i * rowH);
       doc.rect(totalsX, y, boxW * 0.55, rowH);
       doc.rect(totalsX + (boxW * 0.55), y, boxW * 0.45, rowH);
-      doc.setFont('helvetica', i === 2 ? 'bold' : 'normal'); 
+      doc.setFont('helvetica', i === 2 ? 'bold' : 'normal');
       doc.text(label, totalsX + 2, y + 4);
       doc.text(val, totalsX + boxW - 2, y + 4, { align: 'right' });
     });

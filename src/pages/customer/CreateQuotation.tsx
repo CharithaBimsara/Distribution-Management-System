@@ -13,7 +13,7 @@ import { customerCreateQuotation } from '../../services/api/quotationApi';
 import { ChevronDown, Package, FileText, Trash2, Loader2 } from 'lucide-react';
 import type { Product } from '../../types/product.types';
 import { formatCurrency } from '../../utils/formatters';
-import { calculateLine } from '../../utils/calculations';
+import { calculateLine, taxCodeToRate } from '../../utils/calculations';
 
 /* ─────────────────────────────────────────────
    Custom White Dropdown Component (Black & White Theme)
@@ -288,29 +288,29 @@ export default function CustomerCreateQuotation() {
     (acc, row) => {
       if (!row.product) return acc;
       const calcInput = getCalcInput(row.product);
-      const calc = calculateLine({
-        rate: calcInput.rate,
-        qty: row.qty,
-        discountPercent: calcInput.discountPercent,
-        taxAmount: calcInput.taxAmount,
-      });
 
       const rowGrossBase = calcInput.rate * row.qty;
-      const rowTax = calcInput.taxAmount * row.qty;
-      // If Non-Tax Customer, we add tax to gross base to match order page behavior.
-      const rowGross = isNonTaxCustomer ? rowGrossBase + rowTax : rowGrossBase;
-      const rowDiscount = (rowGrossBase * calcInput.discountPercent) / 100;
+      // Per-line tax using taxCode rate for accuracy across mixed tax brackets
+      const rowTaxRate = taxCodeToRate(row.product.taxCode);
+      const allIncRate = row.product.totalAmount || Math.round(calcInput.rate * (1 + rowTaxRate) * 100) / 100;
+      const rowDiscount = isNonTaxCustomer ? allIncRate * row.qty * calcInput.discountPercent / 100 : (rowGrossBase * calcInput.discountPercent) / 100;
+      const rowNet = rowGrossBase - rowGrossBase * (calcInput.discountPercent / 100);
+      const rowTax = isNonTaxCustomer ? 0 : rowNet * rowTaxRate;
+      const nonTaxGross = allIncRate * row.qty;
+      const rowGross = isNonTaxCustomer ? nonTaxGross : rowGrossBase;
 
       return {
         totalItems: acc.totalItems + row.qty,
         totalGross: acc.totalGross + rowGross,
         totalDiscount: acc.totalDiscount + rowDiscount,
-        totalTax: acc.totalTax + (isNonTaxCustomer ? 0 : rowTax),
-        totalAmount: acc.totalAmount + calc.total,
+        totalTax: acc.totalTax + rowTax,
+        totalAmount: acc.totalAmount + (isNonTaxCustomer ? rowGross - rowDiscount : rowNet + rowTax),
       };
     },
     { totalItems: 0, totalGross: 0, totalDiscount: 0, totalTax: 0, totalAmount: 0 }
   );
+
+  const quoteNetAmount = quoteTotals.totalGross - quoteTotals.totalDiscount;
 
   const createMut = useMutation({
     mutationFn: () =>
@@ -417,17 +417,16 @@ export default function CustomerCreateQuotation() {
                     quotationRows.filter(r => r.id !== row.id && r.product).map(r => r.product!.id)
                   );
 
-                  let rate = 0, discPct = 0, discAmt = 0, taxAmt = 0, grossAmount = 0;
+                  let rate = 0, discPct = 0, discAmt = 0, grossAmount = 0;
                   if (prod) {
                     const pricing = getCalcInput(prod);
                     rate = pricing.rate;
                     discPct = pricing.discountPercent;
-                    discAmt = pricing.isSpecialPrice ? 0 : (prod.discountAmount || 0);
-                    taxAmt = prod.taxAmount || 0;
-
+                    const lineTaxRate = taxCodeToRate(prod.taxCode);
+                    const allIncRate = prod.totalAmount || Math.round(rate * (1 + lineTaxRate) * 100) / 100;
+                    discAmt = pricing.isSpecialPrice ? 0 : (isNonTaxCustomer ? allIncRate * row.qty * discPct / 100 : (prod.discountAmount || 0));
                     const baseAmount = rate * row.qty;
-                    const rowTaxAmount = taxAmt * row.qty;
-                    grossAmount = isNonTaxCustomer ? (baseAmount + rowTaxAmount) : baseAmount;
+                    grossAmount = isNonTaxCustomer ? allIncRate * row.qty : baseAmount;
                   }
 
                   const isEven = rowIndex % 2 === 0;
@@ -482,7 +481,7 @@ export default function CustomerCreateQuotation() {
 
                       {/* Rate */}
                       <td className="px-3 py-2 border-b border-gray-100 text-right whitespace-nowrap text-black font-bold">
-                        {prod ? formatCurrency(isNonTaxCustomer ? rate + taxAmt : rate) : <span className="text-black">—</span>}
+                        {prod ? formatCurrency(isNonTaxCustomer ? (prod.totalAmount || rate * (1 + taxCodeToRate(prod.taxCode))) : rate) : <span className="text-black">—</span>}
                       </td>
 
                       {/* Disc % */}
@@ -567,21 +566,27 @@ export default function CustomerCreateQuotation() {
                     <div className="text-sm font-bold text-black">{quoteTotals.totalItems}</div>
                   </div>
                   <div className="flex justify-between items-center">
-                    <div className="text-xs text-black uppercase tracking-wider font-bold">Total Gross</div>
+                    <div className="text-xs text-black uppercase tracking-wider font-bold">Gross Amount</div>
                     <div className="text-sm font-bold text-black">{formatCurrency(quoteTotals.totalGross)}</div>
                   </div>
-                  {!isNonTaxCustomer && (
-                    <div className="flex justify-between items-center">
-                      <div className="text-xs text-black uppercase tracking-wider font-bold">Total Tax</div>
-                      <div className="text-sm font-bold text-black">{formatCurrency(quoteTotals.totalTax)}</div>
-                    </div>
-                  )}
                   <div className="flex justify-between items-center pb-3 border-b border-gray-200">
-                    <div className="text-xs text-black uppercase tracking-wider font-bold">Total Discount</div>
-                    <div className="text-sm font-bold text-black">{formatCurrency(quoteTotals.totalDiscount)}</div>
+                    <div className="text-xs text-orange-500 uppercase tracking-wider font-bold">Discount Amount</div>
+                    <div className="text-sm font-bold text-orange-500">-{formatCurrency(quoteTotals.totalDiscount)}</div>
                   </div>
+                  {!isNonTaxCustomer && (
+                    <>
+                      <div className="flex justify-between items-center">
+                        <div className="text-xs text-black uppercase tracking-wider font-bold">Net Amount</div>
+                        <div className="text-sm font-bold text-black">{formatCurrency(quoteNetAmount)}</div>
+                      </div>
+                      <div className="flex justify-between items-center pb-3 border-b border-gray-200">
+                        <div className="text-xs text-black uppercase tracking-wider font-bold">Total Tax Amount</div>
+                        <div className="text-sm font-bold text-black">{formatCurrency(quoteTotals.totalTax)}</div>
+                      </div>
+                    </>
+                  )}
                   <div className="flex justify-between items-center pt-1">
-                    <span className="text-sm font-bold text-black uppercase tracking-wider">Total Estimate</span>
+                    <span className="text-sm font-bold text-black uppercase tracking-wider">Total Invoice Value</span>
                     <span className="text-xl font-bold text-black">{formatCurrency(quoteTotals.totalAmount)}</span>
                   </div>
                 </div>

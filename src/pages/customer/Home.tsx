@@ -2,6 +2,7 @@
 import { productsApi } from '../../services/api/productsApi';
 import { ordersApi } from '../../services/api/ordersApi';
 import { offersApi } from '../../services/api/offersApi';
+import { customersApi } from '../../services/api/customersApi';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import {
   ShoppingBag, Clock, ChevronRight, Package, Sparkles, ArrowRight,
@@ -53,6 +54,14 @@ export default function CustomerHome() {
     queryKey: ['special-offers-public'],
     queryFn: () => offersApi.getPublic().then(r => r.data.data || []),
   });
+
+  const { data: customerProfile } = useQuery({
+    queryKey: ['customer-profile-home-tax-mode'],
+    queryFn: () => customersApi.customerGetProfile().then(r => r.data.data),
+    staleTime: 5 * 60 * 1000,
+  });
+  const isNonTaxCustomer =
+    (customerProfile?.customerType || '').toLowerCase().replace(/[-\s]/g, '') === 'nontax';
 
   const stats = useMemo(() => {
     const total = recentOrders?.totalCount || 0;
@@ -262,7 +271,7 @@ export default function CustomerHome() {
                     <p className="text-[13px] font-semibold text-slate-800 truncate group-hover:text-orange-700 transition">{product.name}</p>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
-                    <p className="text-sm font-extrabold text-orange-600">{formatCurrency(product.sellingPrice)}</p>
+                    <p className="text-sm font-extrabold text-orange-600">{formatCurrency(isNonTaxCustomer ? (product.sellingPrice || 0) + (product.taxAmount || 0) : product.sellingPrice)}</p>
                     <button
                       onClick={(e) => { e.stopPropagation(); handleQuickAdd(product); }}
                       className="w-7 h-7 rounded-lg bg-orange-500 hover:bg-orange-600 text-white flex items-center justify-center active:scale-90 transition-all shadow-sm"

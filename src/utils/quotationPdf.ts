@@ -1,5 +1,6 @@
 import { formatCurrency, formatDate } from './formatters';
 import { getShopNameOrPlaceholder } from './shopName';
+import { taxCodeToRate } from './calculations';
 import type { Quotation } from '../types/quotation.types';
 import * as XLSX from 'xlsx';
 
@@ -99,23 +100,27 @@ function renderQuotationPage(doc: any, autoTable: any, quotation: Quotation, isT
   let totalGross = 0;
   let totalDiscount = 0;
   let totalTax = 0;
+  const taxCodes = new Set<string>();
 
   const rows = (quotation.items || []).map((item, index) => {
     const rate = item.unitPrice || 0;
     const qty = item.quantity || 0;
     const discPct = item.discountPercent || 0;
     
+    const rowTaxRate = taxCodeToRate(item.taxCode);
+    const allIncRate = Math.round(rate * (1 + rowTaxRate) * 100) / 100;
     const rowGrossBase = rate * qty;
-    const discAmt = (rowGrossBase * discPct) / 100;
-    const taxAmt = item.taxAmount || 0;
-    const taxPerUnit = qty ? taxAmt / qty : 0;
+    const discAmt = isTax ? (rowGrossBase * discPct) / 100 : (allIncRate * qty * discPct) / 100;
+    const rowNet = rowGrossBase - rowGrossBase * (discPct / 100);
+    const taxAmt = rowNet * rowTaxRate;
     
-    const grossAmount = isTax ? rowGrossBase : (rowGrossBase + taxAmt);
-    const displayRate = isTax ? rate : (rate + taxPerUnit);
+    const grossAmount = isTax ? rowGrossBase : allIncRate * qty;
+    const displayRate = isTax ? rate : allIncRate;
 
-    totalGross += isTax ? rowGrossBase : (rowGrossBase + taxAmt);
+    totalGross += grossAmount;
     totalDiscount += discAmt;
     totalTax += isTax ? taxAmt : 0;
+    if (isTax && item.taxCode) taxCodes.add(item.taxCode);
 
     const reqPrice = item.expectedPrice != null && item.expectedPrice > 0 
         ? formatNumber(item.expectedPrice) 
@@ -186,14 +191,15 @@ function renderQuotationPage(doc: any, autoTable: any, quotation: Quotation, isT
 
   // Totals Grid
   if (isTax) {
-    const finalAmount = totalGross - totalDiscount + totalTax; 
-    
-    const baseGross = totalGross;
+    const netAmount = totalGross - totalDiscount;
+    const finalAmount = netAmount + totalTax;
+    const vatLabel = 'Total Tax Amount';
 
     const totalsRows = [
-      ['Total Gross', formatNumber(baseGross)],
-      ['Total Tax', formatNumber(totalTax)],
-      ['Total Discount', formatNumber(totalDiscount)],
+      ['Gross Amount', formatNumber(totalGross)],
+      ['Discount Amount', formatNumber(totalDiscount)],
+      ['Net Amount', formatNumber(netAmount)],
+      [vatLabel, formatNumber(totalTax)],
       ['Total Estimate', formatCurrency(finalAmount)],
     ];
 
@@ -201,16 +207,16 @@ function renderQuotationPage(doc: any, autoTable: any, quotation: Quotation, isT
       const y = afterTableY + (i * rowH);
       doc.rect(totalsX, y, boxW * 0.55, rowH);
       doc.rect(totalsX + (boxW * 0.55), y, boxW * 0.45, rowH);
-      doc.setFont('helvetica', i === 3 ? 'bold' : 'normal'); 
+      doc.setFont('helvetica', i === 4 ? 'bold' : 'normal');
       doc.text(label, totalsX + 2, y + 4);
       doc.text(val, totalsX + boxW - 2, y + 4, { align: 'right' });
     });
   } else {
     const finalAmount = totalGross - totalDiscount;
-    
+
     const totalsRows = [
-      ['Total Gross', formatNumber(totalGross)],
-      ['Total Discount', formatNumber(totalDiscount)],
+      ['Gross Amount', formatNumber(totalGross)],
+      ['Discount Amount', formatNumber(totalDiscount)],
       ['Total Estimate', formatCurrency(finalAmount)],
     ];
 
@@ -218,7 +224,7 @@ function renderQuotationPage(doc: any, autoTable: any, quotation: Quotation, isT
       const y = afterTableY + (i * rowH);
       doc.rect(totalsX, y, boxW * 0.55, rowH);
       doc.rect(totalsX + (boxW * 0.55), y, boxW * 0.45, rowH);
-      doc.setFont('helvetica', i === 2 ? 'bold' : 'normal'); 
+      doc.setFont('helvetica', i === 2 ? 'bold' : 'normal');
       doc.text(label, totalsX + 2, y + 4);
       doc.text(val, totalsX + boxW - 2, y + 4, { align: 'right' });
     });

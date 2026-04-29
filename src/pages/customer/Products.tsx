@@ -12,7 +12,7 @@ import type { RootState } from '../../store/store';
 import { ChevronDown, Package, Store, Trash2, ShoppingCart } from 'lucide-react';
 import type { Product } from '../../types/product.types';
 import { formatCurrency } from '../../utils/formatters';
-import { calculateLine } from '../../utils/calculations';
+import { calculateLine, taxCodeToRate } from '../../utils/calculations';
 
 /* ─────────────────────────────────────────────
    Modern Product Dropdown Component (Orange Theme)
@@ -321,7 +321,7 @@ export default function CustomerProducts() {
           if (base > 0) taxRate = pricing.taxAmount / base;
         }
         const calc = calculateLine({ rate: pricing.rate, qty: r.qty, discountPercent: pricing.discountPercent, taxAmount: pricing.taxAmount });
-        dispatch(addToCart({ lineId: r.id, productId: prod.id, productName: prod.name, unitPrice: pricing.rate, quantity: r.qty, sku: prod.sku, discountPercent: pricing.discountPercent, taxRate, lineTotal: calc.total }));
+        dispatch(addToCart({ lineId: r.id, productId: prod.id, productName: prod.name, unitPrice: pricing.rate, quantity: r.qty, sku: prod.sku, discountPercent: pricing.discountPercent, taxRate, allIncPrice: prod.totalAmount || undefined, lineTotal: calc.total }));
       });
     }
   }, [quickCount, cartCount, quickRows, dispatch]);
@@ -339,27 +339,38 @@ export default function CustomerProducts() {
     if (!r.product) return total;
     const pricing = getCalcInput(r.product);
     const rowBase = pricing.rate * r.qty;
-    const rowTax = (r.product.taxAmount || 0) * r.qty;
-    return total + (isNonTaxCustomer ? (rowBase + rowTax) : rowBase);
+    const lineTaxRate = taxCodeToRate(r.product.taxCode);
+    const nonTaxLineGross = r.product.totalAmount ? r.product.totalAmount * r.qty : rowBase * (1 + lineTaxRate);
+    return total + (isNonTaxCustomer ? nonTaxLineGross : rowBase);
   }, 0);
 
+  // Per-line tax using taxCode rate: lineTax = lineNet × taxCodeToRate(taxCode)
   const totalTaxAmount = quickRows.reduce((total, r) => {
-    if (!r.product) return total;
-    const tax = isNonTaxCustomer ? 0 : (r.product.taxAmount || 0);
-    return total + tax * r.qty;
+    if (!r.product || isNonTaxCustomer) return total;
+    const pricing = getCalcInput(r.product);
+    const taxRate = taxCodeToRate(r.product.taxCode);
+    const rowGross = pricing.rate * r.qty;
+    const rowDiscount = rowGross * (pricing.discountPercent / 100);
+    const rowNet = rowGross - rowDiscount;
+    return total + rowNet * taxRate;
   }, 0);
 
   const totalDiscountAmount = quickRows.reduce((total, r) => {
     if (!r.product) return total;
     const prod = r.product;
     const pricing = getCalcInput(prod);
-    const unitDisc = pricing.isSpecialPrice ? 0 : (prod.discountAmount || 0);
-    return total + unitDisc * r.qty;
+    if (pricing.isSpecialPrice) return total;
+    const rowTaxRate = taxCodeToRate(prod.taxCode);
+    const allIncRate = prod.totalAmount || Math.round(pricing.rate * (1 + rowTaxRate) * 100) / 100;
+    return total + (isNonTaxCustomer ? allIncRate * r.qty * pricing.discountPercent / 100 : (prod.discountAmount || 0) * r.qty);
   }, 0);
 
   const finalAmount = isNonTaxCustomer
     ? totalGrossAmount - totalDiscountAmount
     : totalGrossAmount + totalTaxAmount - totalDiscountAmount;
+
+  const netAmount = totalGrossAmount - totalDiscountAmount;
+  // Always use "Total Tax Amount" — covers mixed tax codes (V18, V15, NV, etc.)
 
   const { data: allProducts = [], isLoading } = useQuery({
     queryKey: ['customer-products-all-for-order', search, categoryFilter, brandFilter, minPriceFilter, maxPriceFilter, sortBy, sortDir],
@@ -394,14 +405,10 @@ export default function CustomerProducts() {
   const handleIncrement = (product: Product) => {
     const qty = getCartQty(product.id);
     const pricing = getCalcInput(product);
-    let taxRate = 0;
-    if (pricing.taxAmount != null) {
-      const base = pricing.rate * (1 - pricing.discountPercent / 100);
-      if (base > 0) taxRate = pricing.taxAmount / base;
-    }
+    const taxRate = taxCodeToRate(product.taxCode);
     if (qty === 0) {
       const calc = calculateLine({ rate: pricing.rate, qty: 1, discountPercent: pricing.discountPercent, taxAmount: pricing.taxAmount });
-      dispatch(addToCart({ lineId: crypto.randomUUID(), productId: product.id, productName: product.name, unitPrice: pricing.rate, quantity: 1, sku: product.sku, discountPercent: pricing.discountPercent, taxRate, lineTotal: calc.total }));
+      dispatch(addToCart({ lineId: crypto.randomUUID(), productId: product.id, productName: product.name, unitPrice: pricing.rate, quantity: 1, sku: product.sku, discountPercent: pricing.discountPercent, taxCode: product.taxCode, taxRate, allIncPrice: product.totalAmount || undefined, lineTotal: calc.total }));
     } else {
       dispatch(updateQuantity({ productId: product.id, quantity: qty + 1 }));
     }
@@ -419,13 +426,9 @@ export default function CustomerProducts() {
       if (!r.product) return;
       const prod = r.product;
       const pricing = getCalcInput(prod);
-      let taxRate = 0;
-      if (pricing.taxAmount != null) {
-        const base = pricing.rate * (1 - pricing.discountPercent / 100);
-        if (base > 0) taxRate = pricing.taxAmount / base;
-      }
+      const taxRate = taxCodeToRate(prod.taxCode);
       const calc = calculateLine({ rate: pricing.rate, qty: r.qty, discountPercent: pricing.discountPercent, taxAmount: pricing.taxAmount });
-      dispatch(addToCart({ productId: prod.id, productName: prod.name, unitPrice: pricing.rate, quantity: r.qty, sku: prod.sku, discountPercent: pricing.discountPercent, taxRate, lineTotal: calc.total }));
+      dispatch(addToCart({ productId: prod.id, productName: prod.name, unitPrice: pricing.rate, quantity: r.qty, sku: prod.sku, discountPercent: pricing.discountPercent, taxCode: prod.taxCode, taxRate, allIncPrice: prod.totalAmount || undefined, lineTotal: calc.total }));
     });
     navigate('/shop/checkout');
   };
@@ -510,12 +513,11 @@ export default function CustomerProducts() {
                       const pricing = getCalcInput(prod);
                       rate = pricing.rate;
                       discPct = pricing.discountPercent;
-                      discAmt = pricing.isSpecialPrice ? 0 : (prod.discountAmount || 0);
-                      taxAmt = prod.taxAmount || 0;
-
+                      const lineTaxRate = taxCodeToRate(prod.taxCode);
+                      const allIncRate = prod.totalAmount || Math.round(rate * (1 + lineTaxRate) * 100) / 100;
+                      discAmt = pricing.isSpecialPrice ? 0 : (isNonTaxCustomer ? allIncRate * row.qty * discPct / 100 : (prod.discountAmount || 0));
                       const baseAmount = rate * row.qty;
-                      const rowTaxAmount = taxAmt * row.qty;
-                      grossAmount = isNonTaxCustomer ? (baseAmount + rowTaxAmount) : baseAmount;
+                      grossAmount = isNonTaxCustomer ? allIncRate * row.qty : baseAmount;
                     }
 
                     return (
@@ -568,7 +570,7 @@ export default function CustomerProducts() {
 
                         {/* Rate */}
                         <td className="px-4 py-4 text-right text-sm font-medium text-slate-500">
-                          {prod ? formatCurrency(isNonTaxCustomer ? rate + taxAmt : rate) : <span className="text-slate-300">—</span>}
+                          {prod ? formatCurrency(isNonTaxCustomer ? (prod.totalAmount || rate * (1 + taxCodeToRate(prod.taxCode))) : rate) : <span className="text-slate-300">—</span>}
                         </td>
 
                         {/* Disc % */}
@@ -616,21 +618,27 @@ export default function CustomerProducts() {
             <div className="w-full md:w-[380px] bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-3">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Order Summary</p>
               <div className="flex justify-between items-center">
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Gross</span>
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Gross Amount</span>
                 <span className="text-sm font-bold text-slate-800">{formatCurrency(totalGrossAmount)}</span>
               </div>
-              {!isNonTaxCustomer && (
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Tax</span>
-                  <span className="text-sm font-bold text-slate-800">{formatCurrency(totalTaxAmount)}</span>
-                </div>
-              )}
               <div className="flex justify-between items-center pb-3 border-b border-slate-100">
-                <span className="text-xs font-bold text-orange-500 uppercase tracking-wider">Discount</span>
+                <span className="text-xs font-bold text-orange-500 uppercase tracking-wider">Discount Amount</span>
                 <span className="text-sm font-bold text-orange-500">-{formatCurrency(totalDiscountAmount)}</span>
               </div>
+              {!isNonTaxCustomer && (
+                <>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Net Amount</span>
+                    <span className="text-sm font-bold text-slate-800">{formatCurrency(netAmount)}</span>
+                  </div>
+                  <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Tax Amount</span>
+                    <span className="text-sm font-bold text-slate-800">{formatCurrency(totalTaxAmount)}</span>
+                  </div>
+                </>
+              )}
               <div className="flex justify-between items-center pt-1">
-                <span className="text-sm font-black text-slate-900 uppercase tracking-wider">Grand Total</span>
+                <span className="text-sm font-black text-slate-900 uppercase tracking-wider">Total Invoice Value</span>
                 <span className="text-2xl font-black text-orange-600">{formatCurrency(finalAmount)}</span>
               </div>
               <button

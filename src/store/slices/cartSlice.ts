@@ -11,6 +11,10 @@ export interface CartItem {  // unique identifier for this line; if omitted, mer
   imageUrl?: string;
   // discount percentage from product or applied by user
   discountPercent?: number;
+  // tax code from product (e.g. "V18", "V15", "NV") used for per-line tax calculation
+  taxCode?: string;
+  // pre-computed all-inclusive price per unit (base + tax), stored on product as totalAmount
+  allIncPrice?: number;
   // tax rate expressed as a decimal (0.18 for 18%) derived from product metadata
   taxRate?: number;
   // total for this line, recalculated whenever quantity/percent/rate change

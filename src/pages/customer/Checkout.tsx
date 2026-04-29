@@ -5,6 +5,7 @@ import { clearCart } from '../../store/slices/cartSlice';
 import { ordersApi } from '../../services/api/ordersApi';
 import { customersApi } from '../../services/api/customersApi';
 import { formatCurrency } from '../../utils/formatters';
+import { taxCodeToRate } from '../../utils/calculations';
 import { downloadPurchaseOrderPdf } from '../../utils/purchaseOrderPdf';
 import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
@@ -44,11 +45,14 @@ export default function CustomerCheckout() {
     const discPct = item.discountPercent || 0;
     
     const baseAmount = rate * qty;
-    const rowDiscountAmount = baseAmount * (discPct / 100);
-    // Tax is applied to the discounted amount
-    const rowTaxAmount = item.taxRate != null ? (baseAmount - rowDiscountAmount) * item.taxRate : 0;
+    // Per-line tax: use taxCode-derived rate for accuracy across mixed tax brackets
+    const lineTaxRate = taxCodeToRate(item.taxCode) || (item.taxRate ?? 0);
+    const allIncRate = item.allIncPrice || Math.round(rate * (1 + lineTaxRate) * 100) / 100;
+    const rowDiscountAmount = isNonTaxCustomer ? allIncRate * qty * (discPct / 100) : baseAmount * (discPct / 100);
+    const rowTaxAmount = (baseAmount - baseAmount * (discPct / 100)) * lineTaxRate;
+    const nonTaxLineGross = allIncRate * qty;
 
-    totalGrossAmount += isNonTaxCustomer ? (baseAmount + rowTaxAmount) : baseAmount;
+    totalGrossAmount += isNonTaxCustomer ? nonTaxLineGross : baseAmount;
     if (!isNonTaxCustomer) {
       totalTaxAmount += rowTaxAmount;
     }
@@ -58,6 +62,8 @@ export default function CustomerCheckout() {
   const finalAmount = isNonTaxCustomer
     ? totalGrossAmount - totalDiscountAmount
     : totalGrossAmount + totalTaxAmount - totalDiscountAmount;
+
+  const netAmount = totalGrossAmount - totalDiscountAmount;
 
   const placeOrderMut = useMutation({
     mutationFn: () => ordersApi.customerCreate({
@@ -208,15 +214,13 @@ export default function CustomerCheckout() {
                   const discPct = item.discountPercent || 0;
                   
                   const baseAmount = rate * qty;
-                  const rowDiscountAmount = baseAmount * (discPct / 100);
-                  const rowTaxAmount = item.taxRate != null ? (baseAmount - rowDiscountAmount) * item.taxRate : 0;
-                  const taxPerUnit = qty ? rowTaxAmount / qty : 0;
-                  const displayRate = isNonTaxCustomer ? rate + taxPerUnit : rate;
+                  const lineTaxRate = taxCodeToRate(item.taxCode) || (item.taxRate ?? 0);
+                  const allIncRate = item.allIncPrice || Math.round(rate * (1 + lineTaxRate) * 100) / 100;
+                  const rowDiscountAmount = isNonTaxCustomer ? allIncRate * qty * (discPct / 100) : baseAmount * (discPct / 100);
+                  const displayRate = isNonTaxCustomer ? allIncRate : rate;
                   
                   // Display Total for each item
-                  // If Non-Tax customer: rate * qty + tax
-                  // If Tax customer: rate * qty
-                  const displayTotal = isNonTaxCustomer ? (baseAmount + rowTaxAmount) : baseAmount;
+                  const displayTotal = isNonTaxCustomer ? allIncRate * qty : baseAmount;
 
                   return (
                     <div key={item.productId} className="px-4 py-3.5 flex items-center justify-between gap-4 hover:bg-orange-50/30 rounded-xl transition">
@@ -252,25 +256,30 @@ export default function CustomerCheckout() {
 
             <div className="space-y-4">
               <div className="flex justify-between items-center text-sm font-bold text-slate-500">
-                <span className="uppercase tracking-widest text-xs">Total Gross</span>
+                <span className="uppercase tracking-widest text-xs">Gross Amount</span>
                 <span className="text-slate-800">{formatCurrency(totalGrossAmount)}</span>
               </div>
-              
-              {/* Show Total Tax only if customer is a Tax Customer */}
-              {!isNonTaxCustomer && (
-                <div className="flex justify-between items-center text-sm font-bold text-slate-500">
-                  <span className="uppercase tracking-widest text-xs">Total Tax</span>
-                  <span className="text-slate-800">{formatCurrency(totalTaxAmount)}</span>
-                </div>
-              )}
-              
+
               <div className="flex justify-between items-center text-sm font-bold pb-5 border-b border-slate-100">
-                <span className="uppercase tracking-widest text-xs text-orange-500">Total Discount</span>
+                <span className="uppercase tracking-widest text-xs text-orange-500">Discount Amount</span>
                 <span className="text-orange-500">-{formatCurrency(totalDiscountAmount)}</span>
               </div>
 
+              {!isNonTaxCustomer && (
+                <>
+                  <div className="flex justify-between items-center text-sm font-bold text-slate-500">
+                    <span className="uppercase tracking-widest text-xs">Net Amount</span>
+                    <span className="text-slate-800">{formatCurrency(netAmount)}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm font-bold pb-5 border-b border-slate-100">
+                    <span className="uppercase tracking-widest text-xs text-slate-500">Total Tax Amount</span>
+                    <span className="text-slate-800">{formatCurrency(totalTaxAmount)}</span>
+                  </div>
+                </>
+              )}
+
               <div className="flex justify-between items-center pt-1">
-                <span className="text-sm font-black text-orange-700 uppercase tracking-widest">Grand Total</span>
+                <span className="text-sm font-black text-orange-700 uppercase tracking-widest">Total Invoice Value</span>
                 <span className="text-2xl font-black text-orange-700">{formatCurrency(finalAmount)}</span>
               </div>
             </div>

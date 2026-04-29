@@ -44,3 +44,14 @@ export function calculateLine(input: LineCalcInput): LineCalcResult {
 
   return { gross, discount, taxableBase, taxRate, tax, total };
 }
+
+/**
+ * Derives the decimal tax rate from a tax code string.
+ * Examples: "V18" → 0.18, "V15" → 0.15, "NV" → 0, "V5" → 0.05
+ */
+export function taxCodeToRate(taxCode: string | undefined | null): number {
+  if (!taxCode) return 0;
+  const digits = taxCode.match(/\d+/)?.[0];
+  if (!digits) return 0;
+  return parseInt(digits, 10) / 100;
+}

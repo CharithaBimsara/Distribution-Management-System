@@ -10,9 +10,10 @@ type Props = {
   open: boolean;
   onClose: () => void;
   onAdd: (p: Product) => void;
+  isNonTaxCustomer?: boolean;
 };
 
-export default function ProductQuickView({ product, open, onClose, onAdd }: Props) {
+export default function ProductQuickView({ product, open, onClose, onAdd, isNonTaxCustomer = false }: Props) {
   const [isPopping, setIsPopping] = useState(false);
   if (!open || !product) return null;
 
@@ -30,7 +31,7 @@ export default function ProductQuickView({ product, open, onClose, onAdd }: Prop
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <div className="text-sm font-bold text-orange-600">{formatCurrency(product.sellingPrice)}</div>
+            <div className="text-sm font-bold text-orange-600">{formatCurrency(isNonTaxCustomer ? (product.sellingPrice || 0) + (product.taxAmount || 0) : product.sellingPrice)}</div>
             <button onClick={onClose} className="p-2 rounded-md text-slate-500 hover:bg-slate-50">
               <X className="w-4 h-4" />
             </button>

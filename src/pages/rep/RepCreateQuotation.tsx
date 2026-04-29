@@ -5,6 +5,7 @@ import { repCreateQuotation } from '../../services/api/quotationApi';
 import { customersApi } from '../../services/api/customersApi';
 import { productsApi } from '../../services/api/productsApi';
 import { formatCurrency } from '../../utils/formatters';
+import { taxCodeToRate } from '../../utils/calculations';
 import type { Product } from '../../types/product.types';
 import toast from 'react-hot-toast';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
@@ -125,26 +126,35 @@ export default function RepCreateQuotation() {
     const p = row.product as Product;
     const pricing = getCalcInput(p);
     const baseAmount = pricing.rate * row.qty;
-    const rowTax = (p.taxAmount || 0) * row.qty;
-    return sum + (isNonTaxCustomer ? (baseAmount + rowTax) : baseAmount);
+    const rowTaxRate = taxCodeToRate(p.taxCode);
+    const nonTaxGross = p.totalAmount ? p.totalAmount * row.qty : baseAmount * (1 + rowTaxRate);
+    return sum + (isNonTaxCustomer ? nonTaxGross : baseAmount);
   }, 0);
 
   const quotationTotalTax = selectedItems.reduce((sum, row) => {
+    if (isNonTaxCustomer) return sum;
     const p = row.product as Product;
-    const tax = isNonTaxCustomer ? 0 : (p.taxAmount || 0);
-    return sum + tax * row.qty;
+    const pricing = getCalcInput(p);
+    const rowGross = pricing.rate * row.qty;
+    const rowDiscount = rowGross * (pricing.discountPercent / 100);
+    const rowNet = rowGross - rowDiscount;
+    return sum + rowNet * taxCodeToRate(p.taxCode);
   }, 0);
 
   const quotationTotalDiscount = selectedItems.reduce((sum, row) => {
     const p = row.product as Product;
     const pricing = getCalcInput(p);
-    const unitDisc = pricing.isSpecialPrice ? 0 : (p.discountAmount || 0);
-    return sum + unitDisc * row.qty;
+    if (pricing.isSpecialPrice) return sum;
+    const rowTaxRate = taxCodeToRate(p.taxCode);
+    const allIncRate = p.totalAmount || Math.round(pricing.rate * (1 + rowTaxRate) * 100) / 100;
+    return sum + (isNonTaxCustomer ? allIncRate * row.qty * pricing.discountPercent / 100 : (p.discountAmount || 0) * row.qty);
   }, 0);
 
   const quotationTotal = isNonTaxCustomer
     ? quotationTotalGross - quotationTotalDiscount
     : quotationTotalGross + quotationTotalTax - quotationTotalDiscount;
+
+  const quotationNetAmount = quotationTotalGross - quotationTotalDiscount;
 
   /* ═══════ DESKTOP ═══════ */
   if (isDesktop) {
@@ -237,13 +247,13 @@ export default function RepCreateQuotation() {
                     const p = row.product;
                     const selectedProductIds = new Set(quotationRows.filter((r) => r.id !== row.id && r.product).map((r) => r.product!.id));
                     const calcInput = p ? getCalcInput(p) : null;
-                    let grossAmount = 0, discAmt = 0, taxAmt = 0;
+                    let grossAmount = 0, discAmt = 0;
                     if (p && calcInput) {
-                      taxAmt = p.taxAmount || 0;
-                      discAmt = calcInput.isSpecialPrice ? 0 : (p.discountAmount || 0);
+                      const lineTaxRate = taxCodeToRate(p.taxCode);
+                      const allIncRate = p.totalAmount || Math.round(calcInput.rate * (1 + lineTaxRate) * 100) / 100;
+                      discAmt = calcInput.isSpecialPrice ? 0 : (isNonTaxCustomer ? allIncRate * row.qty * calcInput.discountPercent / 100 : (p.discountAmount || 0));
                       const baseAmount = calcInput.rate * row.qty;
-                      const rowTax = taxAmt * row.qty;
-                      grossAmount = isNonTaxCustomer ? (baseAmount + rowTax) : baseAmount;
+                      grossAmount = isNonTaxCustomer ? allIncRate * row.qty : baseAmount;
                     }
                     return (
                       <tr key={row.id} className="group hover:bg-slate-50/50 transition-colors">
@@ -267,7 +277,7 @@ export default function RepCreateQuotation() {
                             className="w-16 text-center text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 transition disabled:opacity-40" />
                         </td>
                         {/* Rate */}
-                        <td className="px-3 py-2 text-right text-slate-700 whitespace-nowrap">{p && calcInput ? formatCurrency(isNonTaxCustomer ? calcInput.rate + taxAmt : calcInput.rate) : ''}</td>
+                        <td className="px-3 py-2 text-right text-slate-700 whitespace-nowrap">{p && calcInput ? formatCurrency(isNonTaxCustomer ? (p.totalAmount || calcInput.rate * (1 + taxCodeToRate(p.taxCode))) : calcInput.rate) : ''}</td>
                         {/* Disc % */}
                         <td className="px-3 py-2 text-right text-slate-500 whitespace-nowrap">{p && calcInput && calcInput.discountPercent > 0 ? `${calcInput.discountPercent}%` : ''}</td>
                         {/* Disc Amt */}
@@ -322,21 +332,24 @@ export default function RepCreateQuotation() {
                 <span>Gross Amount</span>
                 <span className="font-semibold text-slate-700">{formatCurrency(quotationTotalGross)}</span>
               </div>
+              <div className="flex justify-between text-sm text-emerald-600 pb-2 border-b border-slate-100">
+                <span>Discount Amount</span>
+                <span className="font-semibold">-{formatCurrency(quotationTotalDiscount)}</span>
+              </div>
               {!isNonTaxCustomer && (
-                <div className="flex justify-between text-sm text-slate-500">
-                  <span>Tax</span>
-                  <span className="font-semibold text-slate-700">+{formatCurrency(quotationTotalTax)}</span>
-                </div>
+                <>
+                  <div className="flex justify-between text-sm text-slate-500">
+                    <span>Net Amount</span>
+                    <span className="font-semibold text-slate-700">{formatCurrency(quotationNetAmount)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm text-slate-500 pb-2 border-b border-slate-100">
+                    <span>Total Tax Amount</span>
+                    <span className="font-semibold text-slate-700">+{formatCurrency(quotationTotalTax)}</span>
+                  </div>
+                </>
               )}
-              {quotationTotalDiscount > 0 && (
-                <div className="flex justify-between text-sm text-emerald-600">
-                  <span>Discount</span>
-                  <span className="font-semibold">-{formatCurrency(quotationTotalDiscount)}</span>
-                </div>
-              )}
-              <div className="h-px bg-slate-100" />
               <div className="flex justify-between items-center">
-                <span className="text-base font-bold text-slate-900">Estimated Total</span>
+                <span className="text-base font-bold text-slate-900">Total Invoice Value</span>
                 <span className="text-2xl font-bold text-emerald-600">{formatCurrency(quotationTotal)}</span>
               </div>
             </div>
@@ -417,8 +430,9 @@ export default function RepCreateQuotation() {
               let grossAmount = 0;
               if (p && calcInput) {
                 const baseAmount = calcInput.rate * row.qty;
-                const rowTax = (p.taxAmount || 0) * row.qty;
-                grossAmount = isNonTaxCustomer ? (baseAmount + rowTax) : baseAmount;
+                const lineTaxRate = taxCodeToRate(p.taxCode);
+                const nonTaxLineGross = p.totalAmount ? p.totalAmount * row.qty : baseAmount * (1 + lineTaxRate);
+                grossAmount = isNonTaxCustomer ? nonTaxLineGross : baseAmount;
               }
               return (
                 <div key={row.id} className="rounded-xl border border-slate-200 bg-slate-50/50 p-3 space-y-2.5">
@@ -489,19 +503,21 @@ export default function RepCreateQuotation() {
             <div className="flex justify-between text-sm text-slate-500">
               <span>Gross Amount</span><span className="font-semibold text-slate-700">{formatCurrency(quotationTotalGross)}</span>
             </div>
+            <div className="flex justify-between text-sm text-emerald-600 pb-2 border-b border-slate-100">
+              <span>Discount Amount</span><span className="font-semibold">-{formatCurrency(quotationTotalDiscount)}</span>
+            </div>
             {!isNonTaxCustomer && (
-              <div className="flex justify-between text-sm text-slate-500">
-                <span>Tax</span><span className="font-semibold text-slate-700">+{formatCurrency(quotationTotalTax)}</span>
-              </div>
+              <>
+                <div className="flex justify-between text-sm text-slate-500">
+                  <span>Net Amount</span><span className="font-semibold text-slate-700">{formatCurrency(quotationNetAmount)}</span>
+                </div>
+                <div className="flex justify-between text-sm text-slate-500 pb-2 border-b border-slate-100">
+                  <span>Total Tax Amount</span><span className="font-semibold text-slate-700">+{formatCurrency(quotationTotalTax)}</span>
+                </div>
+              </>
             )}
-            {quotationTotalDiscount > 0 && (
-              <div className="flex justify-between text-sm text-emerald-600">
-                <span>Discount</span><span className="font-semibold">-{formatCurrency(quotationTotalDiscount)}</span>
-              </div>
-            )}
-            <div className="h-px bg-slate-100" />
             <div className="flex justify-between items-center">
-              <span className="font-bold text-slate-900">Estimated Total</span>
+              <span className="font-bold text-slate-900">Total Invoice Value</span>
               <span className="text-xl font-bold text-emerald-600">{formatCurrency(quotationTotal)}</span>
             </div>
           </div>

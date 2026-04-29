@@ -5,6 +5,7 @@ import { customersApi } from '../../services/api/customersApi';
 import { ordersApi } from '../../services/api/ordersApi';
 import { productsApi } from '../../services/api/productsApi';
 import { formatCurrency } from '../../utils/formatters';
+import { taxCodeToRate } from '../../utils/calculations';
 import { orderDraftUtils } from '../../utils/orderDraft';
 import { ArrowLeft, User, Package, ShoppingCart, Trash2, CheckCircle, MapPin, ChevronRight, Download, Eye, Plus } from 'lucide-react';
 import { downloadPurchaseOrderPdf } from '../../utils/purchaseOrderPdf';
@@ -125,14 +126,23 @@ export default function RepCreateOrder() {
     : ((selectedCustomer?.customerType || '').toLowerCase().replace(/[-\s]/g, '') === 'nontax');
 
   const mobileTotalGross = draft.items.reduce((s, i) => {
-    const rate = i.price || 0, qty = i.quantity || 0, taxAmt = i.taxAmount || 0;
-    return s + (isNonTaxCustomer ? (rate * qty + taxAmt * qty) : rate * qty);
+    const rate = i.price || 0, qty = i.quantity || 0;
+    const rowTaxRate = taxCodeToRate(i.taxCode);
+    const nonTaxGross = i.allIncPrice ? i.allIncPrice * qty : rate * qty * (1 + rowTaxRate);
+    return s + (isNonTaxCustomer ? nonTaxGross : rate * qty);
   }, 0);
   const mobileTotalTax = draft.items.reduce((s, i) => {
-    return s + (isNonTaxCustomer ? 0 : (i.taxAmount || 0)) * (i.quantity || 0);
+    if (isNonTaxCustomer) return s;
+    const rate = i.price || 0, qty = i.quantity || 0;
+    const rowGross = rate * qty;
+    const rowDiscount = rowGross * ((i.discountPercent || 0) / 100);
+    return s + (rowGross - rowDiscount) * taxCodeToRate(i.taxCode);
   }, 0);
   const mobileTotalDiscount = draft.items.reduce((s, i) => {
-    return s + ((i.price || 0) * (i.quantity || 0) * ((i.discountPercent || 0) / 100));
+    const r = i.price || 0, qty = i.quantity || 0, dp = i.discountPercent || 0;
+    const rowTaxRate = taxCodeToRate(i.taxCode);
+    const allIncR = i.allIncPrice || Math.round(r * (1 + rowTaxRate) * 100) / 100;
+    return s + (isNonTaxCustomer ? allIncR * qty * dp / 100 : r * qty * dp / 100);
   }, 0);
   const total = isNonTaxCustomer
     ? mobileTotalGross - mobileTotalDiscount
@@ -152,16 +162,26 @@ export default function RepCreateOrder() {
   const desktopTotalGross = desktopRowsWithProduct.reduce((sum, row) => {
     const p = row.product as Product;
     const pricing = getCalcInput(p);
-    const rowBase = pricing.rate * row.qty, rowTax = (p.taxAmount || 0) * row.qty;
-    return sum + (isNonTaxCustomer ? (rowBase + rowTax) : rowBase);
+    const rowBase = pricing.rate * row.qty;
+    const rowTaxRate = taxCodeToRate(p.taxCode);
+    const nonTaxGross = p.totalAmount ? p.totalAmount * row.qty : rowBase * (1 + rowTaxRate);
+    return sum + (isNonTaxCustomer ? nonTaxGross : rowBase);
   }, 0);
   const desktopTotalTax = desktopRowsWithProduct.reduce((sum, row) => {
-    return sum + (isNonTaxCustomer ? 0 : ((row.product as Product).taxAmount || 0)) * row.qty;
+    if (isNonTaxCustomer) return sum;
+    const p = row.product as Product;
+    const pricing = getCalcInput(p);
+    const rowGross = pricing.rate * row.qty;
+    const rowDiscount = rowGross * (pricing.discountPercent / 100);
+    return sum + (rowGross - rowDiscount) * taxCodeToRate(p.taxCode);
   }, 0);
   const desktopTotalDiscount = desktopRowsWithProduct.reduce((sum, row) => {
     const p = row.product as Product;
     const pricing = getCalcInput(p);
-    return sum + (pricing.isSpecialPrice ? 0 : (p.discountAmount || 0)) * row.qty;
+    if (pricing.isSpecialPrice) return sum;
+    const rowTaxRate = taxCodeToRate(p.taxCode);
+    const allIncRate = p.totalAmount || Math.round(pricing.rate * (1 + rowTaxRate) * 100) / 100;
+    return sum + (isNonTaxCustomer ? allIncRate * row.qty * pricing.discountPercent / 100 : (p.discountAmount || 0) * row.qty);
   }, 0);
   const desktopTotal = isNonTaxCustomer
     ? desktopTotalGross - desktopTotalDiscount
@@ -307,14 +327,15 @@ export default function RepCreateOrder() {
                   {desktopRows.map((row) => {
                     const p = row.product;
                     const selectedIds = new Set(desktopRows.filter(r => r.id !== row.id && r.product).map(r => (r.product as Product).id));
-                    let rate = 0, discPct = 0, discAmt = 0, taxAmt = 0, grossAmount = 0;
+                    let rate = 0, discPct = 0, discAmt = 0, grossAmount = 0;
                     if (p) {
                       const pricing = getCalcInput(p);
                       rate = pricing.rate; discPct = pricing.discountPercent;
-                      discAmt = pricing.isSpecialPrice ? 0 : (p.discountAmount || 0);
-                      taxAmt = p.taxAmount || 0;
-                      const baseAmount = rate * row.qty, rowTaxAmount = taxAmt * row.qty;
-                      grossAmount = isNonTaxCustomer ? (baseAmount + rowTaxAmount) : baseAmount;
+                      const lineTaxRate = taxCodeToRate(p.taxCode);
+                      const allIncRate = p.totalAmount || Math.round(rate * (1 + lineTaxRate) * 100) / 100;
+                      discAmt = pricing.isSpecialPrice ? 0 : (isNonTaxCustomer ? allIncRate * row.qty * discPct / 100 : (p.discountAmount || 0));
+                      const baseAmount = rate * row.qty;
+                      grossAmount = isNonTaxCustomer ? allIncRate * row.qty : baseAmount;
                     }
                     return (
                       <tr key={row.id} className="group hover:bg-slate-50/50 transition-colors">
@@ -333,7 +354,7 @@ export default function RepCreateOrder() {
                             className="w-16 text-center text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 transition disabled:opacity-40"
                           />
                         </td>
-                        <td className="px-3 py-2 text-right text-slate-700 whitespace-nowrap">{p ? formatCurrency(isNonTaxCustomer ? rate + taxAmt : rate) : ''}</td>
+                        <td className="px-3 py-2 text-right text-slate-700 whitespace-nowrap">{p ? formatCurrency(isNonTaxCustomer ? (p.totalAmount || rate * (1 + taxCodeToRate(p.taxCode))) : rate) : ''}</td>
                         <td className="px-3 py-2 text-right text-slate-400 whitespace-nowrap">{p?.mrp != null ? formatCurrency(p.mrp) : ''}</td>
                         <td className="px-3 py-2 text-right text-slate-500 whitespace-nowrap">{p && discPct > 0 ? `${discPct}%` : ''}</td>
                         <td className="px-3 py-2 text-right text-slate-500 whitespace-nowrap">{p && discAmt > 0 ? formatCurrency(discAmt) : ''}</td>
@@ -517,10 +538,11 @@ export default function RepCreateOrder() {
             ) : (
               <div className="space-y-3">
                 {draft.items.map(item => {
-                  const rate = item.price || 0, qty = item.quantity || 0, taxAmt = item.taxAmount || 0;
-                  const displayRate = isNonTaxCustomer ? rate + taxAmt : rate;
-                  const baseAmount = rate * qty, rowTax = taxAmt * qty;
-                  const grossAmount = isNonTaxCustomer ? (baseAmount + rowTax) : baseAmount;
+                  const rate = item.price || 0, qty = item.quantity || 0;
+                  const lineTaxRate = taxCodeToRate(item.taxCode);
+                  const displayRate = isNonTaxCustomer ? rate + rate * lineTaxRate : rate;
+                  const baseAmount = rate * qty;
+                  const grossAmount = isNonTaxCustomer ? baseAmount * (1 + lineTaxRate) : baseAmount;
                   return (
                     <div key={item.productId} className="flex items-start gap-3 p-3 bg-slate-50 rounded-xl">
                       <div className="flex-1 min-w-0">

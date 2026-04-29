@@ -9,9 +9,10 @@ type Props = {
   added?: boolean;
   onAdd: (p: Product) => void;
   onQuickView?: (p: Product) => void;
+  isNonTaxCustomer?: boolean;
 };
 
-export default function ProductCard({ product, added, onAdd, onQuickView }: Props) {
+export default function ProductCard({ product, added, onAdd, onQuickView, isNonTaxCustomer = false }: Props) {
   const [isPopping, setIsPopping] = useState(false);
 
   const handleAdd = () => {
@@ -47,7 +48,7 @@ export default function ProductCard({ product, added, onAdd, onQuickView }: Prop
           </div>
 
           <div className="text-right flex-shrink-0">
-            <div className="text-sm md:text-base font-bold text-orange-600">{formatCurrency(product.sellingPrice)}</div>
+            <div className="text-sm md:text-base font-bold text-orange-600">{formatCurrency(isNonTaxCustomer ? (product.sellingPrice || 0) + (product.taxAmount || 0) : product.sellingPrice)}</div>
           </div>
         </div>
 

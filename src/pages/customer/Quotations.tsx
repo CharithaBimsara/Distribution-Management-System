@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { customerGetQuotations, customerConvertQuotation, customerCancelQuotation } from '../../services/api/quotationApi';
 import { customersApi } from '../../services/api/customersApi';
 import { formatCurrency, formatDate, formatRelative } from '../../utils/formatters';
+import { taxCodeToRate } from '../../utils/calculations';
 import { downloadQuotationPdf } from '../../utils/quotationPdf';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
 import MobileTileList from '../../components/common/MobileTileList';
@@ -299,22 +300,27 @@ export default function CustomerQuotations() {
                                 let totalGross = 0;
                                 let totalDiscount = 0;
                                 let totalTax = 0;
+                                const taxCodes = new Set<string>();
 
                                 const itemRows = q.items.map((item: any, i: number) => {
                                   const rate = item.unitPrice || 0;
                                   const qty = item.quantity || 0;
                                   const discPct = item.discountPercent || 0;
+                                  const rowTaxRate = taxCodeToRate((item as any).taxCode);
+                                  const allIncRate = Math.round(rate * (1 + rowTaxRate) * 100) / 100;
                                   const rowGrossBase = rate * qty;
-                                  const rowDiscount = item.discountAmount || ((rowGrossBase * discPct) / 100);
-                                  const rowTax = item.taxAmount || 0;
-                                  const taxPerUnit = qty ? rowTax / qty : 0;
-                                  const displayRate = isTaxCustomer ? rate : rate + taxPerUnit;
-
-                                  const rowGross = isTaxCustomer ? rowGrossBase : rowGrossBase + rowTax;
+                                  const displayRate = isTaxCustomer ? rate : allIncRate;
+                                  const rowGross = isTaxCustomer ? rowGrossBase : allIncRate * qty;
+                                  const rowDiscount = isTaxCustomer
+                                    ? (item.discountAmount || ((rowGrossBase * discPct) / 100))
+                                    : (allIncRate * qty * discPct) / 100;
+                                  const rowNet = rowGrossBase - (rowGrossBase * discPct) / 100;
+                                  const rowTax = isTaxCustomer ? rowNet * rowTaxRate : 0;
 
                                   totalGross += rowGross;
                                   totalDiscount += rowDiscount;
-                                  totalTax += isTaxCustomer ? rowTax : 0;
+                                  totalTax += rowTax;
+                                  if (isTaxCustomer && (item as any).taxCode) taxCodes.add((item as any).taxCode);
 
                                   return (
                                     <tr key={item.id || item.productId} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50 transition-colors">
@@ -334,9 +340,8 @@ export default function CustomerQuotations() {
                                   );
                                 });
 
-                                const finalAmount = isTaxCustomer 
-                                  ? totalGross - totalDiscount + totalTax 
-                                  : totalGross - totalDiscount;
+                                const netAmount = totalGross - totalDiscount;
+                                const finalAmount = isTaxCustomer ? netAmount + totalTax : netAmount;
 
                                 return (
                                   <>
@@ -367,21 +372,27 @@ export default function CustomerQuotations() {
                                     <div className="flex justify-end">
                                       <div className="w-72 space-y-2 bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
                                         <div className="flex justify-between text-sm">
-                                          <span className="font-bold text-slate-500 uppercase tracking-wider text-xs">Total Gross</span>
+                                          <span className="font-bold text-slate-500 uppercase tracking-wider text-xs">Gross Amount</span>
                                           <span className="font-bold text-slate-900">{formatCurrency(totalGross)}</span>
                                         </div>
-                                        {isTaxCustomer && (
-                                          <div className="flex justify-between text-sm">
-                                            <span className="font-bold text-slate-500 uppercase tracking-wider text-xs">Total Tax</span>
-                                            <span className="font-bold text-slate-900">{formatCurrency(totalTax)}</span>
-                                          </div>
-                                        )}
                                         <div className="flex justify-between text-sm pb-3 border-b border-slate-100">
-                                          <span className="font-bold text-slate-500 uppercase tracking-wider text-xs">Total Discount</span>
-                                          <span className="font-bold text-emerald-600">{formatCurrency(totalDiscount)}</span>
+                                          <span className="font-bold text-orange-500 uppercase tracking-wider text-xs">Discount Amount</span>
+                                          <span className="font-bold text-orange-500">-{formatCurrency(totalDiscount)}</span>
                                         </div>
+                                        {isTaxCustomer && (
+                                          <>
+                                            <div className="flex justify-between text-sm">
+                                              <span className="font-bold text-slate-500 uppercase tracking-wider text-xs">Net Amount</span>
+                                              <span className="font-bold text-slate-900">{formatCurrency(netAmount)}</span>
+                                            </div>
+                                            <div className="flex justify-between text-sm pb-3 border-b border-slate-100">
+                                              <span className="font-bold text-slate-500 uppercase tracking-wider text-xs">Total Tax Amount</span>
+                                              <span className="font-bold text-slate-900">{formatCurrency(totalTax)}</span>
+                                            </div>
+                                          </>
+                                        )}
                                         <div className="flex justify-between items-center pt-2">
-                                          <span className="font-bold text-slate-800 uppercase tracking-wider text-sm">Total Value</span>
+                                          <span className="font-bold text-slate-800 uppercase tracking-wider text-sm">Total Invoice Value</span>
                                           <span className="text-lg font-bold text-orange-600">{formatCurrency(finalAmount)}</span>
                                         </div>
                                       </div>
@@ -477,22 +488,30 @@ export default function CustomerQuotations() {
           let totalGross = 0;
           let totalDiscount = 0;
           let totalTax = 0;
+          const taxCodes = new Set<string>();
 
           selectedQuotation.items?.forEach((item: any) => {
             const rate = item.unitPrice || 0;
             const qty = item.quantity || 0;
             const discPct = item.discountPercent || 0;
+            const rowTaxRate = taxCodeToRate((item as any).taxCode);
+            const allIncRate = Math.round(rate * (1 + rowTaxRate) * 100) / 100;
             const rowGrossBase = rate * qty;
-            const rowDiscount = item.discountAmount || ((rowGrossBase * discPct) / 100);
-            const rowTax = item.taxAmount || 0;
-            const rowGross = isTaxCustomer ? rowGrossBase : rowGrossBase + rowTax;
+            const rowDiscount = isTaxCustomer
+              ? (item.discountAmount || ((rowGrossBase * discPct) / 100))
+              : (allIncRate * qty * discPct) / 100;
+            const rowNet = rowGrossBase - (rowGrossBase * discPct) / 100;
+            const rowTax = isTaxCustomer ? rowNet * rowTaxRate : 0;
+            const rowGross = isTaxCustomer ? rowGrossBase : allIncRate * qty;
 
             totalGross += rowGross;
             totalDiscount += rowDiscount;
-            totalTax += isTaxCustomer ? rowTax : 0;
+            totalTax += rowTax;
+            if (isTaxCustomer && (item as any).taxCode) taxCodes.add((item as any).taxCode);
           });
 
-          const finalAmount = isTaxCustomer ? totalGross - totalDiscount + totalTax : totalGross - totalDiscount;
+          const netAmount = totalGross - totalDiscount;
+          const finalAmount = isTaxCustomer ? netAmount + totalTax : netAmount;
 
           return (
             <div className="space-y-5 pb-6">
@@ -538,11 +557,11 @@ export default function CustomerQuotations() {
                       {selectedQuotation.items?.map((item: any) => {
                         const rate = item.unitPrice || 0;
                         const qty = item.quantity || 0;
-                        const rowTax = item.taxAmount || 0;
-                        const taxPerUnit = qty ? rowTax / qty : 0;
-                        const displayRate = isTaxCustomer ? rate : rate + taxPerUnit;
+                        const rowTaxRate = taxCodeToRate((item as any).taxCode);
+                        const allIncRate = Math.round(rate * (1 + rowTaxRate) * 100) / 100;
+                        const displayRate = isTaxCustomer ? rate : allIncRate;
                         const rowGrossBase = rate * qty;
-                        const rowGross = isTaxCustomer ? rowGrossBase : rowGrossBase + rowTax;
+                        const rowGross = isTaxCustomer ? rowGrossBase : allIncRate * qty;
 
                         return (
                           <tr key={item.id}>
@@ -561,21 +580,27 @@ export default function CustomerQuotations() {
 
               <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-3 shadow-sm">
                 <div className="flex justify-between text-sm">
-                  <span className="font-bold text-slate-500 uppercase tracking-wider text-xs">Total Gross</span>
+                  <span className="font-bold text-slate-500 uppercase tracking-wider text-xs">Gross Amount</span>
                   <span className="font-bold text-slate-900">{formatCurrency(totalGross)}</span>
                 </div>
-                {isTaxCustomer && (
-                  <div className="flex justify-between text-sm">
-                    <span className="font-bold text-slate-500 uppercase tracking-wider text-xs">Total Tax</span>
-                    <span className="font-bold text-slate-900">{formatCurrency(totalTax)}</span>
-                  </div>
-                )}
                 <div className="flex justify-between text-sm pb-3 border-b border-slate-100">
-                  <span className="font-bold text-slate-500 uppercase tracking-wider text-xs">Total Discount</span>
-                  <span className="font-bold text-emerald-600">{formatCurrency(totalDiscount)}</span>
+                  <span className="font-bold text-orange-500 uppercase tracking-wider text-xs">Discount Amount</span>
+                  <span className="font-bold text-orange-500">-{formatCurrency(totalDiscount)}</span>
                 </div>
+                {isTaxCustomer && (
+                  <>
+                    <div className="flex justify-between text-sm">
+                      <span className="font-bold text-slate-500 uppercase tracking-wider text-xs">Net Amount</span>
+                      <span className="font-bold text-slate-900">{formatCurrency(netAmount)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm pb-3 border-b border-slate-100">
+                      <span className="font-bold text-slate-500 uppercase tracking-wider text-xs">Total Tax Amount</span>
+                      <span className="font-bold text-slate-900">{formatCurrency(totalTax)}</span>
+                    </div>
+                  </>
+                )}
                 <div className="flex justify-between items-center pt-1">
-                  <span className="font-bold text-slate-800 uppercase tracking-wider text-sm">Total Value</span>
+                  <span className="font-bold text-slate-800 uppercase tracking-wider text-sm">Total Invoice Value</span>
                   <span className="text-xl font-bold text-orange-600">{formatCurrency(finalAmount)}</span>
                 </div>
               </div>

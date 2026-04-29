@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { repGetQuotations } from '../../services/api/quotationApi';
 import { customersApi } from '../../services/api/customersApi';
 import { formatCurrency, formatRelative } from '../../utils/formatters';
+import { taxCodeToRate } from '../../utils/calculations';
 import { downloadQuotationPdf } from '../../utils/quotationPdf';
 import { useNavigate } from 'react-router-dom';
 import { FileText, Plus, Download } from 'lucide-react';
@@ -184,12 +185,12 @@ export default function RepQuotations() {
                                         const rate = item.unitPrice || 0;
                                         const qty = item.quantity || 0;
                                         const discPct = item.discountPercent || 0;
-                                        const discAmt = (rate * qty * discPct) / 100;
-                                        const taxAmt = item.taxAmount || 0;
                                         const isTax = getIsTax(q);
-                                        const taxPerUnit = qty ? taxAmt / qty : 0;
-                                        const displayRate = isTax === false ? rate + taxPerUnit : rate;
-                                        const lineGross = isTax === false ? (rate * qty + taxAmt) : rate * qty;
+                                        const lineTaxRate = taxCodeToRate(item.taxCode);
+                                        const allIncRate = Math.round(rate * (1 + lineTaxRate) * 100) / 100;
+                                        const displayRate = isTax === false ? allIncRate : rate;
+                                        const lineGross = isTax === false ? allIncRate * qty : rate * qty;
+                                        const discAmt = isTax === false ? (allIncRate * qty * discPct) / 100 : (rate * qty * discPct) / 100;
                                         return (
                                           <tr key={item.id}>
                                             <td className="px-3 py-2.5 text-center text-slate-400">{idx + 1}</td>
@@ -202,7 +203,7 @@ export default function RepQuotations() {
                                             <td className="px-3 py-2.5 text-right text-slate-700">{discPct ? `${discPct}%` : '-'}</td>
                                             <td className="px-3 py-2.5 text-right text-slate-700">{discAmt ? formatCurrency(discAmt) : '-'}</td>
                                             {isTax !== false && <td className="px-3 py-2.5 text-center text-slate-700">{item.taxCode || '—'}</td>}
-                                            <td className="px-3 py-2.5 text-right font-semibold text-slate-900">{formatCurrency(item.lineTotal ?? lineGross)}</td>
+                                            <td className="px-3 py-2.5 text-right font-semibold text-slate-900">{formatCurrency(lineGross)}</td>
                                             <td className="px-3 py-2.5 text-right text-slate-700">
                                               {item.expectedPrice != null ? formatCurrency(item.expectedPrice) : '-'}
                                             </td>
@@ -341,12 +342,12 @@ export default function RepQuotations() {
                         const rate = item.unitPrice || 0;
                         const qty = item.quantity || 0;
                         const discPct = item.discountPercent || 0;
-                        const discAmt = (rate * qty * discPct) / 100;
-                        const taxAmt = item.taxAmount || 0;
                         const isTax = getIsTax(selected);
-                        const taxPerUnit = qty ? taxAmt / qty : 0;
-                        const displayRate = isTax === false ? rate + taxPerUnit : rate;
-                        const lineGross = isTax === false ? (rate * qty + taxAmt) : rate * qty;
+                        const lineTaxRate = taxCodeToRate(item.taxCode);
+                        const allIncRate = Math.round(rate * (1 + lineTaxRate) * 100) / 100;
+                        const displayRate = isTax === false ? allIncRate : rate;
+                        const lineGross = isTax === false ? allIncRate * qty : rate * qty;
+                        const discAmt = isTax === false ? (allIncRate * qty * discPct) / 100 : (rate * qty * discPct) / 100;
                         return (
                           <tr key={item.id}>
                             <td className="px-3 py-2.5 text-center text-slate-400">{idx + 1}</td>
@@ -359,7 +360,7 @@ export default function RepQuotations() {
                             <td className="px-3 py-2.5 text-right text-slate-700">{discPct ? `${discPct}%` : '-'}</td>
                             <td className="px-3 py-2.5 text-right text-slate-700">{discAmt ? formatCurrency(discAmt) : '-'}</td>
                             {isTax !== false && <td className="px-3 py-2.5 text-center text-slate-700">{item.taxCode || '—'}</td>}
-                            <td className="px-3 py-2.5 text-right font-semibold text-slate-900">{formatCurrency(item.lineTotal ?? lineGross)}</td>
+                            <td className="px-3 py-2.5 text-right font-semibold text-slate-900">{formatCurrency(lineGross)}</td>
                             <td className="px-3 py-2.5 text-right text-slate-700">
                               {item.expectedPrice != null ? formatCurrency(item.expectedPrice) : '-'}
                             </td>
