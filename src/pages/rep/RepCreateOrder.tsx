@@ -540,9 +540,11 @@ export default function RepCreateOrder() {
                 {draft.items.map(item => {
                   const rate = item.price || 0, qty = item.quantity || 0;
                   const lineTaxRate = taxCodeToRate(item.taxCode);
-                  const displayRate = isNonTaxCustomer ? rate + rate * lineTaxRate : rate;
                   const baseAmount = rate * qty;
-                  const grossAmount = isNonTaxCustomer ? baseAmount * (1 + lineTaxRate) : baseAmount;
+                  const allIncRate = item.allIncPrice || Math.round(rate * (1 + lineTaxRate) * 100) / 100;
+                  const displayRate = isNonTaxCustomer ? allIncRate : rate;
+                  const grossAmount = isNonTaxCustomer ? allIncRate * qty : baseAmount;
+                  const taxAmt = isNonTaxCustomer ? 0 : (baseAmount - baseAmount * ((item.discountPercent || 0) / 100)) * lineTaxRate;
                   return (
                     <div key={item.productId} className="flex items-start gap-3 p-3 bg-slate-50 rounded-xl">
                       <div className="flex-1 min-w-0">
