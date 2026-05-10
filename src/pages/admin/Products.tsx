@@ -855,12 +855,12 @@ export default function AdminProducts() {
                   <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
                     <span className="text-xs font-medium text-slate-500">Price range</span>
                     <div className="flex items-center gap-1.5 flex-1">
-                      <input type="number" placeholder="Min LKR" value={minPriceFilter}
+                      <input type="number" placeholder="Min" value={minPriceFilter}
                         onChange={e => { setMinPriceFilter(e.target.value); setPage(1); }}
                         className="flex-1 min-w-0 px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700 placeholder-slate-400 outline-none focus:ring-2 focus:ring-indigo-500/15 focus:border-indigo-300 transition"
                       />
                       <span className="text-slate-300 text-xs shrink-0">–</span>
-                      <input type="number" placeholder="Max LKR" value={maxPriceFilter}
+                      <input type="number" placeholder="Max" value={maxPriceFilter}
                         onChange={e => { setMaxPriceFilter(e.target.value); setPage(1); }}
                         className="flex-1 min-w-0 px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700 placeholder-slate-400 outline-none focus:ring-2 focus:ring-indigo-500/15 focus:border-indigo-300 transition"
                       />
@@ -872,7 +872,7 @@ export default function AdminProducts() {
                     </div>
                     {(minPriceFilter || maxPriceFilter) && (
                       <span className="text-xs text-indigo-600 font-medium">
-                        {minPriceFilter && `LKR ${minPriceFilter}`}{minPriceFilter && maxPriceFilter && ' – '}{maxPriceFilter && `LKR ${maxPriceFilter}`}
+                        {minPriceFilter && minPriceFilter}{minPriceFilter && maxPriceFilter && ' – '}{maxPriceFilter && maxPriceFilter}
                       </span>
                     )}
                   </div>
@@ -1102,7 +1102,7 @@ export default function AdminProducts() {
                   {/* MRP */}
                   <div className="shrink-0 text-right">
                     <p className="text-sm font-bold text-slate-900 tabular-nums">
-                      {formatCurrency(product.mrp ?? product.sellingPrice)}
+                      {formatCurrency(product.mrp ?? product.sellingPrice).replace('LKR', '').trim()}
                     </p>
                     <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide mt-0.5">MRP</p>
                   </div>
@@ -1242,14 +1242,14 @@ export default function AdminProducts() {
                         <td className="px-5 py-3.5 text-xs font-semibold text-slate-600 border border-slate-200">{product.sku}</td>
                         <td className="px-5 py-3.5 text-xs font-semibold text-slate-600 border border-slate-200"><p className="truncate max-w-xs">{product.name}</p></td>
                         <td className="px-5 py-3.5 text-xs font-semibold text-slate-600 border border-slate-200">{(product as any).uom || <span className="text-slate-300">—</span>}</td>
-                        <td className="px-5 py-3.5 text-right text-xs font-semibold text-slate-600 border border-slate-200">{formatCurrency(product.sellingPrice)}</td>
+                        <td className="px-5 py-3.5 text-right text-xs font-semibold text-slate-600 border border-slate-200">{formatCurrency(product.sellingPrice).replace('LKR', '').trim()}</td>
                         <td className="px-5 py-3.5 text-center text-xs font-semibold text-slate-600 border border-slate-200">
                           {product.taxCode
                             ? <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-bold ${product.taxCode.startsWith('V') ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>{product.taxCode}</span>
                             : <span className="text-slate-300">—</span>}
                         </td>
-                        <td className="px-5 py-3.5 text-right text-xs font-semibold text-slate-600 border border-slate-200">{product.totalAmount != null ? formatCurrency(product.totalAmount) : <span className="text-slate-300">—</span>}</td>
-                        <td className="px-5 py-3.5 text-right text-xs font-semibold text-slate-600 border border-slate-200">{product.mrp != null ? formatCurrency(product.mrp) : <span className="text-slate-300">—</span>}</td>
+                        <td className="px-5 py-3.5 text-right text-xs font-semibold text-slate-600 border border-slate-200">{product.totalAmount != null ? formatCurrency(product.totalAmount).replace('LKR', '').trim() : <span className="text-slate-300">—</span>}</td>
+                        <td className="px-5 py-3.5 text-right text-xs font-semibold text-slate-600 border border-slate-200">{product.mrp != null ? formatCurrency(product.mrp).replace('LKR', '').trim() : <span className="text-slate-300">—</span>}</td>
                       </tr>
                     );
                   })}
