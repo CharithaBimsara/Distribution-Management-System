@@ -3,6 +3,9 @@ import { format, formatDistanceToNow } from 'date-fns';
 export const formatCurrency = (amount: number) =>
   new Intl.NumberFormat('en-LK', { style: 'currency', currency: 'LKR', minimumFractionDigits: 2 }).format(amount);
 
+export const formatNumber = (amount: number) =>
+  new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
+
 function toUtcDate(d: string | Date) {
   if (typeof d === 'string') {
     // append Z if no timezone present so that JS treats it as UTC

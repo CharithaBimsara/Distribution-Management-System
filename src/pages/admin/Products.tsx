@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { productsApi } from '../../services/api/productsApi';
 import * as XLSX from 'xlsx';
-import { formatCurrency } from '../../utils/formatters';
+import { formatCurrency, formatNumber } from '../../utils/formatters';
 import { Plus, Search, Trash2, X, Layers, Package, Check, SlidersHorizontal, FileSpreadsheet, FileText, Upload, Info, ArrowUpDown, ChevronDown, Zap } from 'lucide-react';
 import type { Product, Category, CreateProductRequest } from '../../types/product.types';
 import toast from 'react-hot-toast';
@@ -1102,7 +1102,7 @@ export default function AdminProducts() {
                   {/* MRP */}
                   <div className="shrink-0 text-right">
                     <p className="text-sm font-bold text-slate-900 tabular-nums">
-                      {formatCurrency(product.mrp ?? product.sellingPrice).replace('LKR', '').trim()}
+                      {formatNumber(product.mrp ?? product.sellingPrice)}
                     </p>
                     <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide mt-0.5">MRP</p>
                   </div>
@@ -1152,7 +1152,7 @@ export default function AdminProducts() {
                     <th onClick={() => handleSort('name')} className="text-left px-5 py-3.5 font-bold text-slate-700 text-xs uppercase tracking-wider cursor-pointer hover:text-indigo-600 select-none whitespace-nowrap border-r border-slate-200">
                       Sales Description<SortIcon field="name" />
                     </th>
-                    <th onClick={() => handleSort('uom')} className="text-left px-5 py-3.5 font-bold text-slate-700 text-xs uppercase tracking-wider cursor-pointer hover:text-indigo-600 select-none whitespace-nowrap border-r border-slate-200">
+                    <th onClick={() => handleSort('uom')} className="text-right px-5 py-3.5 font-bold text-slate-700 text-xs uppercase tracking-wider cursor-pointer hover:text-indigo-600 select-none whitespace-nowrap border-r border-slate-200">
                       UOM<SortIcon field="uom" />
                     </th>
                     <th onClick={() => handleSort('sellingPrice')} className="text-right px-5 py-3.5 font-bold text-slate-700 text-xs uppercase tracking-wider cursor-pointer hover:text-indigo-600 select-none whitespace-nowrap border-r border-slate-200">
@@ -1241,15 +1241,15 @@ export default function AdminProducts() {
                         )}
                         <td className="px-5 py-3.5 text-xs font-semibold text-slate-600 border border-slate-200">{product.sku}</td>
                         <td className="px-5 py-3.5 text-xs font-semibold text-slate-600 border border-slate-200"><p className="truncate max-w-xs">{product.name}</p></td>
-                        <td className="px-5 py-3.5 text-xs font-semibold text-slate-600 border border-slate-200">{(product as any).uom || <span className="text-slate-300">—</span>}</td>
-                        <td className="px-5 py-3.5 text-right text-xs font-semibold text-slate-600 border border-slate-200">{formatCurrency(product.sellingPrice).replace('LKR', '').trim()}</td>
+                        <td className="px-5 py-3.5 text-right text-xs font-semibold text-slate-600 border border-slate-200">{(product as any).uom || <span className="text-slate-300">—</span>}</td>
+                        <td className="px-5 py-3.5 text-right text-xs font-semibold text-slate-600 border border-slate-200">{formatNumber(product.sellingPrice)}</td>
                         <td className="px-5 py-3.5 text-center text-xs font-semibold text-slate-600 border border-slate-200">
                           {product.taxCode
                             ? <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-bold ${product.taxCode.startsWith('V') ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>{product.taxCode}</span>
                             : <span className="text-slate-300">—</span>}
                         </td>
-                        <td className="px-5 py-3.5 text-right text-xs font-semibold text-slate-600 border border-slate-200">{product.totalAmount != null ? formatCurrency(product.totalAmount).replace('LKR', '').trim() : <span className="text-slate-300">—</span>}</td>
-                        <td className="px-5 py-3.5 text-right text-xs font-semibold text-slate-600 border border-slate-200">{product.mrp != null ? formatCurrency(product.mrp).replace('LKR', '').trim() : <span className="text-slate-300">—</span>}</td>
+                        <td className="px-5 py-3.5 text-right text-xs font-semibold text-slate-600 border border-slate-200">{product.totalAmount != null ? formatNumber(product.totalAmount) : <span className="text-slate-300">—</span>}</td>
+                        <td className="px-5 py-3.5 text-right text-xs font-semibold text-slate-600 border border-slate-200">{product.mrp != null ? formatNumber(product.mrp) : <span className="text-slate-300">—</span>}</td>
                       </tr>
                     );
                   })}
