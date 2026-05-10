@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { productsApi } from '../../services/api/productsApi';
+import { systemConfigApi } from '../../services/api/systemConfigApi';
 import * as XLSX from 'xlsx';
 import { formatCurrency, formatNumber } from '../../utils/formatters';
 import { Plus, Search, Trash2, X, Layers, Package, Check, SlidersHorizontal, FileSpreadsheet, FileText, Upload, Info, ArrowUpDown, ChevronDown, Zap } from 'lucide-react';
@@ -327,10 +328,8 @@ export default function AdminProducts() {
     }
 
     const chunkSize = 100;
-    const totalChunks = Math.ceil(items.length / chunkSize);
     let processed = 0;
     setImportProgress({ active: true, total: items.length, processed: 0 });
-    toast(`Parsed ${items.length} products. Uploading in ${totalChunks} chunk(s).`);
 
     const postChunkWithRetry = async (chunk: CreateProductRequest[], retries = 2) => {
       let lastError: unknown;
@@ -413,101 +412,65 @@ export default function AdminProducts() {
       if (!data) return;
       const workbook = XLSX.read(data, { type: 'binary' });
 
-      // Process all sheets, detect section-header rows for auto-category
+      // Exact columns: GroupName | Item | Sales Description | UOM | Price | SalesTax | All Inc Price | MRP
+      // QOH and all other columns are ignored.
       const items: CreateProductRequest[] = [];
 
       workbook.SheetNames.forEach(sheetName => {
         const ws = workbook.Sheets[sheetName];
         const rows: any[] = XLSX.utils.sheet_to_json(ws, { defval: '' }) as any[];
 
-        let currentCategory = '';
-
         rows.forEach(r => {
-          // Detect category header rows: 
-          // In the client's sheet, category rows have text in 'Item' column (col A)
-          // but Sales Description (col B) is empty and Price is empty.
-          const rawItem = (r['Item'] || r['SKU'] || r['Item Code'] || '').toString().trim();
-          const name = (
-            r['Sales Description'] || r['Description'] || r['Name'] || r['Item Description'] || ''
-          ).toString().trim();
+          const sku = (r['Item'] ?? '').toString().trim();
+          const name = (r['Sales Description'] ?? '').toString().trim();
 
-          const priceVal = r['Price'] ?? r['Rate'] ?? r['Selling Price'] ?? '';
-          const isCategoryRow = rawItem && !name && (priceVal === '' || priceVal === 0 || priceVal === '0');
-
-          if (isCategoryRow) {
-            currentCategory = rawItem;
-            return; // skip — this is a section header row
-          }
-
-          // For normal product rows, sku comes from Item col, name from Sales Description
-          const sku = rawItem;
-
-          // Skip rows that have no SKU and no name
+          // Skip section-header rows, subtotal rows, and blank rows
           if (!sku || !name) return;
 
-          // Resolve category from explicit column or from auto-detected section header
-          const rawCategory: string = (
-            r['Category'] || r['Category Name'] || r['CategoryName'] || currentCategory || ''
-          ).toString().trim();
-          let mainName: string = (r['Main Category'] || r['MainCategory'] || '').toString().trim();
-          let subName: string = (r['Subcategory'] || r['Sub Category'] || '').toString().trim();
-
-          if (!mainName && !subName && rawCategory) {
-            if (rawCategory.includes('>')) {
-              const parts = rawCategory.split('>').map((p: string) => p.trim()).filter(Boolean);
-              mainName = parts[0] || '';
-              subName = parts.slice(1).join(' > ').trim();
-            } else if (rawCategory.includes('/')) {
-              const parts = rawCategory.split('/').map((p: string) => p.trim()).filter(Boolean);
-              mainName = parts[0] || '';
-              subName = parts.slice(1).join('/').trim();
-            } else if (rawCategory.includes(' - ')) {
-              // Client format: "Bakery Ingredient - Baking Powder"
-              const idx = rawCategory.indexOf(' - ');
-              mainName = rawCategory.substring(0, idx).trim();
-              subName = rawCategory.substring(idx + 3).trim();
+          // Parse category from GroupName: "Main - Sub" format
+          const groupName = (r['GroupName'] ?? '').toString().trim();
+          let mainName = '';
+          let subName = '';
+          if (groupName) {
+            const dashIdx = groupName.search(/\s*-\s*/);
+            if (dashIdx !== -1) {
+              mainName = groupName.substring(0, dashIdx).trim();
+              subName = groupName.substring(dashIdx).replace(/^\s*-\s*/, '').trim();
             } else {
-              mainName = rawCategory;
-              subName = '';
+              mainName = groupName;
             }
           }
 
-          const normalizedMain = mainName.trim();
-          const normalizedSub = subName.trim();
-
+          // Match against existing categories
           let cat: Category | undefined;
-          if (normalizedSub && categories) {
+          if (subName && categories) {
             for (const c of categories) {
-              const sc = (c.subCategories || []).find((x: Category) => x.name.toLowerCase() === normalizedSub.toLowerCase());
+              const sc = (c.subCategories || []).find((x: Category) => x.name.toLowerCase() === subName.toLowerCase());
               if (sc) { cat = sc; break; }
             }
           }
-          if (!cat && normalizedMain && categories) {
-            cat = categories.find(c => c.name.toLowerCase() === normalizedMain.toLowerCase());
+          if (!cat && mainName && categories) {
+            cat = categories.find(c => c.name.toLowerCase() === mainName.toLowerCase());
           }
 
-          // Parse All Inc Price — supports both column names from client sheet
-          const allIncRaw = r['All Inc Price'] ?? r['All Inclusive Price'] ?? r['Amount'] ?? '';
-          const taxCodeRaw = r['SalesTax'] || r['Sales Tax'] || r['Tax'] || r['Tax Code'] || '';
-          const qtyRaw = r['QOH'] ?? r['Qty'] ?? r['Quantity'] ?? 0;
+          const priceRaw   = (r['Price'] ?? '').toString().trim();
+          const allIncRaw  = (r['All Inc Price'] ?? '').toString().trim();
+          const mrpRaw     = (r['MRP'] ?? '').toString().trim();
+          const taxCodeRaw = (r['SalesTax'] ?? '').toString().trim();
+          const uomRaw     = (r['UOM'] ?? '').toString().trim();
 
           items.push({
             name,
             sku,
-            barcode: r['Barcode'] || undefined,
             categoryId: cat?.id,
-            mainCategory: normalizedMain || undefined,
-            subCategory: normalizedSub || undefined,
-            brand: r['Brand'] || undefined,
-            sellingPrice: parseFloat(r['Price'] ?? r['Rate'] ?? r['Selling Price'] ?? 0) || 0,
-            mrp: (r['MRP'] || r['M R P']) ? parseFloat(r['MRP'] ?? r['M R P'] ?? 0) : undefined,
-            quantity: parseInt(qtyRaw.toString(), 10) || 0,
-            uom: r['UOM'] || r['Unit'] || r['U.O.M'] || undefined,
-            discountPercent: parsePercentValue(r['Disc%'] ?? r['Disc %'] ?? r['Discount%'] ?? r['Discount %']),
-            discountAmount: (r['Disc Amt'] !== null && r['Disc Amt'] !== undefined && r['Disc Amt'] !== '') ? parseFloat(r['Disc Amt']) : undefined,
-            taxCode: taxCodeRaw.toString().trim() || undefined,
-            taxAmount: (r['Tax Amt'] !== null && r['Tax Amt'] !== undefined && r['Tax Amt'] !== '') ? parseFloat(r['Tax Amt']) : undefined,
-            totalAmount: (allIncRaw !== null && allIncRaw !== undefined && allIncRaw !== '') ? parseFloat(allIncRaw) : undefined,
+            mainCategory: mainName || undefined,
+            subCategory: subName || undefined,
+            sellingPrice: parseFloat(priceRaw) || 0,
+            mrp: mrpRaw !== '' ? (parseFloat(mrpRaw) || undefined) : undefined,
+            quantity: 0,
+            uom: uomRaw || undefined,
+            taxCode: taxCodeRaw || undefined,
+            totalAmount: allIncRaw !== '' ? (parseFloat(allIncRaw) || undefined) : undefined,
           } as CreateProductRequest);
         });
       });
@@ -528,7 +491,7 @@ export default function AdminProducts() {
   // export helper (defined before return)
   const exportProducts = async (format: 'excel' | 'pdf', onlySelected = false) => {
     try {
-      // if onlySelected is true and we have IDs, export from cached data rather than refetch
+      // Fetch items
       let items: Product[] = [];
       if (onlySelected && selectedIds.size > 0 && data?.items) {
         items = data.items.filter(p => selectedIds.has(p.id));
@@ -537,35 +500,212 @@ export default function AdminProducts() {
         items = resp.data.data.items;
       }
 
+      // Fetch company config (for company name only; addresses are fixed per business)
+      const cfgResp = await systemConfigApi.getConfig();
+      const cfg = cfgResp.data.data || cfgResp.data;
+      const companyName = cfg.companyName || 'Janasiri';
+
+      // Fixed company details
+      const registeredOffice = 'No. 205, Wattarantenna Passage, Kandy.';
+      const warehouseCentral = 'No. 02, Mawilmada Road, Kandy.';
+      const warehouseWest    = 'No. 41A, Gnanathilaka Road, Mount Lavinia.';
+      const contactVat       = '+94 81 495 0206  |  TP / Hotline  |  VAT: 114608394-7000';
+
+      const exportDate = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+
+      // Build categoryId → full "Main - Sub" GroupName from the loaded categories tree
+      const catMap = new Map<string, string>();
+      if (categories) {
+        for (const main of categories as Category[]) {
+          if (!main.subCategories?.length) {
+            catMap.set(main.id, main.name);
+          } else {
+            for (const sub of main.subCategories) {
+              catMap.set(sub.id, `${main.name} - ${sub.name}`);
+            }
+          }
+        }
+      }
+
+      // Group items — use full GroupName; sort products A-Z by name within each group
+      const grouped = new Map<string, Product[]>();
+      for (const p of items) {
+        const group = (p.categoryId && catMap.get(p.categoryId)) || p.categoryName || 'Uncategorized';
+        if (!grouped.has(group)) grouped.set(group, []);
+        grouped.get(group)!.push(p);
+      }
+      // Sort groups A-Z, products A-Z within each group
+      const sortedGrouped = new Map(
+        [...grouped.entries()]
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([key, prods]) => [key, prods.slice().sort((a, b) => a.name.localeCompare(b.name))] as [string, Product[]])
+      );
+
       if (format === 'excel') {
         const wb = XLSX.utils.book_new();
-        const dataForSheet = items.map(p => ({
-          'Item Code': p.sku,
-          'Sales Description': p.name,
-          'UOM': p.uom ?? '',
-          'Price': p.sellingPrice,
-          'Sales Tax': p.taxCode || '',
-          'All Inclusive Price': p.totalAmount ?? '',
-          'MRP': p.mrp ?? '',
-          'Qty': p.quantity,
-          'Disc%': p.discountPercent ?? '',
-          'Disc Amt': p.discountAmount ?? '',
-          'Tax Amt': p.taxAmount ?? '',
-        }));
-        const ws = XLSX.utils.json_to_sheet(dataForSheet);
-        XLSX.utils.book_append_sheet(wb, ws, 'Products');
-        XLSX.writeFile(wb, 'products-export.xlsx');
+
+        // Build rows array manually: company header + data
+        const aoa: (string | number)[][] = [];
+
+        // Company header block
+        aoa.push([companyName]);
+        aoa.push([`Registered Office: ${registeredOffice}   |   Warehouse Central: ${warehouseCentral}   |   Warehouse West: ${warehouseWest}`]);
+        aoa.push([contactVat]);
+        aoa.push([`Product Price List  —  ${exportDate}`]);
+        aoa.push([]);  // blank spacer
+
+        // Column headers — exact import format
+        aoa.push(['GroupName', 'Item', 'Sales Description', 'UOM', 'Price', 'SalesTax', 'All Inc Price', 'MRP']);
+
+        // Track which row indices (0-based) are group header rows → bold
+        const boldRows = new Set<number>();
+
+        // Data rows grouped by category
+        let isFirst = true;
+        for (const [group, products] of sortedGrouped) {
+          // Blank spacer between groups (not before the first)
+          if (!isFirst) aoa.push([]);
+          isFirst = false;
+
+          // Category section header row — bold
+          boldRows.add(aoa.length);
+          aoa.push([group, '', '', '', '', '', '', '']);
+
+          for (const p of products) {
+            aoa.push([
+              group,
+              p.sku,
+              p.name,
+              p.uom ?? '',
+              p.sellingPrice,
+              p.taxCode || '',
+              p.totalAmount ?? '',
+              p.mrp ?? '',
+            ]);
+          }
+        }
+
+        const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+        // Apply bold to group header rows across all 8 columns
+        const colLetters = ['A','B','C','D','E','F','G','H'];
+        boldRows.forEach(rowIdx => {
+          colLetters.forEach(col => {
+            const addr = `${col}${rowIdx + 1}`;
+            if (!ws[addr]) ws[addr] = { t: 's', v: '' };
+            ws[addr].s = { font: { bold: true } };
+          });
+        });
+
+        // Column widths
+        ws['!cols'] = [
+          { wch: 30 }, // GroupName
+          { wch: 12 }, // Item
+          { wch: 40 }, // Sales Description
+          { wch: 10 }, // UOM
+          { wch: 12 }, // Price
+          { wch: 10 }, // SalesTax
+          { wch: 14 }, // All Inc Price
+          { wch: 12 }, // MRP
+        ];
+
+        XLSX.utils.book_append_sheet(wb, ws, 'Price List');
+        const filename = `${companyName.replace(/\s+/g, '_')}_Price_List_${exportDate.replace(/\s/g, '_')}.xlsx`;
+        const wbOut = XLSX.write(wb, { bookType: 'xlsx', type: 'array', cellStyles: true });
+        const blob = new Blob([wbOut], { type: 'application/octet-stream' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
+        URL.revokeObjectURL(url);
+
       } else {
-        const jsPDFModule = await import('jspdf');
-        const autoTable = (await import('jspdf-autotable')).default;
-        const doc = new jsPDFModule.jsPDF();
-        const cols = ['Item Code','Sales Description','UOM','Price','Sales Tax','All Inclusive Price','MRP'];
-        const rows = items.map(p => [
-          p.sku, p.name, p.uom ?? '', p.sellingPrice, p.taxCode || '', p.totalAmount ?? '', p.mrp ?? ''
-        ]);
-        // use explicit plugin invocation
-        autoTable(doc, { head: [cols], body: rows, startY: 20, styles: { fontSize: 8 } });
-        doc.save('products-export.pdf');
+        const { jsPDF } = await import('jspdf');
+        const autoTable   = (await import('jspdf-autotable')).default;
+
+        const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+        const pageW = doc.internal.pageSize.getWidth();
+        const pageH = doc.internal.pageSize.getHeight();
+        const marginX = 14;
+
+        // ── Header block ────────────────────────────────────────────────
+        // Taller dark header bar to fit multi-line details
+        doc.setFillColor(30, 41, 59);   // slate-800
+        doc.rect(0, 0, pageW, 36, 'F');
+
+        // Company name
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(15);
+        doc.setTextColor(255, 255, 255);
+        doc.text(companyName, marginX, 10);
+
+        // Address line 1 & 2
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7.5);
+        doc.setTextColor(203, 213, 225);  // slate-300
+        doc.text(`Registered Office: ${registeredOffice}   |   Warehouse Central: ${warehouseCentral}`, marginX, 18);
+        doc.text(`Warehouse West: ${warehouseWest}`, marginX, 23);
+        doc.text(contactVat, marginX, 28);
+
+        // Document title on right
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.setTextColor(148, 163, 184);  // slate-400
+        doc.text('PRODUCT PRICE LIST', pageW - marginX, 10, { align: 'right' });
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(100, 116, 139);
+        doc.text(`Generated: ${exportDate}    Total: ${items.length} products`, pageW - marginX, 32, { align: 'right' });
+
+        // ── Table ────────────────────────────────────────────────────────
+        const head = [['GroupName', 'Item', 'Sales Description', 'UOM', 'Price', 'SalesTax', 'All Inc Price', 'MRP']];
+
+        const body: (string | number)[][] = [];
+        for (const [group, products] of sortedGrouped) {
+          // Section header row
+          body.push([{ content: group, colSpan: 8, styles: { fontStyle: 'bold', fillColor: [241, 245, 249], textColor: [30, 41, 59], fontSize: 8 } } as any]);
+          for (const p of products) {
+            body.push([
+              group,
+              p.sku,
+              p.name,
+              p.uom ?? '',
+              p.sellingPrice ? p.sellingPrice.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '',
+              p.taxCode || '',
+              p.totalAmount != null ? p.totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '',
+              p.mrp != null ? p.mrp.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '',
+            ]);
+          }
+        }
+
+        autoTable(doc, {
+          head,
+          body,
+          startY: 40,
+          margin: { left: marginX, right: marginX },
+          styles: { fontSize: 7.5, cellPadding: 2.2, lineColor: [226, 232, 240], lineWidth: 0.2 },
+          headStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold', fontSize: 8, halign: 'center' },
+          alternateRowStyles: { fillColor: [248, 250, 252] },
+          columnStyles: {
+            0: { cellWidth: 58 },
+            1: { cellWidth: 22, halign: 'center' },
+            2: { cellWidth: 'auto' },
+            3: { cellWidth: 18, halign: 'center' },
+            4: { cellWidth: 22, halign: 'right' },
+            5: { cellWidth: 18, halign: 'center' },
+            6: { cellWidth: 26, halign: 'right' },
+            7: { cellWidth: 22, halign: 'right' },
+          },
+          didDrawPage: (hookData: any) => {
+            // Footer on every page
+            const pageNum = hookData.pageNumber;
+            const totalPages = (doc as any).internal.getNumberOfPages();
+            doc.setFontSize(7);
+            doc.setTextColor(148, 163, 184);
+            doc.text(`${companyName}  |  Product Price List  |  ${exportDate}`, marginX, pageH - 6);
+            doc.text(`Page ${pageNum} of ${totalPages}`, pageW - marginX, pageH - 6, { align: 'right' });
+          },
+        });
+
+        doc.save(`${companyName.replace(/\s+/g, '_')}_Price_List_${exportDate.replace(/\s/g, '_')}.pdf`);
       }
     } catch (err) {
       console.error('export failed', err);
@@ -1265,8 +1405,8 @@ export default function AdminProducts() {
           </>)}
         </div>
 
-      {isBusy && (
-        <div className="fixed inset-0 z-[70] flex flex-col items-center" style={{ pointerEvents: 'auto' }}>
+      {isBusy && createPortal(
+        <div className="fixed inset-0 z-[9999] flex flex-col items-center" style={{ pointerEvents: 'auto' }}>
           <div className="absolute inset-0 bg-slate-950/45 backdrop-blur-[2px]" />
           <div
             className="relative mt-16 w-full max-w-md mx-4 rounded-2xl border border-slate-200 bg-white shadow-2xl p-6"
@@ -1279,17 +1419,12 @@ export default function AdminProducts() {
             <p className="text-sm text-slate-500 mt-1 text-center">{busySubtitle}</p>
 
             {importProgress.active && (
-              <>
-                <p className="text-xs text-slate-500 mt-3 text-center">
-                  Total: {importProgress.total} | Imported: {importProgress.processed} | Remaining: {Math.max(importProgress.total - importProgress.processed, 0)}
-                </p>
-                <div className="mt-2 h-2.5 w-full rounded-full bg-slate-200 overflow-hidden">
-                  <div
-                    className="h-full bg-indigo-600 transition-all duration-300"
-                    style={{ width: `${importProgress.total > 0 ? Math.round((importProgress.processed / importProgress.total) * 100) : 0}%` }}
-                  />
-                </div>
-              </>
+              <div className="mt-4 h-2 w-full rounded-full bg-slate-200 overflow-hidden">
+                <div
+                  className="h-full bg-indigo-600 transition-all duration-300"
+                  style={{ width: `${importProgress.total > 0 ? Math.round((importProgress.processed / importProgress.total) * 100) : 0}%` }}
+                />
+              </div>
             )}
 
             <div className="mt-4 flex items-center justify-center gap-1.5">
@@ -1298,7 +1433,8 @@ export default function AdminProducts() {
               <span className="h-2.5 w-2.5 rounded-full bg-indigo-500 animate-bounce" />
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ── Import Modal ─────────────────────────────────────────────────── */}
@@ -1323,58 +1459,6 @@ export default function AdminProducts() {
             </div>
 
             <div className="p-6 space-y-5">
-              {/* Format guide */}
-              <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <Info className="w-4 h-4 text-blue-500 shrink-0" />
-                  <p className="text-xs font-bold text-blue-700 uppercase tracking-wide">Expected Column Headers</p>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-[11px] border-collapse">
-                    <thead>
-                      <tr className="bg-blue-100/80">
-                        {['Item', 'Sales Description', 'UOM', 'QOH', 'Price', 'SalesTax', 'All Inc Price', 'MRP'].map(h => (
-                          <th key={h} className="px-2 py-1.5 text-left font-bold text-blue-800 border border-blue-200 whitespace-nowrap">{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr className="bg-slate-100 font-semibold">
-                        <td colSpan={8} className="px-2 py-1.5 text-slate-700 border border-blue-100 italic text-[11px]">Bakery Ingredient - Baking Powder</td>
-                      </tr>
-                      <tr className="bg-white/70">
-                        <td className="px-2 py-1.5 font-mono text-slate-600 border border-blue-100">DEL010</td>
-                        <td className="px-2 py-1.5 text-slate-700 border border-blue-100">Motha Baking Powder 12×1kg</td>
-                        <td className="px-2 py-1.5 text-slate-600 border border-blue-100">12×1kg</td>
-                        <td className="px-2 py-1.5 text-slate-600 border border-blue-100">7</td>
-                        <td className="px-2 py-1.5 text-slate-600 border border-blue-100">1463.62</td>
-                        <td className="px-2 py-1.5 text-slate-600 border border-blue-100">V18</td>
-                        <td className="px-2 py-1.5 text-slate-600 border border-blue-100">1727.07</td>
-                        <td className="px-2 py-1.5 text-slate-600 border border-blue-100">1990</td>
-                      </tr>
-                      <tr className="bg-white/70">
-                        <td className="px-2 py-1.5 font-mono text-slate-600 border border-blue-100">LCPL244</td>
-                        <td className="px-2 py-1.5 text-slate-700 border border-blue-100">MD Baking Powder 1kg</td>
-                        <td className="px-2 py-1.5 text-slate-600 border border-blue-100">12×1kg</td>
-                        <td className="px-2 py-1.5 text-slate-600 border border-blue-100">0</td>
-                        <td className="px-2 py-1.5 text-slate-600 border border-blue-100">807.09</td>
-                        <td className="px-2 py-1.5 text-slate-600 border border-blue-100">V18</td>
-                        <td className="px-2 py-1.5 text-slate-600 border border-blue-100">952.37</td>
-                        <td className="px-2 py-1.5 text-slate-600 border border-blue-100">1100</td>
-                      </tr>
-                      <tr className="bg-emerald-50/50">
-                        <td colSpan={8} className="px-2 py-1 text-slate-500 italic border border-blue-100 text-[10px]">
-                          ↑ Rows with only Item text and no Price are auto-detected as category headers
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-                <p className="text-[10px] text-blue-600 mt-2">
-                  <strong>Note:</strong> Rows where <em>Item</em> has text but <em>Sales Description</em> and <em>Price</em> are empty are treated as <strong>category headers</strong> automatically — no extra columns needed.
-                </p>
-              </div>
-
               {/* Drop zone */}
               <label
                 htmlFor="import-file-input"

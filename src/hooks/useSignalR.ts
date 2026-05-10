@@ -4,6 +4,15 @@ import { useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { useAuth } from './useAuth';
 
+// Debounce helper — collapses rapid repeated calls into one invocation after `delay` ms
+function debounce<T extends (...args: unknown[]) => void>(fn: T, delay: number): T {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  return ((...args: unknown[]) => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => { timer = null; fn(...args); }, delay);
+  }) as T;
+}
+
 // Use dedicated SIGNALR_URL env var; fall back to deriving from API_URL
 const SIGNALR_BASE = import.meta.env.VITE_SIGNALR_URL
   || (import.meta.env.VITE_API_URL || '/api').replace(/\/api$/, '') + '/hubs';
@@ -153,13 +162,13 @@ export function useSignalR() {
       queryClient.invalidateQueries({ queryKey: ['rep-catalog'] });
     });
 
-    conn.on('ProductsUpdated', () => {
+    conn.on('ProductsUpdated', debounce(() => {
       toast('Product catalog updated by admin', { icon: '🔄', duration: 4000 });
       queryClient.invalidateQueries({ queryKey: ['customer-products'] });
       queryClient.invalidateQueries({ queryKey: ['customer-catalog'] });
       queryClient.invalidateQueries({ queryKey: ['rep-catalog'] });
       queryClient.invalidateQueries({ queryKey: ['admin-products'] });
-    });
+    }, 3000));
 
     startConnection(conn, cancelled, 'NotificationHub');
 
