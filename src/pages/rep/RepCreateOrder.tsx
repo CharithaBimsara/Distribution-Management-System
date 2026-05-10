@@ -410,21 +410,24 @@ export default function RepCreateOrder() {
                 <span>Gross Amount</span>
                 <span className="font-semibold text-slate-700">{formatCurrency(desktopTotalGross)}</span>
               </div>
+              <div className="flex justify-between text-sm text-orange-500 pb-2 border-b border-slate-100">
+                <span>Discount Amount</span>
+                <span className="font-semibold">-{formatCurrency(desktopTotalDiscount)}</span>
+              </div>
               {!isNonTaxCustomer && (
-                <div className="flex justify-between text-sm text-slate-500">
-                  <span>Tax</span>
-                  <span className="font-semibold text-slate-700">+{formatCurrency(desktopTotalTax)}</span>
-                </div>
+                <>
+                  <div className="flex justify-between text-sm text-slate-500">
+                    <span>Net Amount</span>
+                    <span className="font-semibold text-slate-700">{formatCurrency(desktopTotalGross - desktopTotalDiscount)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm text-slate-500 pb-2 border-b border-slate-100">
+                    <span>Total Tax Amount</span>
+                    <span className="font-semibold text-slate-700">+{formatCurrency(desktopTotalTax)}</span>
+                  </div>
+                </>
               )}
-              {desktopTotalDiscount > 0 && (
-                <div className="flex justify-between text-sm text-emerald-600">
-                  <span>Discount</span>
-                  <span className="font-semibold">-{formatCurrency(desktopTotalDiscount)}</span>
-                </div>
-              )}
-              <div className="h-px bg-slate-100" />
               <div className="flex justify-between items-center">
-                <span className="text-base font-bold text-slate-900">Grand Total</span>
+                <span className="text-base font-bold text-slate-900">Total Invoice Value</span>
                 <span className="text-2xl font-bold text-emerald-600">{formatCurrency(desktopTotal)}</span>
               </div>
             </div>
@@ -604,19 +607,21 @@ export default function RepCreateOrder() {
             <div className="flex justify-between text-sm text-slate-500">
               <span>Gross Amount</span><span className="font-semibold text-slate-700">{formatCurrency(mobileTotalGross)}</span>
             </div>
+            <div className="flex justify-between text-sm text-orange-500 pb-2 border-b border-slate-100">
+              <span>Discount Amount</span><span className="font-semibold">-{formatCurrency(mobileTotalDiscount)}</span>
+            </div>
             {!isNonTaxCustomer && (
-              <div className="flex justify-between text-sm text-slate-500">
-                <span>Tax</span><span className="font-semibold text-slate-700">+{formatCurrency(mobileTotalTax)}</span>
-              </div>
+              <>
+                <div className="flex justify-between text-sm text-slate-500">
+                  <span>Net Amount</span><span className="font-semibold text-slate-700">{formatCurrency(mobileTotalGross - mobileTotalDiscount)}</span>
+                </div>
+                <div className="flex justify-between text-sm text-slate-500 pb-2 border-b border-slate-100">
+                  <span>Total Tax Amount</span><span className="font-semibold text-slate-700">+{formatCurrency(mobileTotalTax)}</span>
+                </div>
+              </>
             )}
-            {mobileTotalDiscount > 0 && (
-              <div className="flex justify-between text-sm text-emerald-600">
-                <span>Discount</span><span className="font-semibold">-{formatCurrency(mobileTotalDiscount)}</span>
-              </div>
-            )}
-            <div className="h-px bg-slate-100" />
             <div className="flex justify-between items-center">
-              <span className="font-bold text-slate-900">Grand Total</span>
+              <span className="font-bold text-slate-900">Total Invoice Value</span>
               <span className="text-xl font-bold text-emerald-600">{formatCurrency(total)}</span>
             </div>
           </div>

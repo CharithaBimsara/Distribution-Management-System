@@ -141,51 +141,52 @@ export default function CustomerQuotations() {
         </div>
       </div>
 
-      {/* Filters Bar (Matches Order Page) */}
+      {/* Filters Bar */}
       <div className="sticky top-14 md:top-16 z-20 px-4 lg:px-0">
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm px-4 py-3 flex flex-wrap items-center gap-3">
-          <div className="relative flex-1 min-w-[200px] group">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-orange-500 transition-colors" />
-            <input
-              type="text"
-              placeholder="Search by quotation #..."
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-              className="w-full pl-9 pr-8 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm placeholder-slate-400 focus:bg-white focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none transition-all"
-            />
-            {search && (
-              <button onClick={() => { setSearch(''); setPage(1); }} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                <X className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <select
-              value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value);
-                setPage(1);
-              }}
-              className="flex-1 sm:flex-none px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 outline-none focus:ring-1 focus:ring-orange-500 focus:border-orange-500 transition cursor-pointer"
-            >
-              {STATUS_FILTERS.map((f) => (
-                <option key={f.label} value={f.value}>{f.label}</option>
-              ))}
-            </select>
-
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm px-4 py-3 space-y-3">
+          {/* Search + Clear row */}
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1 group">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-orange-500 transition-colors" />
+              <input
+                type="text"
+                placeholder="Search by quotation #..."
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                className="w-full pl-9 pr-8 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm placeholder-slate-400 focus:bg-white focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none transition-all"
+              />
+              {search && (
+                <button onClick={() => { setSearch(''); setPage(1); }} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
             {hasActiveFilters && (
               <button
                 onClick={() => { setSearch(''); setStatusFilter(''); setPage(1); }}
-                className="flex items-center justify-center w-10 h-10 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700 transition"
+                className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-orange-50 border border-orange-100 text-orange-600 text-xs font-bold hover:bg-orange-100 transition flex-shrink-0"
                 title="Clear Filters"
               >
-                <RefreshCcw className="w-4 h-4" />
+                <RefreshCcw className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Clear</span>
               </button>
             )}
+          </div>
+          {/* Status pills */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-0.5 scrollbar-hide">
+            {STATUS_FILTERS.map((f) => (
+              <button
+                key={f.label}
+                onClick={() => { setStatusFilter(f.value); setPage(1); }}
+                className={`flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all ${
+                  statusFilter === f.value
+                    ? 'bg-orange-500 text-white shadow-sm shadow-orange-200'
+                    : 'bg-slate-100 text-slate-600 hover:bg-orange-50 hover:text-orange-700'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
           </div>
         </div>
       </div>
@@ -370,30 +371,30 @@ export default function CustomerQuotations() {
                                     </div>
 
                                     <div className="flex justify-end">
-                                      <div className="w-72 space-y-2 bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-                                        <div className="flex justify-between text-sm">
+                                      <div className="w-full max-w-md space-y-2 bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+                                        <div className="flex items-center justify-between gap-8">
                                           <span className="font-bold text-slate-500 uppercase tracking-wider text-xs">Gross Amount</span>
-                                          <span className="font-bold text-slate-900">{formatCurrency(totalGross)}</span>
+                                          <span className="font-bold text-slate-900 whitespace-nowrap tabular-nums">{formatCurrency(totalGross)}</span>
                                         </div>
-                                        <div className="flex justify-between text-sm pb-3 border-b border-slate-100">
+                                        <div className="flex items-center justify-between gap-8 pb-3 border-b border-slate-100">
                                           <span className="font-bold text-orange-500 uppercase tracking-wider text-xs">Discount Amount</span>
-                                          <span className="font-bold text-orange-500">-{formatCurrency(totalDiscount)}</span>
+                                          <span className="font-bold text-orange-500 whitespace-nowrap tabular-nums">-{formatCurrency(totalDiscount)}</span>
                                         </div>
                                         {isTaxCustomer && (
                                           <>
-                                            <div className="flex justify-between text-sm">
+                                            <div className="flex items-center justify-between gap-8">
                                               <span className="font-bold text-slate-500 uppercase tracking-wider text-xs">Net Amount</span>
-                                              <span className="font-bold text-slate-900">{formatCurrency(netAmount)}</span>
+                                              <span className="font-bold text-slate-900 whitespace-nowrap tabular-nums">{formatCurrency(netAmount)}</span>
                                             </div>
-                                            <div className="flex justify-between text-sm pb-3 border-b border-slate-100">
+                                            <div className="flex items-center justify-between gap-8 pb-3 border-b border-slate-100">
                                               <span className="font-bold text-slate-500 uppercase tracking-wider text-xs">Total Tax Amount</span>
-                                              <span className="font-bold text-slate-900">{formatCurrency(totalTax)}</span>
+                                              <span className="font-bold text-slate-900 whitespace-nowrap tabular-nums">{formatCurrency(totalTax)}</span>
                                             </div>
                                           </>
                                         )}
-                                        <div className="flex justify-between items-center pt-2">
+                                        <div className="flex items-center justify-between gap-8 pt-2">
                                           <span className="font-bold text-slate-800 uppercase tracking-wider text-sm">Total Invoice Value</span>
-                                          <span className="text-lg font-bold text-orange-600">{formatCurrency(finalAmount)}</span>
+                                          <span className="text-xl font-black text-orange-600 whitespace-nowrap tabular-nums">{formatCurrency(finalAmount)}</span>
                                         </div>
                                       </div>
                                     </div>

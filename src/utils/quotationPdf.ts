@@ -200,14 +200,14 @@ function renderQuotationPage(doc: any, autoTable: any, quotation: Quotation, isT
       ['Discount Amount', formatNumber(totalDiscount)],
       ['Net Amount', formatNumber(netAmount)],
       [vatLabel, formatNumber(totalTax)],
-      ['Total Estimate', formatCurrency(finalAmount)],
+      ['Total Invoice Value', formatCurrency(finalAmount)],
     ];
 
     totalsRows.forEach(([label, val], i) => {
       const y = afterTableY + (i * rowH);
       doc.rect(totalsX, y, boxW * 0.55, rowH);
       doc.rect(totalsX + (boxW * 0.55), y, boxW * 0.45, rowH);
-      doc.setFont('helvetica', i === 4 ? 'bold' : 'normal');
+      doc.setFont('helvetica', i === totalsRows.length - 1 ? 'bold' : 'normal');
       doc.text(label, totalsX + 2, y + 4);
       doc.text(val, totalsX + boxW - 2, y + 4, { align: 'right' });
     });
@@ -217,14 +217,14 @@ function renderQuotationPage(doc: any, autoTable: any, quotation: Quotation, isT
     const totalsRows = [
       ['Gross Amount', formatNumber(totalGross)],
       ['Discount Amount', formatNumber(totalDiscount)],
-      ['Total Estimate', formatCurrency(finalAmount)],
+      ['Total Invoice Value', formatCurrency(finalAmount)],
     ];
 
     totalsRows.forEach(([label, val], i) => {
       const y = afterTableY + (i * rowH);
       doc.rect(totalsX, y, boxW * 0.55, rowH);
       doc.rect(totalsX + (boxW * 0.55), y, boxW * 0.45, rowH);
-      doc.setFont('helvetica', i === 2 ? 'bold' : 'normal');
+      doc.setFont('helvetica', i === totalsRows.length - 1 ? 'bold' : 'normal');
       doc.text(label, totalsX + 2, y + 4);
       doc.text(val, totalsX + boxW - 2, y + 4, { align: 'right' });
     });
@@ -326,13 +326,31 @@ export function downloadQuotationsExcel(quotations: Quotation[], customerTaxMap?
     });
 
     rows.push([]);
+    let excelTotalGross = 0, excelTotalDiscount = 0, excelTotalTax = 0;
+    (q.items || []).forEach((item) => {
+      const rate = item.unitPrice || 0;
+      const qty = item.quantity || 0;
+      const discPct = item.discountPercent || 0;
+      const rowGrossBase = rate * qty;
+      const discAmt = (rowGrossBase * discPct) / 100;
+      const taxAmt = item.taxAmount || 0;
+      const grossAmount = withTax ? rowGrossBase : (rowGrossBase + taxAmt);
+      excelTotalGross += grossAmount;
+      excelTotalDiscount += discAmt;
+      if (withTax) excelTotalTax += taxAmt;
+    });
     if (withTax) {
-      rows.push(['', '', '', '', '', '', '', 'Subtotal', q.subTotal || 0]);
-      rows.push(['', '', '', '', '', '', '', 'Tax', q.taxAmount || 0]);
-      rows.push(['', '', '', '', '', '', '', 'Total Estimate', q.totalAmount || 0]);
+      const excelNetAmt = excelTotalGross - excelTotalDiscount;
+      const excelFinal = excelNetAmt + excelTotalTax;
+      rows.push(['', '', '', '', '', '', '', 'Gross Amount', excelTotalGross]);
+      rows.push(['', '', '', '', '', '', '', 'Discount Amount', excelTotalDiscount]);
+      rows.push(['', '', '', '', '', '', '', 'Net Amount', excelNetAmt]);
+      rows.push(['', '', '', '', '', '', '', 'Total Tax Amount', excelTotalTax]);
+      rows.push(['', '', '', '', '', '', '', 'Total Invoice Value', excelFinal]);
     } else {
-      rows.push(['', '', '', '', '', '', 'Subtotal', q.subTotal || 0]);
-      rows.push(['', '', '', '', '', '', 'Total Estimate', q.totalAmount || 0]);
+      rows.push(['', '', '', '', '', '', 'Gross Amount', excelTotalGross]);
+      rows.push(['', '', '', '', '', '', 'Discount Amount', excelTotalDiscount]);
+      rows.push(['', '', '', '', '', '', 'Total Invoice Value', excelTotalGross - excelTotalDiscount]);
     }
 
     const ws = XLSX.utils.aoa_to_sheet(rows);

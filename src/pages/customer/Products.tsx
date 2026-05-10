@@ -246,6 +246,7 @@ export default function CustomerProducts() {
   const initialQuick: QuickRow[] = savedQuick ? JSON.parse(savedQuick) : [{ id: crypto.randomUUID(), qty: 1 }];
   const [quickRows, setQuickRows] = useState<QuickRow[]>(initialQuick);
   const [rowSearches, setRowSearches] = useState<Record<string, string>>({});
+  const [qtyInputs, setQtyInputs] = useState<Record<string, string>>({});
 
   const addQuickRow = () => setQuickRows(r => [...r, { id: crypto.randomUUID(), qty: 1 }]);
   const setRowSearch = (id: string, value: string) => setRowSearches(cur => ({ ...cur, [id]: value }));
@@ -454,54 +455,26 @@ export default function CustomerProducts() {
       <div className="px-4 lg:px-0">
         <div className="overflow-visible space-y-5">
 
-          {/* Header */}
-          <div className="relative overflow-hidden bg-gradient-to-r from-orange-500 to-amber-500 rounded-2xl p-6 shadow-lg shadow-orange-200/50">
-            <div className="absolute -right-12 -top-12 w-48 h-48 rounded-full bg-white/10 blur-3xl pointer-events-none" />
-            <div className="absolute bottom-0 left-1/3 w-32 h-32 rounded-full bg-amber-400/20 blur-2xl pointer-events-none" />
-            <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0">
-                  <Store className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-extrabold text-white tracking-tight">Quick Order Entry</h2>
-                  <p className="text-xs text-orange-100 mt-0.5">Search and select products row by row</p>
-                </div>
-              </div>
-              <button
-                onClick={goToCreateOrder}
-                disabled={quickCount === 0}
-                className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-white text-orange-600 rounded-xl text-sm font-bold shadow-md hover:bg-orange-50 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-              >
-                <ShoppingCart className="w-4 h-4" />
-                Proceed to Checkout
-                {quickCount > 0 && (
-                  <span className="bg-orange-500 text-white rounded-full w-5 h-5 text-[10px] flex items-center justify-center font-black">{quickCount}</span>
-                )}
-              </button>
-            </div>
-          </div>
-
           {/* Table Container */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="overflow-x-auto scrollbar-hide">
-              <table className="w-full text-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-[12px] border-collapse">
                 <thead>
-                  <tr className="bg-orange-50/60 border-b border-orange-100">
-                    <th className="px-3 py-4 text-center text-xs font-bold text-slate-500 uppercase tracking-widest w-10">#</th>
-                    <th className="px-4 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-widest">Item Code</th>
-                    <th className="px-4 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-widest w-1/4 min-w-[220px]">Item Description</th>
-                    <th className="px-3 py-4 text-center text-xs font-bold text-slate-500 uppercase tracking-widest">Qty</th>
-                    <th className="px-4 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-widest">Rate</th>
-                    <th className="px-4 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-widest">Disc %</th>
-                    <th className="px-4 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-widest">Disc Amt</th>
-                    {!isNonTaxCustomer && <th className="px-4 py-4 text-center text-xs font-bold text-slate-500 uppercase tracking-widest">Tax</th>}
-                    <th className="px-4 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-widest">Line Gross</th>
-                    <th className="px-3 py-4 text-center text-xs font-bold text-slate-500 uppercase tracking-widest w-[60px]">Action</th>
+                  <tr className="bg-slate-800 text-white">
+                    <th className="text-center px-4 py-3 font-semibold text-xs uppercase tracking-wider border-r border-slate-600 w-10">#</th>
+                    <th className="text-left px-4 py-3 font-semibold text-xs uppercase tracking-wider border-r border-slate-600 min-w-[220px]">Item Description</th>
+                    <th className="text-left px-4 py-3 font-semibold text-xs uppercase tracking-wider border-r border-slate-600 whitespace-nowrap">Item Code</th>
+                    <th className="text-center px-4 py-3 font-semibold text-xs uppercase tracking-wider border-r border-slate-600 whitespace-nowrap">Qty</th>
+                    <th className="text-right px-4 py-3 font-semibold text-xs uppercase tracking-wider border-r border-slate-600 whitespace-nowrap">Rate</th>
+                    <th className="text-right px-4 py-3 font-semibold text-xs uppercase tracking-wider border-r border-slate-600 whitespace-nowrap">Disc %</th>
+                    <th className="text-right px-4 py-3 font-semibold text-xs uppercase tracking-wider border-r border-slate-600 whitespace-nowrap">Disc Amt</th>
+                    {!isNonTaxCustomer && <th className="text-center px-4 py-3 font-semibold text-xs uppercase tracking-wider border-r border-slate-600 whitespace-nowrap">Tax</th>}
+                    <th className="text-right px-4 py-3 font-semibold text-xs uppercase tracking-wider border-r border-slate-600 whitespace-nowrap">Line Gross</th>
+                    <th className="text-center px-4 py-3 font-semibold text-xs uppercase tracking-wider whitespace-nowrap w-[60px]">Action</th>
                   </tr>
                 </thead>
 
-                <tbody className="divide-y divide-slate-100">
+                <tbody>
                   {quickRows.map((row, rowIndex) => {
                     const prod = row.product;
                     const selectedProductIds = new Set(
@@ -523,25 +496,15 @@ export default function CustomerProducts() {
                     return (
                       <tr
                         key={row.id}
-                        className={`group transition-colors ${
-                          prod ? 'bg-white hover:bg-slate-50/80' : 'bg-slate-50/30 hover:bg-slate-50'
-                        }`}
+                        className="border-b border-slate-100 hover:bg-slate-50/60 transition-colors"
                       >
                         {/* # */}
-                        <td className="px-3 py-4 text-center text-xs text-slate-400 font-medium">
+                        <td className="px-4 py-2.5 text-center text-slate-400 border-r border-slate-100">
                           {rowIndex + 1}
                         </td>
 
-                        {/* Item Code (SKU) */}
-                        <td className="px-4 py-4">
-                          {prod?.sku
-                            ? <span className="font-medium text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-md">{prod.sku}</span>
-                            : <span className="text-slate-300">—</span>
-                          }
-                        </td>
-
                         {/* Item Description (product dropdown) */}
-                        <td className="px-3 py-2 w-1/4 min-w-[220px]">
+                        <td className="px-3 py-2 min-w-[220px] border-r border-slate-100">
                           <ProductDropdown
                             rowId={row.id}
                             value={rowSearches[row.id] !== undefined ? rowSearches[row.id] : (prod?.name || '')}
@@ -559,50 +522,68 @@ export default function CustomerProducts() {
                           />
                         </td>
 
+                        {/* Item Code (SKU) */}
+                        <td className="px-4 py-2.5 font-mono text-slate-600 whitespace-nowrap border-r border-slate-100">
+                          {prod?.sku || <span className="text-slate-300">—</span>}
+                        </td>
+
                         {/* Qty */}
-                        <td className="px-3 py-4 text-center">
+                        <td className="px-3 py-2 text-center border-r border-slate-100">
                           <input
-                            type="number" min={1} value={row.qty} disabled={!prod}
-                            onChange={e => updateQuickRow(row.id, { qty: Math.max(1, parseInt(e.target.value) || 1) })}
-                            className="w-14 text-center font-bold text-sm text-slate-900 bg-white border border-slate-200 rounded-xl py-2 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400 disabled:opacity-40 disabled:bg-slate-50 transition-all no-number-spin"
+                            type="number" min={1}
+                            value={qtyInputs[row.id] !== undefined ? qtyInputs[row.id] : String(row.qty)}
+                            disabled={!prod}
+                            onChange={e => {
+                              const raw = e.target.value;
+                              setQtyInputs(cur => ({ ...cur, [row.id]: raw }));
+                              const parsed = parseInt(raw);
+                              if (!isNaN(parsed) && parsed >= 1) updateQuickRow(row.id, { qty: parsed });
+                            }}
+                            onBlur={e => {
+                              const parsed = parseInt(e.target.value);
+                              const safe = isNaN(parsed) || parsed < 1 ? 1 : parsed;
+                              updateQuickRow(row.id, { qty: safe });
+                              setQtyInputs(cur => { const n = { ...cur }; delete n[row.id]; return n; });
+                            }}
+                            className="w-14 text-center font-bold text-[12px] text-slate-900 bg-white border border-slate-200 rounded-lg py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400 disabled:opacity-40 disabled:bg-slate-50 transition-all no-number-spin"
                           />
                         </td>
 
                         {/* Rate */}
-                        <td className="px-4 py-4 text-right text-sm font-medium text-slate-500">
+                        <td className="px-4 py-2.5 text-right text-slate-700 whitespace-nowrap border-r border-slate-100">
                           {prod ? formatCurrency(isNonTaxCustomer ? (prod.totalAmount || rate * (1 + taxCodeToRate(prod.taxCode))) : rate) : <span className="text-slate-300">—</span>}
                         </td>
 
                         {/* Disc % */}
-                        <td className="px-4 py-4 text-right text-sm font-bold text-emerald-600">
+                        <td className="px-4 py-2.5 text-right font-semibold text-emerald-600 whitespace-nowrap border-r border-slate-100">
                           {prod && discPct > 0 ? `${discPct}%` : <span className="text-slate-300">—</span>}
                         </td>
 
                         {/* Disc Amt */}
-                        <td className="px-4 py-4 text-right text-sm font-bold text-emerald-600">
+                        <td className="px-4 py-2.5 text-right font-semibold text-emerald-600 whitespace-nowrap border-r border-slate-100">
                           {prod && discAmt > 0 ? formatCurrency(discAmt) : <span className="text-slate-300">—</span>}
                         </td>
 
                         {/* Tax code — tax customers only */}
                         {!isNonTaxCustomer && (
-                          <td className="px-4 py-4 text-center text-sm font-medium text-slate-500">
+                          <td className="px-4 py-2.5 text-center text-slate-600 whitespace-nowrap border-r border-slate-100">
                             {prod?.taxCode || <span className="text-slate-300">—</span>}
                           </td>
                         )}
 
                         {/* Line Gross */}
-                        <td className="px-4 py-4 text-right text-sm font-bold text-slate-900">
+                        <td className="px-4 py-2.5 text-right font-semibold text-slate-900 whitespace-nowrap border-r border-slate-100">
                           {prod ? formatCurrency(grossAmount) : <span className="text-slate-300">—</span>}
                         </td>
 
                         {/* Delete */}
-                        <td className="px-3 py-4 text-center">
+                        <td className="px-3 py-2.5 text-center">
                           <button
                             onClick={() => removeQuickRow(row.id)}
                             title="Remove item"
-                            className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all mx-auto"
+                            className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all mx-auto"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </td>
                       </tr>
@@ -615,7 +596,7 @@ export default function CustomerProducts() {
 
           {/* Order Summary (Right Aligned) */}
           <div className="flex justify-end mt-4">
-            <div className="w-full md:w-[380px] bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-3">
+            <div className="w-full md:w-[480px] bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-3">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Order Summary</p>
               <div className="flex justify-between items-center">
                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Gross Amount</span>

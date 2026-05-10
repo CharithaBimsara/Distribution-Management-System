@@ -338,10 +338,13 @@ export default function AdminOrders() {
             : totalGrossAmount + totalTaxAmount - totalDiscountAmount;
 
           rows.push([]);
-          rows.push([...Array(excelHeaders.length - 2).fill(null), 'Total Gross', totalGrossAmount]);
-          if (!isNonTaxCustomer) rows.push([...Array(excelHeaders.length - 2).fill(null), 'Total Tax', totalTaxAmount]);
-          rows.push([...Array(excelHeaders.length - 2).fill(null), 'Total Discount', -totalDiscountAmount]);
-          rows.push([...Array(excelHeaders.length - 2).fill(null), 'GRAND TOTAL', finalAmount]);
+          rows.push([...Array(excelHeaders.length - 2).fill(null), 'Gross Amount', totalGrossAmount]);
+          rows.push([...Array(excelHeaders.length - 2).fill(null), 'Discount Amount', -totalDiscountAmount]);
+          if (!isNonTaxCustomer) {
+            rows.push([...Array(excelHeaders.length - 2).fill(null), 'Net Amount', totalGrossAmount - totalDiscountAmount]);
+            rows.push([...Array(excelHeaders.length - 2).fill(null), 'Total Tax Amount', totalTaxAmount]);
+          }
+          rows.push([...Array(excelHeaders.length - 2).fill(null), 'Total Invoice Value', finalAmount]);
 
           const ws = XLSX.utils.aoa_to_sheet(rows);
           ws['!cols'] = colWidths; // Apply dynamic column widths
@@ -507,11 +510,12 @@ export default function AdminOrders() {
             : totalGrossAmount + totalTaxAmount - totalDiscountAmount;
 
           const summaryLines: { label: string; value: string; isBold?: boolean }[] = [];
-          summaryLines.push({ label: 'Total Gross', value: formatAmt(totalGrossAmount) });
+          summaryLines.push({ label: 'Gross Amount', value: formatAmt(totalGrossAmount) });
+          summaryLines.push({ label: 'Discount Amount', value: `-${formatAmt(totalDiscountAmount)}` });
           if (!isNonTaxCustomer) {
-            summaryLines.push({ label: 'Total Tax', value: formatAmt(totalTaxAmount) });
+            summaryLines.push({ label: 'Net Amount', value: formatAmt(totalGrossAmount - totalDiscountAmount) });
+            summaryLines.push({ label: 'Total Tax Amount', value: formatAmt(totalTaxAmount) });
           }
-          summaryLines.push({ label: 'Total Discount', value: formatAmt(totalDiscountAmount) });
           summaryLines.push({ label: 'Total Invoice Value', value: `LKR ${formatAmt(finalAmount)}`, isBold: true });
 
           const totalsRowH = 6;
@@ -1180,11 +1184,16 @@ export default function AdminOrders() {
                               </div>
                             )}
                             <div className="flex justify-end">
-                              <div className="w-64 space-y-2 text-sm bg-white border border-slate-100 rounded-xl p-5 shadow-sm">
-                                <div className="flex justify-between font-medium text-slate-500"><span>Total Gross</span><span>{formatCurrency(displayTotalGross)}</span></div>
-                                {!isNonTaxCustomer && <div className="flex justify-between font-medium text-slate-500"><span>Total Tax</span><span>{formatCurrency(displayTotalTax)}</span></div>}
-                                <div className="flex justify-between font-medium text-emerald-600"><span>Total Discount</span><span>-{formatCurrency(displayTotalDiscount)}</span></div>
-                                <div className="flex justify-between items-center font-bold text-sm pt-3 border-t border-slate-200 text-indigo-700 whitespace-nowrap gap-2"><span>Grand Total</span><span>{formatCurrency(displayFinalAmount)}</span></div>
+                              <div className="w-full max-w-md space-y-2 text-sm bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+                                <div className="flex items-center justify-between gap-8 font-medium text-slate-500"><span>Gross Amount</span><span className="whitespace-nowrap tabular-nums">{formatCurrency(displayTotalGross)}</span></div>
+                                <div className="flex items-center justify-between gap-8 font-medium text-orange-500 pb-3 border-b border-slate-100"><span>Discount Amount</span><span className="whitespace-nowrap tabular-nums">-{formatCurrency(displayTotalDiscount)}</span></div>
+                                {!isNonTaxCustomer && (
+                                  <>
+                                    <div className="flex items-center justify-between gap-8 font-medium text-slate-500"><span>Net Amount</span><span className="whitespace-nowrap tabular-nums">{formatCurrency(displayTotalGross - displayTotalDiscount)}</span></div>
+                                    <div className="flex items-center justify-between gap-8 font-medium text-slate-500 pb-3 border-b border-slate-100"><span>Total Tax Amount</span><span className="whitespace-nowrap tabular-nums">{formatCurrency(displayTotalTax)}</span></div>
+                                  </>
+                                )}
+                                <div className="flex items-center justify-between gap-8 font-bold pt-1"><span className="text-slate-800 uppercase tracking-wider text-sm">Total Invoice Value</span><span className="text-xl font-black text-orange-600 whitespace-nowrap tabular-nums">{formatCurrency(displayFinalAmount)}</span></div>
                               </div>
                             </div>
                           </div>

@@ -518,10 +518,15 @@ export default function AdminQuotations() {
                       );
                     })}
                     <div className="text-xs space-y-1 bg-white border border-slate-100 rounded-xl p-3">
-                      <div className="flex justify-between text-slate-500"><span>Subtotal</span><span>{formatCurrency(mSubtotal)}</span></div>
-                      {isTaxM !== false && <div className="flex justify-between text-slate-500"><span>Tax</span><span>{formatCurrency(mTax)}</span></div>}
-                      <div className="flex justify-between text-emerald-600"><span>Discount</span><span>-{formatCurrency(mDiscount)}</span></div>
-                      <div className="flex justify-between font-bold text-indigo-700 pt-1.5 border-t border-slate-100"><span>Total</span><span>{formatCurrency(mTotal)}</span></div>
+                      <div className="flex justify-between text-slate-500"><span>Gross Amount</span><span>{formatCurrency(mSubtotal)}</span></div>
+                      <div className="flex justify-between text-orange-500 pb-1 border-b border-slate-100"><span>Discount Amount</span><span>-{formatCurrency(mDiscount)}</span></div>
+                      {isTaxM !== false && (
+                        <>
+                          <div className="flex justify-between text-slate-500"><span>Net Amount</span><span>{formatCurrency(mSubtotal - mDiscount)}</span></div>
+                          <div className="flex justify-between text-slate-500 pb-1 border-b border-slate-100"><span>Total Tax Amount</span><span>{formatCurrency(mTax)}</span></div>
+                        </>
+                      )}
+                      <div className="flex justify-between font-bold text-orange-600 pt-1"><span>Total Invoice Value</span><span>{formatCurrency(mTotal)}</span></div>
                     </div>
                     <div className="flex gap-2">
                       <button onClick={e => { e.stopPropagation(); exportQuotations('pdf', false, q); }} className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium rounded-lg bg-indigo-50 text-indigo-700 active:scale-95">
@@ -736,11 +741,16 @@ export default function AdminQuotations() {
                             )}
 
                             <div className="flex justify-end">
-                              <div className="w-64 space-y-2 text-sm bg-white border border-slate-100 rounded-xl p-5 shadow-sm">
-                                <div className="flex justify-between font-medium text-slate-500"><span>Subtotal</span><span>{formatCurrency(calcSubtotal)}</span></div>
-                                {isTax !== false && <div className="flex justify-between font-medium text-slate-500"><span>Total Tax</span><span>{formatCurrency(calcTotalTax)}</span></div>}
-                                <div className="flex justify-between font-medium text-emerald-600"><span>Total Discount</span><span>-{formatCurrency(calcTotalDiscount)}</span></div>
-                                <div className="flex justify-between items-center font-bold text-sm pt-3 border-t border-slate-200 text-indigo-700 whitespace-nowrap gap-2"><span>Grand Total</span><span>{formatCurrency(calcGrandTotal)}</span></div>
+                              <div className="w-full max-w-md space-y-2 text-sm bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+                                <div className="flex items-center justify-between gap-8 font-medium text-slate-500"><span>Gross Amount</span><span className="whitespace-nowrap tabular-nums">{formatCurrency(calcSubtotal)}</span></div>
+                                <div className="flex items-center justify-between gap-8 font-medium text-orange-500 pb-3 border-b border-slate-100"><span>Discount Amount</span><span className="whitespace-nowrap tabular-nums">-{formatCurrency(calcTotalDiscount)}</span></div>
+                                {isTax !== false && (
+                                  <>
+                                    <div className="flex items-center justify-between gap-8 font-medium text-slate-500"><span>Net Amount</span><span className="whitespace-nowrap tabular-nums">{formatCurrency(calcSubtotal - calcTotalDiscount)}</span></div>
+                                    <div className="flex items-center justify-between gap-8 font-medium text-slate-500 pb-3 border-b border-slate-100"><span>Total Tax Amount</span><span className="whitespace-nowrap tabular-nums">{formatCurrency(calcTotalTax)}</span></div>
+                                  </>
+                                )}
+                                <div className="flex items-center justify-between gap-8 font-bold pt-1"><span className="text-slate-800 uppercase tracking-wider text-sm">Total Invoice Value</span><span className="text-xl font-black text-orange-600 whitespace-nowrap tabular-nums">{formatCurrency(calcGrandTotal)}</span></div>
                               </div>
                             </div>
                           </div>

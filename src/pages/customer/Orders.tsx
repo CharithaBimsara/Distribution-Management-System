@@ -361,30 +361,30 @@ export default function CustomerOrders() {
                                     </div>
 
                                     <div className="flex justify-end">
-                                      <div className="w-72 space-y-2 bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-                                        <div className="flex justify-between text-sm">
+                                      <div className="w-full max-w-md space-y-2 bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+                                        <div className="flex items-center justify-between gap-8">
                                           <span className="font-bold text-slate-500 uppercase tracking-wider text-xs">Gross Amount</span>
-                                          <span className="font-bold text-slate-900">{formatCurrency(totalGross)}</span>
+                                          <span className="font-bold text-slate-900 whitespace-nowrap tabular-nums">{formatCurrency(totalGross)}</span>
                                         </div>
-                                        <div className="flex justify-between text-sm pb-3 border-b border-slate-100">
+                                        <div className="flex items-center justify-between gap-8 pb-3 border-b border-slate-100">
                                           <span className="font-bold text-orange-500 uppercase tracking-wider text-xs">Discount Amount</span>
-                                          <span className="font-bold text-orange-500">-{formatCurrency(totalDiscount)}</span>
+                                          <span className="font-bold text-orange-500 whitespace-nowrap tabular-nums">-{formatCurrency(totalDiscount)}</span>
                                         </div>
                                         {isTaxCustomer && (
                                           <>
-                                            <div className="flex justify-between text-sm">
+                                            <div className="flex items-center justify-between gap-8">
                                               <span className="font-bold text-slate-500 uppercase tracking-wider text-xs">Net Amount</span>
-                                              <span className="font-bold text-slate-900">{formatCurrency(netAmount)}</span>
+                                              <span className="font-bold text-slate-900 whitespace-nowrap tabular-nums">{formatCurrency(netAmount)}</span>
                                             </div>
-                                            <div className="flex justify-between text-sm pb-3 border-b border-slate-100">
+                                            <div className="flex items-center justify-between gap-8 pb-3 border-b border-slate-100">
                                               <span className="font-bold text-slate-500 uppercase tracking-wider text-xs">Total Tax Amount</span>
-                                              <span className="font-bold text-slate-900">{formatCurrency(totalTax)}</span>
+                                              <span className="font-bold text-slate-900 whitespace-nowrap tabular-nums">{formatCurrency(totalTax)}</span>
                                             </div>
                                           </>
                                         )}
-                                        <div className="flex justify-between items-center pt-2">
+                                        <div className="flex items-center justify-between gap-8 pt-2">
                                           <span className="font-bold text-slate-800 uppercase tracking-wider text-sm">Total Invoice Value</span>
-                                          <span className="text-lg font-bold text-orange-600">{formatCurrency(finalAmount)}</span>
+                                          <span className="text-xl font-black text-orange-600 whitespace-nowrap tabular-nums">{formatCurrency(finalAmount)}</span>
                                         </div>
                                       </div>
                                     </div>

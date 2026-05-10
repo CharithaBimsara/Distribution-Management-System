@@ -437,27 +437,16 @@ export default function CoordinatorOrders() {
                               const calcTotal = calcSubtotal - calcDiscount + calcTax;
                               return (
                             <div className="flex justify-end">
-                              <div className="w-60 space-y-1.5 text-sm bg-white border border-slate-100 rounded-xl p-4">
-                                <div className="flex justify-between text-slate-500">
-                                  <span>Subtotal</span>
-                                  <span>{formatCurrency(calcSubtotal)}</span>
-                                </div>
-                                {calcDiscount > 0 && (
-                                  <div className="flex justify-between text-slate-500">
-                                    <span>Discount</span>
-                                    <span className="text-emerald-600">{formatCurrency(calcDiscount)}</span>
-                                  </div>
+                              <div className="w-full max-w-md space-y-2 text-sm bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+                                <div className="flex items-center justify-between gap-8 font-medium text-slate-500"><span>Gross Amount</span><span className="whitespace-nowrap tabular-nums">{formatCurrency(calcSubtotal)}</span></div>
+                                <div className="flex items-center justify-between gap-8 font-medium text-orange-500 pb-3 border-b border-slate-100"><span>Discount Amount</span><span className="whitespace-nowrap tabular-nums">-{formatCurrency(calcDiscount)}</span></div>
+                                {!isNonTaxSummary && (
+                                  <>
+                                    <div className="flex items-center justify-between gap-8 font-medium text-slate-500"><span>Net Amount</span><span className="whitespace-nowrap tabular-nums">{formatCurrency(calcSubtotal - calcDiscount)}</span></div>
+                                    <div className="flex items-center justify-between gap-8 font-medium text-slate-500 pb-3 border-b border-slate-100"><span>Total Tax Amount</span><span className="whitespace-nowrap tabular-nums">{formatCurrency(calcTax)}</span></div>
+                                  </>
                                 )}
-                                {calcTax > 0 && (
-                                  <div className="flex justify-between text-slate-500">
-                                    <span>Tax</span>
-                                    <span>{formatCurrency(calcTax)}</span>
-                                  </div>
-                                )}
-                                <div className="flex justify-between font-bold text-base pt-2.5 border-t border-slate-200 text-indigo-700">
-                                  <span>Total</span>
-                                  <span>{formatCurrency(calcTotal)}</span>
-                                </div>
+                                <div className="flex items-center justify-between gap-8 font-bold pt-1"><span className="text-slate-800 uppercase tracking-wider text-sm">Total Invoice Value</span><span className="text-xl font-black text-orange-600 whitespace-nowrap tabular-nums">{formatCurrency(calcTotal)}</span></div>
                               </div>
                             </div>
                               );

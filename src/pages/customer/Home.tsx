@@ -106,7 +106,7 @@ export default function CustomerHome() {
                 <span className="text-sm text-orange-100 font-medium">Welcome back</span>
               </div>
               <h1 className="text-3xl lg:text-4xl font-extrabold tracking-tight mb-2">
-                Hi, {user?.username || 'there'}! 👋
+                Hi, {customerProfile?.shopName || user?.username || 'there'}! 👋
               </h1>
               <p className="text-orange-50/80 text-sm lg:text-base max-w-md mb-6">
                 Discover fresh products, exclusive offers, and shop with ease.
