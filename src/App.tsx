@@ -86,10 +86,12 @@ import CoordinatorNotifications from './pages/coordinator/Notifications';
 import CoordinatorSupport from './pages/coordinator/Support';
 import CoordinatorCreateSupport from './pages/coordinator/CreateSupport';
 import CoordinatorProfile from './pages/coordinator/Profile';
+import CoordinatorCustomerSpecialPrices from './pages/coordinator/CustomerSpecialPrices';
 
 // Customer pages
 import CustomerHome from './pages/customer/Home';
 import CustomerProducts from './pages/customer/Products';
+import CustomerProductCatalog from './pages/customer/ProductCatalog';
 import CustomerCheckout from './pages/customer/Checkout';
 import CustomerOrders from './pages/customer/Orders';
 import CustomerLedger from './pages/customer/Ledger';
@@ -201,6 +203,7 @@ export default function App() {
         {/* Customer routes */}
         <Route path="/shop" element={<ProtectedRoute allowedRoles={['Customer']}><CustomerLayout /></ProtectedRoute>}>
           <Route index element={<CustomerHome />} />
+          <Route path="catalog" element={<CustomerProductCatalog />} />
           <Route path="products" element={<CustomerProducts />} />
           <Route path="checkout" element={<CustomerCheckout />} />
           <Route path="orders" element={<CustomerOrders />}>
@@ -222,6 +225,7 @@ export default function App() {
           <Route path="routes" element={<CoordinatorRouteManagement />} />
           <Route path="customers" element={<AdminCustomers />} />
           <Route path="customers/:id" element={<AdminCustomerDetail />} />
+          <Route path="customers/:id/special-prices" element={<CoordinatorCustomerSpecialPrices />} />
           <Route path="orders" element={<CoordinatorOrders />} />
           <Route path="orders/:id" element={<CoordinatorOrderDetail />} />
           <Route path="approvals" element={<CoordinatorApprovals />} />

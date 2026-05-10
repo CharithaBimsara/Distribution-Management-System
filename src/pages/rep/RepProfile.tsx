@@ -118,8 +118,9 @@ export default function RepProfile() {
             <InfoRow icon={<BadgeCheck className="w-4 h-4 text-slate-500" />} label="Employee Code" value={profile?.employeeCode || 'N/A'} />
             <InfoRow icon={<Mail className="w-4 h-4 text-slate-500" />} label="Email" value={profile?.email || user?.email || 'N/A'} />
             <InfoRow icon={<Phone className="w-4 h-4 text-slate-500" />} label="Phone" value={profile?.phoneNumber || user?.phoneNumber || 'N/A'} />
-            <InfoRow icon={<MapPin className="w-4 h-4 text-slate-500" />} label="Region" value={profile?.regionName || 'N/A'} />
-            <InfoRow icon={<MapPin className="w-4 h-4 text-slate-500" />} label="Sub Region" value={profile?.subRegionName || 'N/A'} />
+            <InfoRow icon={<MapPin className="w-4 h-4 text-slate-500" />} label="Region(s)" value={profile?.regionNames?.length ? profile.regionNames.join(', ') : 'N/A'} />
+            <InfoRow icon={<MapPin className="w-4 h-4 text-slate-500" />} label="Sub Region(s)" value={profile?.subRegionNames?.length ? profile.subRegionNames.join(', ') : 'N/A'} />
+            <InfoRow icon={<BadgeCheck className="w-4 h-4 text-slate-500" />} label="Coordinator(s)" value={profile?.coordinatorNames?.length ? profile.coordinatorNames.join(', ') : 'N/A'} />
             <InfoRow icon={<Calendar className="w-4 h-4 text-slate-500" />} label="Hire Date" value={profile?.hireDate ? new Date(profile.hireDate).toLocaleDateString() : 'N/A'} />
             <InfoRow icon={<Calendar className="w-4 h-4 text-slate-500" />} label="Created" value={profile?.createdAt ? new Date(profile.createdAt).toLocaleString() : 'N/A'} />
           </div>

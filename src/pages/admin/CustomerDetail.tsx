@@ -364,7 +364,7 @@ export default function AdminCustomerDetail() {
             Joined {customer.createdAt ? formatDate(customer.createdAt) : '—'} &nbsp;·&nbsp; Customer Details
           </p>
         </div>
-        {!isCoordinatorView && (
+        {!isCoordinatorView ? (
           <>
             <button
               onClick={() => navigate(`/admin/customers/${id}/special-prices`)}
@@ -386,6 +386,14 @@ export default function AdminCustomerDetail() {
               {customer.isActive ? 'Deactivate' : 'Activate'}
             </button>
           </>
+        ) : (
+          <button
+            onClick={() => navigate(`/coordinator/customers/${id}/special-prices`)}
+            className="hidden lg:inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition"
+          >
+            <DollarSign className="w-5 h-5" />
+            Special Prices
+          </button>
         )}
       </div>
 
@@ -847,7 +855,7 @@ export default function AdminCustomerDetail() {
             </p>
 
             {/* Mobile toggle */}
-            {!isCoordinatorView && (
+            {!isCoordinatorView ? (
               <>
                 <button
                   onClick={() => toggleStatusMut.mutate(!customer.isActive)}
@@ -868,6 +876,14 @@ export default function AdminCustomerDetail() {
                   Special Prices
                 </button>
               </>
+            ) : (
+              <button
+                onClick={() => navigate(`/coordinator/customers/${id}/special-prices`)}
+                className="lg:hidden w-full mt-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold"
+              >
+                <DollarSign className="w-4 h-4 inline mr-2" />
+                Special Prices
+              </button>
             )}
           </div>
 

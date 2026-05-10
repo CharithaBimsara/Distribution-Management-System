@@ -9,7 +9,7 @@ import { notificationsApi } from '../../services/api/notificationsApi';
 import {
   Home, ClipboardList,
   User, ShoppingCart, Bell, LogOut, Menu, X, ChevronLeft,
-  MessageSquare, Sparkles, FileText
+  MessageSquare, Sparkles, FileText, Package
 } from 'lucide-react';
 import ConfirmModal from '../common/ConfirmModal';
 import NotificationPanel from '../common/NotificationPanel';
@@ -18,6 +18,7 @@ import { useAutoCollapseSidebar } from '../../hooks/useAutoCollapseSidebar';
 
 const navItems = [
   { to: '/shop', icon: Home, label: 'Home', end: true },
+  { to: '/shop/catalog', icon: Package, label: 'Products' },
   { to: '/shop/orders', icon: ClipboardList, label: 'Orders' },
   { to: '/shop/quotations', icon: FileText, label: 'Quotations' },
   { to: '/shop/support', icon: MessageSquare, label: 'Support' },

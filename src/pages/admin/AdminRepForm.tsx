@@ -7,6 +7,49 @@ import toast from 'react-hot-toast';
 
 type Props = { rep?: { id?: string }; onSuccess?: () => void; onCancel?: () => void };
 
+function MultiCheckList({
+  label,
+  options,
+  selected,
+  onChange,
+  getId,
+  getLabel,
+}: {
+  label: string;
+  options: any[];
+  selected: string[];
+  onChange: (ids: string[]) => void;
+  getId: (o: any) => string;
+  getLabel: (o: any) => string;
+}) {
+  const toggle = (id: string) => {
+    onChange(selected.includes(id) ? selected.filter(s => s !== id) : [...selected, id]);
+  };
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{label}</label>
+      <div className="border border-slate-200 rounded-lg max-h-32 overflow-y-auto bg-white">
+        {options.length === 0 ? (
+          <p className="text-xs text-slate-400 p-2">None available</p>
+        ) : options.map(opt => (
+          <label key={getId(opt)} className="flex items-center gap-2 px-3 py-1.5 hover:bg-slate-50 cursor-pointer text-sm">
+            <input
+              type="checkbox"
+              checked={selected.includes(getId(opt))}
+              onChange={() => toggle(getId(opt))}
+              className="accent-indigo-600"
+            />
+            {getLabel(opt)}
+          </label>
+        ))}
+      </div>
+      {selected.length > 0 && (
+        <p className="text-xs text-indigo-600">{selected.length} selected</p>
+      )}
+    </div>
+  );
+}
+
 export default function AdminRepForm({ rep, onSuccess, onCancel }: Props) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState({
@@ -16,11 +59,11 @@ export default function AdminRepForm({ rep, onSuccess, onCancel }: Props) {
     phoneNumber: '',
     employeeCode: '',
     hireDate: '',
-    regionId: '',
-    subRegionId: '',
-    coordinatorId: '',
     isActive: true,
   });
+  const [selectedRegionIds, setSelectedRegionIds] = useState<string[]>([]);
+  const [selectedSubRegionIds, setSelectedSubRegionIds] = useState<string[]>([]);
+  const [selectedCoordinatorIds, setSelectedCoordinatorIds] = useState<string[]>([]);
 
   const { data: regionsData } = useQuery({
     queryKey: ['regions'],
@@ -35,15 +78,9 @@ export default function AdminRepForm({ rep, onSuccess, onCancel }: Props) {
   const regionList = Array.isArray(regionsData) ? regionsData : [];
   const coordinators = coordinatorsData || [];
 
-  const subRegions = useMemo(() => {
-    const region = regionList.find((r: any) => r.id === form.regionId);
-    return region?.subRegions || [];
-  }, [regionList, form.regionId]);
-
-  const filteredCoordinators = useMemo(() => {
-    if (!form.regionId) return coordinators;
-    return coordinators.filter((c: any) => c.regionId === form.regionId);
-  }, [coordinators, form.regionId]);
+  const allSubRegions = useMemo(() => {
+    return regionList.flatMap((r: any) => (r.subRegions || []).map((s: any) => ({ ...s, regionName: r.name })));
+  }, [regionList]);
 
   const createMut = useMutation({
     mutationFn: (d: any) => repsApi.adminCreate(d),
@@ -66,9 +103,9 @@ export default function AdminRepForm({ rep, onSuccess, onCancel }: Props) {
       phoneNumber: form.phoneNumber || undefined,
       employeeCode: form.employeeCode || undefined,
       hireDate: form.hireDate || undefined,
-      regionId: form.regionId || undefined,
-      subRegionId: form.subRegionId || undefined,
-      coordinatorId: form.coordinatorId || undefined,
+      regionIds: selectedRegionIds,
+      subRegionIds: selectedSubRegionIds,
+      coordinatorIds: selectedCoordinatorIds,
     });
   };
 
@@ -122,49 +159,30 @@ export default function AdminRepForm({ rep, onSuccess, onCancel }: Props) {
         />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Region</label>
-          <select
-            value={form.regionId}
-            onChange={e => setForm(f => ({ ...f, regionId: e.target.value, subRegionId: '', coordinatorId: '' }))}
-            className={cls}
-          >
-            <option value="">Select region…</option>
-            {regionList.map((r: any) => (
-              <option key={r.id} value={r.id}>{r.name}</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Sub-region</label>
-          <select
-            value={form.subRegionId}
-            onChange={e => setForm(f => ({ ...f, subRegionId: e.target.value }))}
-            disabled={!form.regionId}
-            className={cls}
-          >
-            <option value="">Select sub-region…</option>
-            {subRegions.map((s: any) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Coordinator</label>
-          <select
-            value={form.coordinatorId}
-            onChange={e => setForm(f => ({ ...f, coordinatorId: e.target.value }))}
-            disabled={!form.regionId}
-            className={cls}
-          >
-            <option value="">Select coordinator…</option>
-            {filteredCoordinators.map((c: any) => (
-              <option key={c.id} value={c.id}>{c.fullName}</option>
-            ))}
-          </select>
-        </div>
+        <MultiCheckList
+          label="Regions"
+          options={regionList}
+          selected={selectedRegionIds}
+          onChange={setSelectedRegionIds}
+          getId={(r: any) => r.id}
+          getLabel={(r: any) => r.name}
+        />
+        <MultiCheckList
+          label="Sub-Regions"
+          options={allSubRegions}
+          selected={selectedSubRegionIds}
+          onChange={setSelectedSubRegionIds}
+          getId={(s: any) => s.id}
+          getLabel={(s: any) => `${s.name} (${s.regionName})`}
+        />
+        <MultiCheckList
+          label="Coordinators"
+          options={coordinators}
+          selected={selectedCoordinatorIds}
+          onChange={setSelectedCoordinatorIds}
+          getId={(c: any) => c.id}
+          getLabel={(c: any) => c.fullName}
+        />
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-2">

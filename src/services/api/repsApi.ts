@@ -9,13 +9,12 @@ export interface Rep {
   fullName: string;
   employeeCode: string;
   hireDate: string;
-  regionId?: string;
-  regionName?: string;
-  subRegionId?: string;
-  subRegionName?: string;
-  coordinatorId?: string;
-  coordinatorName?: string;
-  coordinatorRegionName?: string;
+  regionIds: string[];
+  regionNames: string[];
+  subRegionIds: string[];
+  subRegionNames: string[];
+  coordinatorIds: string[];
+  coordinatorNames: string[];
   assignedCustomersCount?: number;
   email?: string;
   phoneNumber?: string;
@@ -33,10 +32,10 @@ export const repsApi = {
   adminGetById: (id: string) =>
     api.get<ApiResponse<Rep>>(`/admin/reps/${id}`),
 
-  adminCreate: (data: { username?: string; email?: string; password: string; fullName: string; phoneNumber?: string; employeeCode?: string; hireDate?: string; regionId?: string; subRegionId?: string; coordinatorId?: string }) =>
+  adminCreate: (data: { username?: string; email?: string; password: string; fullName: string; phoneNumber?: string; employeeCode?: string; hireDate?: string; regionIds?: string[]; subRegionIds?: string[]; coordinatorIds?: string[] }) =>
     api.post<ApiResponse<Rep>>('/admin/reps', data),
 
-  adminUpdate: (id: string, data: { fullName?: string; phoneNumber?: string; regionId?: string; subRegionId?: string; coordinatorId?: string; isActive?: boolean }) =>
+  adminUpdate: (id: string, data: { fullName?: string; employeeCode?: string; phoneNumber?: string; hireDate?: string; regionIds?: string[]; subRegionIds?: string[]; coordinatorIds?: string[]; isActive?: boolean }) =>
     api.put<ApiResponse<Rep>>(`/admin/reps/${id}`, data),
 
   adminUnassignCoordinator: (id: string) =>

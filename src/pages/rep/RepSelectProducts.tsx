@@ -341,7 +341,8 @@ export default function RepSelectProducts() {
                                 {/* Qty */}
                                 <td className="px-2 py-2 text-center">
                                   <input
-                                    type="number" min={1} value={row.qty} disabled={!prod}
+                                    type="text" inputMode="numeric" pattern="[0-9]*" value={row.qty || ''} disabled={!prod}
+                                    placeholder="Qty"
                                     onChange={e => { const q = Math.max(1, parseInt(e.target.value) || 1); updateQuickRow(row.id, { qty: q }); if (prod) { syncRowItem({ ...row, qty: q }); } }}
                                     className="w-16 text-center text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 transition disabled:opacity-40"
                                   />

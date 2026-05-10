@@ -272,7 +272,7 @@ export default function RepCreateQuotation() {
                         </td>
                         {/* Qty */}
                         <td className="px-2 py-2 text-center">
-                          <input type="number" min={1} value={row.qty} disabled={!p}
+                          <input type="text" inputMode="numeric" pattern="[0-9]*" value={row.qty || ''} disabled={!p} placeholder="Qty"
                             onChange={(e) => updateQuotationRow(row.id, { qty: Math.max(1, Number(e.target.value) || 1) })}
                             className="w-16 text-center text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 transition disabled:opacity-40" />
                         </td>
@@ -445,7 +445,7 @@ export default function RepCreateQuotation() {
                   <div className="grid grid-cols-3 gap-2">
                     <div>
                       <label className="block text-[10px] font-semibold text-slate-400 mb-1">Qty</label>
-                      <input type="number" min={1} value={row.qty} disabled={!p}
+                      <input type="text" inputMode="numeric" pattern="[0-9]*" value={row.qty || ''} disabled={!p} placeholder="Qty"
                         onChange={(e) => updateQuotationRow(row.id, { qty: Math.max(1, Number(e.target.value) || 1) })}
                         className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-center disabled:opacity-40" />
                     </div>

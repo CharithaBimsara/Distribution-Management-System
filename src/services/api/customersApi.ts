@@ -28,7 +28,7 @@ export const customersApi = {
     api.get<ApiResponse<Customer>>(`/coordinator/customer-management/${id}`),
 
   coordinatorGetSummary: (id: string) =>
-    api.get<ApiResponse<CustomerSummary>>(`/coordinator/customer-management/${id}/summary`),
+    api.get<ApiResponse<CustomerSummary>>(`/admin/customers/${id}/summary`),
 
   adminCreate: (data: Record<string, unknown>) =>
     api.post<ApiResponse<Customer>>('/admin/customers', data),

@@ -1,6 +1,6 @@
 import api from './axiosConfig';
 import type { ApiResponse, PagedResult } from '../../types/api.types';
-import type { Customer } from '../../types/customer.types';
+import type { Customer, PriceDetail, PriceSpecialRequest } from '../../types/customer.types';
 import type { RepPerformance, Route } from '../../types/common.types';
 import type {
   Coordinator,
@@ -159,5 +159,15 @@ export const coordinatorApproveCustomer = async (customerId: string, req: Approv
 
 export const coordinatorRejectCustomer = async (customerId: string, req: RejectCustomerRequest) => {
   const { data } = await api.post<ApiResponse<string>>(`/coordinator/customers/${customerId}/reject`, req);
+  return data.data;
+};
+
+export const coordinatorGetSpecialPrices = async (customerId: string) => {
+  const { data } = await api.get<ApiResponse<PriceDetail[]>>(`/coordinator/customers/${customerId}/special-prices`);
+  return data.data;
+};
+
+export const coordinatorSaveSpecialPrices = async (customerId: string, prices: PriceSpecialRequest[]) => {
+  const { data } = await api.post<ApiResponse<string>>(`/coordinator/customers/${customerId}/special-prices`, prices);
   return data.data;
 };

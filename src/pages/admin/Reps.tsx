@@ -106,9 +106,9 @@ export default function AdminReps() {
       const rows = list.map((r) => ({
         'Full Name': r.fullName,
         'Employee Code': r.employeeCode || '',
-        Region: r.regionName || '',
-        'Sub-Region': r.subRegionName || '',
-        Coordinator: r.coordinatorName || '',
+        Region: r.regionNames?.join(', ') || '',
+        'Sub-Region': r.subRegionNames?.join(', ') || '',
+        Coordinator: r.coordinatorNames?.join(', ') || '',
         Customers: r.assignedCustomersCount || 0,
         Status: r.isActive ? 'Active' : 'Inactive',
       }));
@@ -128,9 +128,9 @@ export default function AdminReps() {
         body: list.map((r) => [
           r.fullName,
           r.employeeCode || '',
-          r.regionName || '',
-          r.subRegionName || '',
-          r.coordinatorName || '',
+          r.regionNames?.join(', ') || '',
+          r.subRegionNames?.join(', ') || '',
+          r.coordinatorNames?.join(', ') || '',
           r.assignedCustomersCount || 0,
           r.isActive ? 'Active' : 'Inactive',
         ]),
@@ -260,9 +260,9 @@ export default function AdminReps() {
                       <p className="font-semibold text-slate-900 text-sm">{r.fullName}</p>
                       <p className="text-xs text-slate-400">{r.employeeCode}</p>
                     </td>
-                    <td className="px-4 py-3 text-slate-600 text-sm">{r.regionName || '—'}</td>
-                    <td className="px-4 py-3 text-slate-600 text-sm">{r.subRegionName || '—'}</td>
-                    <td className="px-4 py-3 text-slate-600 text-sm">{r.coordinatorName || '—'}</td>
+                    <td className="px-4 py-3 text-slate-600 text-sm">{r.regionNames?.join(', ') || '—'}</td>
+                    <td className="px-4 py-3 text-slate-600 text-sm">{r.subRegionNames?.join(', ') || '—'}</td>
+                    <td className="px-4 py-3 text-slate-600 text-sm">{r.coordinatorNames?.join(', ') || '—'}</td>
                     <td className="px-4 py-3 text-center font-medium text-sm">{r.assignedCustomersCount || 0}</td>
                     <td className="px-4 py-3 text-center"><StatusBadge status={r.isActive ? 'Active' : 'Inactive'} /></td>
                     <td className="px-4 py-3 text-center">
@@ -312,13 +312,13 @@ export default function AdminReps() {
                   />
                   <div>
                     <p className="font-semibold text-slate-900">{r.fullName}</p>
-                    <p className="text-xs text-slate-400">{r.employeeCode} · {r.regionName || 'No region'}</p>
+                    <p className="text-xs text-slate-400">{r.employeeCode} · {r.regionNames?.join(', ') || 'No region'}</p>
                   </div>
                 </div>
                 <StatusBadge status={r.isActive ? 'Active' : 'Inactive'} />
               </div>
               <div className="flex items-center gap-3 text-xs text-slate-400 mb-3 ml-8">
-                <span>{r.coordinatorName || 'No coordinator'}</span>
+                <span>{r.coordinatorNames?.join(', ') || 'No coordinator'}</span>
                 <span>{r.assignedCustomersCount || 0} customers</span>
               </div>
               <div className="ml-8">

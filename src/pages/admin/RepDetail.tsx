@@ -125,9 +125,9 @@ export default function AdminRepDetail() {
 
   const resetAssignmentFields = () => {
     if (!rep) return;
-    setSelectedRegionId(rep.regionId || '');
-    setSelectedSubRegionId(rep.subRegionId || '');
-    setSelectedCoordId(rep.coordinatorId || '');
+    setSelectedRegionIds(rep.regionIds || []);
+    setSelectedSubRegionIds(rep.subRegionIds || []);
+    setSelectedCoordIds(rep.coordinatorIds || []);
   };
 
   const handleTabChange = (tab: Tab) => {
@@ -145,9 +145,9 @@ export default function AdminRepDetail() {
     targetAmount: '',
   });
   const [generatedTempPassword, setGeneratedTempPassword] = useState<string>('');
-  const [selectedCoordId, setSelectedCoordId] = useState('');
-  const [selectedRegionId, setSelectedRegionId] = useState('');
-  const [selectedSubRegionId, setSelectedSubRegionId] = useState('');
+  const [selectedCoordIds, setSelectedCoordIds] = useState<string[]>([]);
+  const [selectedRegionIds, setSelectedRegionIds] = useState<string[]>([]);
+  const [selectedSubRegionIds, setSelectedSubRegionIds] = useState<string[]>([]);
 
   // ── Queries ──────────────────────────────────────────────────────────────
 
@@ -204,12 +204,6 @@ export default function AdminRepDetail() {
     queryFn: () => regionsApi.getAll().then(r => r.data || []),
   });
 
-  const { data: subRegions } = useQuery({
-    queryKey: ['sub-regions', selectedRegionId || rep?.regionId],
-    queryFn: () =>
-      regionsApi.getSubRegions(selectedRegionId || rep?.regionId).then(r => r.data || []),
-    enabled: !!(selectedRegionId || rep?.regionId),
-  });
 
   const { data: coordinatorsData } = useQuery({
     queryKey: ['coordinators-list'],
@@ -288,28 +282,25 @@ export default function AdminRepDetail() {
 
   useEffect(() => {
     if (!rep) return;
-    setSelectedRegionId(rep.regionId || '');
-    setSelectedSubRegionId(rep.subRegionId || '');
-    setSelectedCoordId(rep.coordinatorId || '');
+    setSelectedRegionIds(rep.regionIds || []);
+    setSelectedSubRegionIds(rep.subRegionIds || []);
+    setSelectedCoordIds(rep.coordinatorIds || []);
   }, [rep]);
 
-  const filteredCoordinators = useMemo(() => {
-    if (!selectedRegionId) return coordinators;
-    return coordinators.filter((c: any) => c.regionId === selectedRegionId);
-  }, [coordinators, selectedRegionId]);
-
-  const regionChanged = (selectedRegionId || '') !== (rep?.regionId || '');
+  const allSubRegions = useMemo(() => {
+    return regionList.flatMap((r: any) => (r.subRegions || []).map((s: any) => ({ ...s, regionName: r.name })));
+  }, [regionList]);
 
   const assignmentChanged =
-    regionChanged ||
-    (selectedSubRegionId || '') !== (rep?.subRegionId || '') ||
-    (selectedCoordId || '') !== (rep?.coordinatorId || '');
+    JSON.stringify([...selectedRegionIds].sort()) !== JSON.stringify([...(rep?.regionIds || [])].sort()) ||
+    JSON.stringify([...selectedSubRegionIds].sort()) !== JSON.stringify([...(rep?.subRegionIds || [])].sort()) ||
+    JSON.stringify([...selectedCoordIds].sort()) !== JSON.stringify([...(rep?.coordinatorIds || [])].sort());
 
   const handleUpdateAssignment = () => {
     updateMut.mutate({
-      regionId: selectedRegionId || null,
-      subRegionId: selectedSubRegionId || null,
-      coordinatorId: selectedCoordId || null,
+      regionIds: selectedRegionIds,
+      subRegionIds: selectedSubRegionIds,
+      coordinatorIds: selectedCoordIds,
     });
   };
 
@@ -633,55 +624,169 @@ export default function AdminRepDetail() {
               </div>
             </Card>
 
-            {/* Assignment – editable dropdowns */}
+            {/* Assignment */}
             <Card>
-              <CardHeader title="Assignment" icon={<MapPin className="w-4 h-4" />} />
-              <div className="p-5 space-y-4">
+              <CardHeader
+                title="Territory Assignment"
+                icon={<MapPin className="w-4 h-4" />}
+                action={
+                  assignmentChanged && (
+                    <span className="text-xs font-semibold px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full border border-amber-200 animate-pulse">
+                      Unsaved changes
+                    </span>
+                  )
+                }
+              />
+              <div className="p-5 space-y-5">
+
+                {/* Current summary chips */}
+                {(rep.regionIds?.length > 0 || rep.subRegionIds?.length > 0 || rep.coordinatorIds?.length > 0) && (
+                  <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 space-y-2">
+                    <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Currently Assigned</p>
+                    {rep.regionIds?.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        <span className="text-[10px] font-bold text-blue-500 uppercase tracking-wider w-20 pt-1">Regions</span>
+                        {rep.regionNames?.map((name: string, i: number) => (
+                          <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded-full border border-blue-200">
+                            <MapPin className="w-2.5 h-2.5" />{name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {rep.subRegionIds?.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-wider w-20 pt-1">Sub-Reg.</span>
+                        {rep.subRegionNames?.map((name: string, i: number) => (
+                          <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-100 text-indigo-700 text-xs font-medium rounded-full border border-indigo-200">
+                            {name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {rep.coordinatorIds?.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        <span className="text-[10px] font-bold text-violet-500 uppercase tracking-wider w-20 pt-1">Coord.</span>
+                        {rep.coordinatorNames?.map((name: string, i: number) => (
+                          <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-violet-100 text-violet-700 text-xs font-medium rounded-full border border-violet-200">
+                            <User className="w-2.5 h-2.5" />{name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Checkbox panels */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <SelectField
-                    label="Region"
-                    value={selectedRegionId}
-                    onChange={v => { setSelectedRegionId(v); setSelectedSubRegionId(''); setSelectedCoordId(''); }}
-                  >
-                    <option value="">Select region…</option>
-                    {regionList.map((r: any) => (
-                      <option key={r.id} value={r.id}>{r.name}</option>
-                    ))}
-                  </SelectField>
+                  {/* Regions */}
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-semibold text-blue-600 uppercase tracking-wider">Regions</label>
+                      {selectedRegionIds.length > 0 && (
+                        <span className="text-[10px] bg-blue-100 text-blue-700 font-bold px-1.5 py-0.5 rounded-full">{selectedRegionIds.length}</span>
+                      )}
+                    </div>
+                    <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm">
+                      {regionList.length === 0 ? (
+                        <p className="text-xs text-slate-400 p-3">None available</p>
+                      ) : regionList.map((r: any) => (
+                        <label key={r.id} className={`flex items-center gap-2.5 px-3 py-2 cursor-pointer transition-colors ${
+                          selectedRegionIds.includes(r.id) ? 'bg-blue-50 border-l-2 border-blue-500' : 'hover:bg-slate-50 border-l-2 border-transparent'
+                        }`}>
+                          <input
+                            type="checkbox"
+                            checked={selectedRegionIds.includes(r.id)}
+                            onChange={() => setSelectedRegionIds(prev =>
+                              prev.includes(r.id) ? prev.filter(x => x !== r.id) : [...prev, r.id]
+                            )}
+                            className="accent-blue-600 w-3.5 h-3.5"
+                          />
+                          <span className={`text-sm ${selectedRegionIds.includes(r.id) ? 'text-blue-700 font-medium' : 'text-slate-700'}`}>
+                            {r.name}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
 
-                  <SelectField
-                    label="Sub-Region"
-                    value={selectedSubRegionId}
-                    onChange={setSelectedSubRegionId}
-                    disabled={!regionChanged}
-                  >
-                    <option value="">Select sub-region…</option>
-                    {(subRegions || []).map((s: any) => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
-                    ))}
-                  </SelectField>
+                  {/* Sub-Regions */}
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-semibold text-indigo-600 uppercase tracking-wider">Sub-Regions</label>
+                      {selectedSubRegionIds.length > 0 && (
+                        <span className="text-[10px] bg-indigo-100 text-indigo-700 font-bold px-1.5 py-0.5 rounded-full">{selectedSubRegionIds.length}</span>
+                      )}
+                    </div>
+                    <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm">
+                      {allSubRegions.length === 0 ? (
+                        <p className="text-xs text-slate-400 p-3">None available</p>
+                      ) : allSubRegions.map((s: any) => (
+                        <label key={s.id} className={`flex items-center gap-2.5 px-3 py-2 cursor-pointer transition-colors ${
+                          selectedSubRegionIds.includes(s.id) ? 'bg-indigo-50 border-l-2 border-indigo-500' : 'hover:bg-slate-50 border-l-2 border-transparent'
+                        }`}>
+                          <input
+                            type="checkbox"
+                            checked={selectedSubRegionIds.includes(s.id)}
+                            onChange={() => setSelectedSubRegionIds(prev =>
+                              prev.includes(s.id) ? prev.filter(x => x !== s.id) : [...prev, s.id]
+                            )}
+                            className="accent-indigo-600 w-3.5 h-3.5"
+                          />
+                          <span className={`text-sm ${selectedSubRegionIds.includes(s.id) ? 'text-indigo-700 font-medium' : 'text-slate-700'}`}>
+                            {s.name}
+                            <span className="text-slate-400 text-[11px] ml-1">({s.regionName})</span>
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
 
-                  <SelectField
-                    label="Coordinator"
-                    value={selectedCoordId}
-                    onChange={setSelectedCoordId}
-                    disabled={!regionChanged}
-                  >
-                    <option value="">Select coordinator…</option>
-                    {filteredCoordinators.map((c: any) => (
-                      <option key={c.id} value={c.id}>{c.fullName}</option>
-                    ))}
-                  </SelectField>
+                  {/* Coordinators */}
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-semibold text-violet-600 uppercase tracking-wider">Coordinators</label>
+                      {selectedCoordIds.length > 0 && (
+                        <span className="text-[10px] bg-violet-100 text-violet-700 font-bold px-1.5 py-0.5 rounded-full">{selectedCoordIds.length}</span>
+                      )}
+                    </div>
+                    <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm">
+                      {coordinators.length === 0 ? (
+                        <p className="text-xs text-slate-400 p-3">None available</p>
+                      ) : coordinators.map((c: any) => (
+                        <label key={c.id} className={`flex items-center gap-2.5 px-3 py-2 cursor-pointer transition-colors ${
+                          selectedCoordIds.includes(c.id) ? 'bg-violet-50 border-l-2 border-violet-500' : 'hover:bg-slate-50 border-l-2 border-transparent'
+                        }`}>
+                          <input
+                            type="checkbox"
+                            checked={selectedCoordIds.includes(c.id)}
+                            onChange={() => setSelectedCoordIds(prev =>
+                              prev.includes(c.id) ? prev.filter(x => x !== c.id) : [...prev, c.id]
+                            )}
+                            className="accent-violet-600 w-3.5 h-3.5"
+                          />
+                          <span className={`text-sm ${selectedCoordIds.includes(c.id) ? 'text-violet-700 font-medium' : 'text-slate-700'}`}>
+                            {c.fullName}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
                 </div>
 
-                <div className="flex justify-end pt-1">
+                <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+                  <button
+                    onClick={resetAssignmentFields}
+                    className="text-xs text-slate-400 hover:text-slate-600 font-medium transition"
+                  >
+                    Reset changes
+                  </button>
                   <button
                     onClick={handleUpdateAssignment}
                     disabled={!assignmentChanged || updateMut.isPending}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-semibold
-                               hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold
+                               hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition shadow-sm"
                   >
-                    {updateMut.isPending ? 'Updating…' : 'Update Assignment'}
+                    {updateMut.isPending ? 'Saving…' : 'Save Assignment'}
                   </button>
                 </div>
               </div>

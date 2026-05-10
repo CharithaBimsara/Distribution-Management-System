@@ -29,7 +29,7 @@ export default function RepRoutes() {
   }, [routes, selectedRouteId]);
 
   const customers = selectedRoute?.customers || [];
-  const regionLabel = profile?.coordinatorRegionName || profile?.regionName || 'Region not set';
+  const regionLabel = profile?.regionNames?.join(', ') || 'Region not set';
 
   return (
     <div className="animate-fade-in">
