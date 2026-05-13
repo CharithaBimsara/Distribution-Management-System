@@ -1,4 +1,5 @@
-﻿import { useState, useEffect, useMemo } from 'react';
+﻿import { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { customersApi } from '../../services/api/customersApi';
 import { regionsApi } from '../../services/api/regionsApi';
@@ -9,7 +10,8 @@ import { formatCurrency, formatDate } from '../../utils/formatters';
 import {
   ArrowLeft, Store, MapPin, User, Calendar, TrendingUp,
   ShoppingBag, DollarSign, ToggleLeft, ToggleRight,
-  UserCheck, Building2, Phone, Mail, Package, FileText as FileTextIcon, KeyRound, PencilLine, Copy
+  UserCheck, Building2, Phone, Mail, Package, FileText as FileTextIcon, KeyRound, PencilLine, Copy,
+  Check, X as XIcon, Eye, EyeOff, Upload
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../hooks/useAuth';
@@ -51,6 +53,82 @@ function toDateInputValue(value?: string) {
   return date.toISOString().slice(0, 10);
 }
 
+// Inline editable row — double-click to edit
+function InlineEditRow({
+  label,
+  displayValue,
+  isEditing,
+  onDoubleClick,
+  onCommit,
+  onCancel,
+  type = 'text',
+  options,
+}: {
+  label: string;
+  displayValue?: string | null;
+  isEditing: boolean;
+  onDoubleClick: () => void;
+  onCommit: (val: string) => void;
+  onCancel: () => void;
+  type?: 'text' | 'select';
+  options?: { value: string; label: string }[];
+}) {
+  const [draft, setDraft] = useState(displayValue || '');
+  const inputRef = useRef<HTMLInputElement & HTMLSelectElement>(null);
+
+  useEffect(() => {
+    if (isEditing) {
+      setDraft(displayValue || '');
+      setTimeout(() => { inputRef.current?.focus(); (inputRef.current as HTMLInputElement)?.select?.(); }, 0);
+    }
+  }, [isEditing, displayValue]);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') { e.preventDefault(); onCommit(draft); }
+    if (e.key === 'Escape') { onCancel(); }
+  };
+
+  return (
+    <div className="flex justify-between items-center gap-4 py-2.5 border-b border-slate-100 last:border-0 group min-h-[40px]">
+      <span className="text-xs text-slate-400 uppercase tracking-wider flex-shrink-0 w-36">{label}</span>
+      {isEditing ? (
+        type === 'select' ? (
+          <select
+            ref={inputRef as any}
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            onBlur={() => onCommit(draft)}
+            onKeyDown={handleKeyDown}
+            className="text-sm px-2.5 py-1.5 border border-indigo-400 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500/20 outline-none max-w-[200px]"
+            autoFocus
+          >
+            {options?.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+          </select>
+        ) : (
+          <input
+            ref={inputRef as any}
+            type="text"
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            onBlur={() => onCommit(draft)}
+            onKeyDown={handleKeyDown}
+            className="text-sm px-2.5 py-1.5 border border-indigo-400 rounded-lg focus:ring-2 focus:ring-indigo-500/20 outline-none w-full max-w-[220px]"
+          />
+        )
+      ) : (
+        <span
+          className="text-sm text-slate-800 text-right break-words min-w-0 font-medium flex items-center justify-end gap-1.5 cursor-pointer group-hover:text-indigo-600 transition-colors"
+          onDoubleClick={onDoubleClick}
+          title="Double-click to edit"
+        >
+          <span>{displayValue || '—'}</span>
+          <PencilLine className="w-3 h-3 opacity-0 group-hover:opacity-40 flex-shrink-0 transition-opacity" />
+        </span>
+      )}
+    </div>
+  );
+}
+
 export default function AdminCustomerDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -66,7 +144,23 @@ export default function AdminCustomerDetail() {
   const [selectedCoordinatorId, setSelectedCoordinatorId] = useState('');
   const [generatedTempPassword, setGeneratedTempPassword] = useState('');
   const [editingRegistration, setEditingRegistration] = useState(false);
+
+  // Inline field editing state
+  const [editingField, setEditingField] = useState<string | null>(null);
+  const [pendingConfirm, setPendingConfirm] = useState<{
+    field: string; label: string; oldValue: string; newValue: string; apiType: 'update' | 'reg' | 'password';
+  } | null>(null);
+
+  // Password input state (for Credentials section)
+  const [newPasswordInput, setNewPasswordInput] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
   const [registrationFiles, setRegistrationFiles] = useState<{
+    businessRegDoc?: File;
+    businessAddressDoc?: File;
+    vatDoc?: File;
+  }>({});
+
+  const [quickDocFiles, setQuickDocFiles] = useState<{
     businessRegDoc?: File;
     businessAddressDoc?: File;
     vatDoc?: File;
@@ -242,6 +336,19 @@ export default function AdminCustomerDetail() {
     },
   });
 
+  const uploadDocsMut = useMutation({
+    mutationFn: (formData: FormData) => customersApi.adminUpdateRegistrationDetails(id!, formData),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-customer-summary', id] });
+      queryClient.invalidateQueries({ queryKey: ['admin-customers'] });
+      toast.success('Documents uploaded successfully');
+      setQuickDocFiles({});
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.message || 'Failed to upload documents');
+    },
+  });
+
   const resetTempPasswordMut = useMutation({
     mutationFn: () => {
       if (!customer?.userId) {
@@ -256,6 +363,75 @@ export default function AdminCustomerDetail() {
     },
     onError: () => toast.error('Failed to generate password'),
   });
+
+  // Inline field update mutations
+  const inlineUpdateMut = useMutation({
+    mutationFn: (data: Record<string, unknown>) => customersApi.adminUpdate(id!, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-customer-summary', id] });
+      queryClient.invalidateQueries({ queryKey: ['admin-customers'] });
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.message || 'Failed to update field'),
+  });
+
+  const inlineRegUpdateMut = useMutation({
+    mutationFn: (formData: FormData) => customersApi.adminUpdateRegistrationDetails(id!, formData),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-customer-summary', id] });
+      queryClient.invalidateQueries({ queryKey: ['admin-customers'] });
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.message || 'Failed to update field'),
+  });
+
+  const setPasswordMut = useMutation({
+    mutationFn: (password: string) => {
+      if (!customer?.userId) throw new Error('Customer user id is missing');
+      return authApi.adminSetUserPassword(customer.userId, password);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-customer-summary', id] });
+      toast.success('Password updated successfully');
+      setNewPasswordInput('');
+      setShowNewPassword(false);
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.message || 'Failed to update password'),
+  });
+
+  const handleStartInlineEdit = (field: string, currentValue: string) => {
+    setEditingField(field);
+  };
+
+  const handleInlineCommit = (field: string, label: string, oldValue: string, newValue: string, apiType: 'update' | 'reg' | 'password') => {
+    const trimmed = newValue.trim();
+    if (trimmed === oldValue.trim()) {
+      // No change
+      setEditingField(null);
+      return;
+    }
+    setPendingConfirm({ field, label, oldValue, newValue: trimmed, apiType });
+    setEditingField(null);
+  };
+
+  const handleConfirmSave = async () => {
+    if (!pendingConfirm) return;
+    const { field, label, newValue, apiType } = pendingConfirm;
+    try {
+      if (apiType === 'password') {
+        await setPasswordMut.mutateAsync(newValue);
+      } else if (apiType === 'reg') {
+        const formData = new FormData();
+        formData.append(field, newValue);
+        await inlineRegUpdateMut.mutateAsync(formData);
+      } else {
+        await inlineUpdateMut.mutateAsync({ [field]: newValue || null });
+      }
+      toast.success(`${label} updated successfully`);
+      setPendingConfirm(null);
+    } catch {
+      // Handled by mutation error handler
+      setPendingConfirm(null);
+    }
+  };
 
   const handleSaveAssignment = () => {
     updateAssignmentMut.mutate({
@@ -313,6 +489,18 @@ export default function AdminCustomerDetail() {
     setEditingRegistration(false);
     setRegistrationFiles({});
     syncRegistrationFormFromSummary();
+  };
+
+  const handleQuickUploadDocs = () => {
+    if (!quickDocFiles.businessRegDoc && !quickDocFiles.businessAddressDoc && !quickDocFiles.vatDoc) {
+      toast.error('Please select at least one document to upload');
+      return;
+    }
+    const formData = new FormData();
+    if (quickDocFiles.businessRegDoc) formData.append('businessRegDoc', quickDocFiles.businessRegDoc);
+    if (quickDocFiles.businessAddressDoc) formData.append('businessAddressDoc', quickDocFiles.businessAddressDoc);
+    if (quickDocFiles.vatDoc) formData.append('vatDoc', quickDocFiles.vatDoc);
+    uploadDocsMut.mutate(formData);
   };
   const visibleTempPassword = generatedTempPassword || customer?.temporaryPassword || '';
 
@@ -405,75 +593,154 @@ export default function AdminCustomerDetail() {
 
           {/* General Information */}
           <Section title="General Information" icon={<Building2 className="w-4 h-4" />}>
-            <InfoRow label="Business Reg #" value={customer.businessRegistrationNumber} />
-            <InfoRow label="Email" value={displayEmailValue(customer.email)} />
-            <InfoRow label="Phone" value={customer.phoneNumber} />
-            <InfoRow label="Username" value={customer.username} />
-            <InfoRow label="Street" value={customer.street} />
-            <InfoRow label="City" value={customer.city} />
-            <InfoRow label="State / Province" value={customer.state} />
+            {!isCoordinatorView ? (
+              <>
+                <InlineEditRow
+                  label="Shop Name"
+                  displayValue={customer.shopName}
+                  isEditing={editingField === 'shopName'}
+                  onDoubleClick={() => handleStartInlineEdit('shopName', customer.shopName || '')}
+                  onCommit={(v) => handleInlineCommit('shopName', 'Shop Name', customer.shopName || '', v, 'update')}
+                  onCancel={() => setEditingField(null)}
+                />
+                <InlineEditRow
+                  label="Business Reg #"
+                  displayValue={customer.businessRegistrationNumber}
+                  isEditing={editingField === 'businessRegistrationNumber'}
+                  onDoubleClick={() => handleStartInlineEdit('businessRegistrationNumber', customer.businessRegistrationNumber || '')}
+                  onCommit={(v) => handleInlineCommit('businessRegistrationNumber', 'Business Registration #', customer.businessRegistrationNumber || '', v, 'reg')}
+                  onCancel={() => setEditingField(null)}
+                />
+                <InlineEditRow
+                  label="Email"
+                  displayValue={displayEmailValue(customer.email) === '-' ? '' : displayEmailValue(customer.email)}
+                  isEditing={editingField === 'email'}
+                  onDoubleClick={() => handleStartInlineEdit('email', displayEmailValue(customer.email) === '-' ? '' : customer.email || '')}
+                  onCommit={(v) => handleInlineCommit('email', 'Email', displayEmailValue(customer.email) === '-' ? '' : customer.email || '', v, 'reg')}
+                  onCancel={() => setEditingField(null)}
+                />
+                <InlineEditRow
+                  label="Phone"
+                  displayValue={customer.phoneNumber}
+                  isEditing={editingField === 'phoneNumber'}
+                  onDoubleClick={() => handleStartInlineEdit('phoneNumber', customer.phoneNumber || '')}
+                  onCommit={(v) => handleInlineCommit('phoneNumber', 'Phone Number', customer.phoneNumber || '', v, 'update')}
+                  onCancel={() => setEditingField(null)}
+                />
+                <InlineEditRow
+                  label="Street"
+                  displayValue={customer.street}
+                  isEditing={editingField === 'street'}
+                  onDoubleClick={() => handleStartInlineEdit('street', customer.street || '')}
+                  onCommit={(v) => handleInlineCommit('street', 'Street', customer.street || '', v, 'update')}
+                  onCancel={() => setEditingField(null)}
+                />
+                <InlineEditRow
+                  label="City"
+                  displayValue={customer.city}
+                  isEditing={editingField === 'city'}
+                  onDoubleClick={() => handleStartInlineEdit('city', customer.city || '')}
+                  onCommit={(v) => handleInlineCommit('city', 'City', customer.city || '', v, 'update')}
+                  onCancel={() => setEditingField(null)}
+                />
+                <InlineEditRow
+                  label="State / Province"
+                  displayValue={customer.state}
+                  isEditing={editingField === 'state'}
+                  onDoubleClick={() => handleStartInlineEdit('state', customer.state || '')}
+                  onCommit={(v) => handleInlineCommit('state', 'State / Province', customer.state || '', v, 'update')}
+                  onCancel={() => setEditingField(null)}
+                />
+                <p className="text-[10px] text-slate-400 mt-2 italic">Double-click any value to edit inline</p>
+              </>
+            ) : (
+              <>
+                <InfoRow label="Business Reg #" value={customer.businessRegistrationNumber} />
+                <InfoRow label="Email" value={displayEmailValue(customer.email)} />
+                <InfoRow label="Phone" value={customer.phoneNumber} />
+                <InfoRow label="Street" value={customer.street} />
+                <InfoRow label="City" value={customer.city} />
+                <InfoRow label="State / Province" value={customer.state} />
+              </>
+            )}
           </Section>
 
           {!isCoordinatorView && (
             <Section title="Credentials" icon={<KeyRound className="w-4 h-4" />}>
-              <div className="flex flex-col">
+              <div className="flex flex-col gap-1">
                 
-                {/* Username Row */}
-                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 py-3 border-b border-slate-100">
-                  <span className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Username</span>
-                  
+                {/* Username Row — double-click to edit */}
+                <InlineEditRow
+                  label="Username"
+                  displayValue={customer.businessRegistrationNumber || customer.username}
+                  isEditing={editingField === 'credUsername'}
+                  onDoubleClick={() => handleStartInlineEdit('credUsername', customer.businessRegistrationNumber || customer.username || '')}
+                  onCommit={(v) => handleInlineCommit('businessRegistrationNumber', 'Username', customer.businessRegistrationNumber || customer.username || '', v, 'reg')}
+                  onCancel={() => setEditingField(null)}
+                />
+
+                {/* Current password display */}
+                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 py-2.5 border-b border-slate-100">
+                  <span className="text-xs text-slate-400 uppercase tracking-wider flex-shrink-0 w-36">Current Password</span>
                   <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200/60 px-3 py-1.5 rounded-lg w-fit">
                     <span className="text-sm text-slate-700 font-medium select-all">
-                      {customer.businessRegistrationNumber || customer.username || '-'}
+                      {visibleTempPassword || '-'}
                     </span>
-                    <button
-                      onClick={() => {
-                        const text = customer.businessRegistrationNumber || customer.username || '';
-                        if (text && text !== '-') {
-                          navigator.clipboard.writeText(text);
-                          toast.success('Username copied!');
-                        }
-                      }}
-                      className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors ml-1"
-                      title="Copy Username"
-                    >
-                      <Copy className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Password Row */}
-                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 py-3">
-                  <span className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Current Password</span>
-
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200/60 px-3 py-1.5 rounded-lg w-fit">
-                      <span className="text-sm text-slate-700 font-medium select-all">
-                        {visibleTempPassword || '-'}
-                      </span>
+                    {visibleTempPassword && (
                       <button
                         onClick={() => {
-                          if (visibleTempPassword && visibleTempPassword !== '-') {
-                            navigator.clipboard.writeText(visibleTempPassword);
-                            toast.success('Password copied!');
-                          }
+                          navigator.clipboard.writeText(visibleTempPassword);
+                          toast.success('Password copied!');
                         }}
                         className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors ml-1"
                         title="Copy Password"
                       >
                         <Copy className="w-3.5 h-3.5" />
                       </button>
-                    </div>
+                    )}
+                  </div>
+                </div>
 
+                {/* Set New Password Row */}
+                <div className="pt-2 mt-1">
+                  <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold mb-2">Set New Password</p>
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1 max-w-xs">
+                      <input
+                        type={showNewPassword ? 'text' : 'password'}
+                        value={newPasswordInput}
+                        onChange={e => setNewPasswordInput(e.target.value)}
+                        placeholder="Enter new password…"
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/15 focus:border-indigo-400 outline-none pr-9"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && newPasswordInput.trim()) {
+                            setPendingConfirm({ field: 'password', label: 'Password', oldValue: '(current password)', newValue: newPasswordInput.trim(), apiType: 'password' });
+                            setNewPasswordInput('');
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword(p => !p)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                      >
+                        {showNewPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
                     <button
-                      onClick={() => resetTempPasswordMut.mutate()}
-                      disabled={resetTempPasswordMut.isPending}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-100 hover:bg-indigo-100 hover:border-indigo-200 transition-all disabled:opacity-50 shadow-sm"
+                      onClick={() => {
+                        if (!newPasswordInput.trim()) return;
+                        setPendingConfirm({ field: 'password', label: 'Password', oldValue: '(current password)', newValue: newPasswordInput.trim(), apiType: 'password' });
+                        setNewPasswordInput('');
+                      }}
+                      disabled={!newPasswordInput.trim() || setPasswordMut.isPending}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40 transition"
                     >
                       <KeyRound className="w-3.5 h-3.5" />
-                      {resetTempPasswordMut.isPending ? 'Generating…' : 'Generate New'}
+                      {setPasswordMut.isPending ? 'Saving…' : 'Set Password'}
                     </button>
                   </div>
+                  <p className="text-[10px] text-slate-400 mt-1.5">Admin sets the password directly. Customer will use this on next login.</p>
                 </div>
                 
               </div>
@@ -599,6 +866,63 @@ export default function AdminCustomerDetail() {
                   </div>
                 )}
               </>
+            )}
+
+            {/* ── Admin: Quick Document Upload (always visible, outside edit mode) ─── */}
+            {!isCoordinatorView && !editingRegistration && (
+              <div className="mt-4 pt-4 border-t border-slate-100">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                  <Upload className="w-3.5 h-3.5" /> Upload / Replace Documents
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {[
+                    { key: 'businessRegDoc' as const, label: 'Business Reg Doc', currentPath: summary.registrationRequest?.businessRegDocPath },
+                    { key: 'businessAddressDoc' as const, label: 'Business Address Doc', currentPath: summary.registrationRequest?.businessAddressDocPath },
+                    ...(summary.registrationRequest?.customerType !== 'NonTax'
+                      ? [{ key: 'vatDoc' as const, label: 'VAT Doc', currentPath: summary.registrationRequest?.vatDocPath }]
+                      : []),
+                  ].map(({ key, label, currentPath }) => (
+                    <div key={key} className="rounded-xl border-2 border-dashed border-slate-200 hover:border-indigo-300 p-3 transition-colors">
+                      <p className="text-xs font-semibold text-slate-600 mb-1.5">{label}</p>
+                      {currentPath && (
+                        <a
+                          href={currentPath}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-[10px] text-indigo-600 hover:underline mb-1.5"
+                        >
+                          <FileTextIcon className="w-3 h-3" /> View current
+                        </a>
+                      )}
+                      {!currentPath && (
+                        <p className="text-[10px] text-slate-400 mb-1.5">No document uploaded yet</p>
+                      )}
+                      <label className="flex items-center gap-1.5 cursor-pointer group">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-100 group-hover:bg-indigo-50 group-hover:text-indigo-700 text-xs font-medium text-slate-600 transition-colors border border-slate-200">
+                          <Upload className="w-3 h-3" />
+                          {quickDocFiles[key] ? quickDocFiles[key]!.name : (currentPath ? 'Replace' : 'Choose file')}
+                        </span>
+                        <input
+                          type="file"
+                          accept=".pdf,.jpg,.jpeg,.png"
+                          className="hidden"
+                          onChange={e => setQuickDocFiles(prev => ({ ...prev, [key]: e.target.files?.[0] }))}
+                        />
+                      </label>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex justify-end mt-3">
+                  <button
+                    onClick={handleQuickUploadDocs}
+                    disabled={uploadDocsMut.isPending || (!quickDocFiles.businessRegDoc && !quickDocFiles.businessAddressDoc && !quickDocFiles.vatDoc)}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 disabled:opacity-40 transition"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    {uploadDocsMut.isPending ? 'Uploading…' : 'Upload Documents'}
+                  </button>
+                </div>
+              </div>
             )}
 
             {summary.registrationRequest && editingRegistration && !isCoordinatorView && (
@@ -757,7 +1081,7 @@ export default function AdminCustomerDetail() {
                         <FileTextIcon className="w-3.5 h-3.5" /> Current Address Doc
                       </a>
                     )}
-                    {summary.registrationRequest.vatDocPath && (
+                    {summary.registrationRequest.vatDocPath && registrationForm.customerType !== 'NonTax' && (
                       <a href={summary.registrationRequest.vatDocPath} target="_blank" rel="noopener noreferrer"
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-medium border border-indigo-200 hover:bg-indigo-100 transition">
                         <FileTextIcon className="w-3.5 h-3.5" /> Current VAT Doc
@@ -773,10 +1097,12 @@ export default function AdminCustomerDetail() {
                       <label className="block text-xs font-semibold text-slate-600 mb-1">Replace Address Doc</label>
                       <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={e => setRegistrationFiles(prev => ({ ...prev, businessAddressDoc: e.target.files?.[0] }))} className="w-full text-xs" />
                     </div>
+                    {registrationForm.customerType !== 'NonTax' && (
                     <div>
                       <label className="block text-xs font-semibold text-slate-600 mb-1">Replace VAT Doc</label>
                       <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={e => setRegistrationFiles(prev => ({ ...prev, vatDoc: e.target.files?.[0] }))} className="w-full text-xs" />
                     </div>
+                    )}
                   </div>
                 </div>
 
@@ -975,6 +1301,61 @@ export default function AdminCustomerDetail() {
           )}
         </div>
       </div>
+
+      {/* ── Inline Edit Confirmation Modal ──────────────────────────────── */}
+      {pendingConfirm && createPortal(
+        <div className="fixed inset-0 z-50 flex flex-col items-center" style={{ pointerEvents: 'auto' }}>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={() => setPendingConfirm(null)} />
+          <div
+            className="relative mt-16 w-full max-w-sm mx-4 bg-white rounded-2xl shadow-2xl border border-slate-200"
+            style={{ animation: 'slideDown 0.25s ease-out both' }}
+          >
+            <div className="flex items-start gap-4 p-6 pb-4">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center">
+                <PencilLine className="w-5 h-5 text-indigo-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base font-semibold text-slate-900">Update {pendingConfirm.label}?</h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  Confirm this change for <span className="font-semibold text-slate-700">{customer.shopName}</span>
+                </p>
+              </div>
+            </div>
+
+            <div className="mx-6 rounded-xl bg-slate-50 border border-slate-200 p-3.5 mb-5 space-y-2">
+              <div className="flex items-start gap-2 text-sm">
+                <span className="text-slate-400 w-14 shrink-0 font-medium">From:</span>
+                <span className="font-medium text-slate-500 line-through break-words min-w-0">{pendingConfirm.oldValue || '(empty)'}</span>
+              </div>
+              <div className="h-px bg-slate-200" />
+              <div className="flex items-start gap-2 text-sm">
+                <span className="text-slate-400 w-14 shrink-0 font-medium">To:</span>
+                <span className="font-bold text-slate-900 break-words min-w-0">{pendingConfirm.apiType === 'password' ? '••••••••' : pendingConfirm.newValue}</span>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 px-6 pb-5">
+              <button
+                onClick={() => setPendingConfirm(null)}
+                className="px-4 py-2 rounded-xl border border-slate-200 text-sm font-medium text-slate-700 hover:bg-slate-50 transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmSave}
+                disabled={inlineUpdateMut.isPending || inlineRegUpdateMut.isPending || setPasswordMut.isPending}
+                className="px-5 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition flex items-center gap-1.5"
+              >
+                {(inlineUpdateMut.isPending || inlineRegUpdateMut.isPending || setPasswordMut.isPending)
+                  ? 'Saving…'
+                  : <><Check className="w-4 h-4" /> Save</>
+                }
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

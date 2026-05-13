@@ -99,42 +99,22 @@ export default function AdminOrderDetail() {
       doc.text(poValue, pageWidth - 15, 30, { align: 'right' });
 
       const sectionY = 44;
-      const colMid = pageWidth / 2 + 2;
 
       doc.setFillColor(...BLUE);
-      doc.rect(14, sectionY, 88, 6, 'F');
+      doc.rect(14, sectionY, pageWidth - 28, 6, 'F');
       doc.setTextColor(...WHITE);
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(9);
-      doc.text('VENDOR', 16, sectionY + 4.2);
+      doc.text('CUSTOMER', 16, sectionY + 4.2);
 
-      doc.setFillColor(...BLUE);
-      doc.rect(colMid, sectionY, 88, 6, 'F');
-      doc.setTextColor(...WHITE);
-      doc.text('SHIP TO', colMid + 2, sectionY + 4.2);
-
-      const vY = sectionY + 10;
+      doc.setDrawColor(180, 180, 180);
+      doc.rect(14, sectionY + 6, pageWidth - 28, 18);
       doc.setTextColor(...DARK);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8.5);
-      doc.text('Janasiri Distribution Pvt Ltd', 16, vY);
-      doc.text('No 205 Wattarantenna Passage', 16, vY + 5);
-      doc.text('Kandy, Sri Lanka', 16, vY + 10);
-      doc.text('Phone: 0814 950206', 16, vY + 15);
-      doc.text('Hotline: 0777 675322', 16, vY + 20);
+      doc.text(data.customerName || '[Name]', 16, sectionY + 14);
 
-      const sY = sectionY + 10;
-      doc.text(data.customerName || '[Name]', colMid + 2, sY);
-      doc.text('[Company Name]', colMid + 2, sY + 5);
-      doc.text(data.deliveryAddress || '[Street Address]', colMid + 2, sY + 10);
-      doc.text('[City, ST ZIP]', colMid + 2, sY + 15);
-      doc.text('[Phone]', colMid + 2, sY + 20);
-
-      doc.setDrawColor(180, 180, 180);
-      doc.rect(14, sectionY, 88, 30);
-      doc.rect(colMid, sectionY, 88, 30);
-
-      const tableStartY = sectionY + 36;
+      const tableStartY = sectionY + 30;
       const cols = isNonTaxCustomer
         ? ['Description','Item','Rate','Qty','Disc%','Disc Amt','Amount']
         : ['Description','Item','Rate','Qty','Disc%','Disc Amt','Tax','Tax Amt','Amount'];

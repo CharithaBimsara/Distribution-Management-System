@@ -33,6 +33,9 @@ export const authApi = {
   adminResetUserTempPassword: (userId: string) =>
     api.post<ApiResponse<AdminResetPasswordResult>>(`/auth/admin/users/${userId}/temp-password`),
 
+  adminSetUserPassword: (userId: string, password: string) =>
+    api.put<ApiResponse<string>>(`/auth/admin/users/${userId}/password`, { password }),
+
   logout: () =>
     api.post<ApiResponse<string>>('/auth/logout'),
 };

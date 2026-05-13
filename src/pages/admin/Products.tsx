@@ -626,42 +626,43 @@ export default function AdminProducts() {
         const pageH = doc.internal.pageSize.getHeight();
         const marginX = 14;
 
-        // ── Header block ────────────────────────────────────────────────
-        // Taller dark header bar to fit multi-line details
-        doc.setFillColor(30, 41, 59);   // slate-800
-        doc.rect(0, 0, pageW, 36, 'F');
+        // ── Header block — black & white ────────────────────────────────
+        // White background (default), bottom border line
+        doc.setDrawColor(0, 0, 0);
+        doc.setLineWidth(0.4);
+        doc.line(0, 38, pageW, 38);
 
         // Company name
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(15);
-        doc.setTextColor(255, 255, 255);
-        doc.text(companyName, marginX, 10);
+        doc.setFontSize(18);
+        doc.setTextColor(0, 0, 0);
+        doc.text(companyName, marginX, 11);
 
-        // Address line 1 & 2
+        // Address lines
         doc.setFont('helvetica', 'normal');
-        doc.setFontSize(7.5);
-        doc.setTextColor(203, 213, 225);  // slate-300
-        doc.text(`Registered Office: ${registeredOffice}   |   Warehouse Central: ${warehouseCentral}`, marginX, 18);
-        doc.text(`Warehouse West: ${warehouseWest}`, marginX, 23);
-        doc.text(contactVat, marginX, 28);
+        doc.setFontSize(9);
+        doc.setTextColor(0, 0, 0);
+        doc.text(`Registered Office: ${registeredOffice}   |   Warehouse Central: ${warehouseCentral}`, marginX, 19);
+        doc.text(`Warehouse West: ${warehouseWest}`, marginX, 25);
+        doc.text(contactVat, marginX, 31);
 
         // Document title on right
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(10);
-        doc.setTextColor(148, 163, 184);  // slate-400
-        doc.text('PRODUCT PRICE LIST', pageW - marginX, 10, { align: 'right' });
+        doc.setFontSize(13);
+        doc.setTextColor(0, 0, 0);
+        doc.text('PRODUCT PRICE LIST', pageW - marginX, 11, { align: 'right' });
         doc.setFont('helvetica', 'normal');
-        doc.setFontSize(8);
-        doc.setTextColor(100, 116, 139);
-        doc.text(`Generated: ${exportDate}    Total: ${items.length} products`, pageW - marginX, 32, { align: 'right' });
+        doc.setFontSize(9);
+        doc.setTextColor(0, 0, 0);
+        doc.text(`Generated: ${exportDate}    Total: ${items.length} products`, pageW - marginX, 33, { align: 'right' });
 
         // ── Table ────────────────────────────────────────────────────────
         const head = [['GroupName', 'Item', 'Sales Description', 'UOM', 'Price', 'SalesTax', 'All Inc Price', 'MRP']];
 
         const body: (string | number)[][] = [];
         for (const [group, products] of sortedGrouped) {
-          // Section header row
-          body.push([{ content: group, colSpan: 8, styles: { fontStyle: 'bold', fillColor: [241, 245, 249], textColor: [30, 41, 59], fontSize: 8 } } as any]);
+          // Section header row — white bg, bold black text
+          body.push([{ content: group, colSpan: 8, styles: { fontStyle: 'bold', fillColor: [255, 255, 255], textColor: [0, 0, 0], fontSize: 10 } } as any]);
           for (const p of products) {
             body.push([
               group,
@@ -679,27 +680,28 @@ export default function AdminProducts() {
         autoTable(doc, {
           head,
           body,
-          startY: 40,
+          startY: 42,
           margin: { left: marginX, right: marginX },
-          styles: { fontSize: 7.5, cellPadding: 2.2, lineColor: [226, 232, 240], lineWidth: 0.2 },
-          headStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold', fontSize: 8, halign: 'center' },
-          alternateRowStyles: { fillColor: [248, 250, 252] },
+          tableWidth: 'auto',
+          styles: { fontSize: 9, cellPadding: 2.8, lineColor: [0, 0, 0], lineWidth: 0.2, textColor: [0, 0, 0], fillColor: [255, 255, 255] },
+          headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], fontStyle: 'bold', fontSize: 10, halign: 'center', lineColor: [0, 0, 0], lineWidth: 0.3 },
+          alternateRowStyles: { fillColor: [255, 255, 255] },
           columnStyles: {
-            0: { cellWidth: 58 },
-            1: { cellWidth: 22, halign: 'center' },
+            0: { cellWidth: 'auto' },
+            1: { cellWidth: 28, halign: 'center' },
             2: { cellWidth: 'auto' },
-            3: { cellWidth: 18, halign: 'center' },
-            4: { cellWidth: 22, halign: 'right' },
-            5: { cellWidth: 18, halign: 'center' },
-            6: { cellWidth: 26, halign: 'right' },
-            7: { cellWidth: 22, halign: 'right' },
+            3: { cellWidth: 20, halign: 'center' },
+            4: { cellWidth: 28, halign: 'right' },
+            5: { cellWidth: 22, halign: 'center' },
+            6: { cellWidth: 32, halign: 'right' },
+            7: { cellWidth: 28, halign: 'right' },
           },
           didDrawPage: (hookData: any) => {
             // Footer on every page
             const pageNum = hookData.pageNumber;
             const totalPages = (doc as any).internal.getNumberOfPages();
-            doc.setFontSize(7);
-            doc.setTextColor(148, 163, 184);
+            doc.setFontSize(8);
+            doc.setTextColor(0, 0, 0);
             doc.text(`${companyName}  |  Product Price List  |  ${exportDate}`, marginX, pageH - 6);
             doc.text(`Page ${pageNum} of ${totalPages}`, pageW - marginX, pageH - 6, { align: 'right' });
           },

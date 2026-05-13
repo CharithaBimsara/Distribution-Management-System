@@ -30,7 +30,10 @@ export interface CreateCoordinatorRequest {
 
 export interface UpdateCoordinatorRequest {
   fullName?: string;
+  employeeCode?: string;
   phoneNumber?: string;
+  email?: string;
+  hireDate?: string;
   regionId?: string | null;
   isActive?: boolean;
 }

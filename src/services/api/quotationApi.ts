@@ -104,3 +104,19 @@ export const adminRejectQuotation = async (id: string, req: RejectQuotationReque
   const { data } = await api.post<ApiResponse<string>>(`/admin/quotations/${id}/reject`, req);
   return data.data;
 };
+
+export const adminSoftDeleteQuotation = async (id: string) => {
+  const { data } = await api.delete<ApiResponse<string>>(`/admin/quotations/${id}`);
+  return data.data;
+};
+
+export const adminGetQuotationsTrash = async (page = 1, pageSize = 20) => {
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+  const { data } = await api.get<ApiResponse<PagedResult<Quotation>>>(`/admin/quotations/trash?${params}`);
+  return data.data;
+};
+
+export const adminRestoreQuotation = async (id: string) => {
+  const { data } = await api.post<ApiResponse<string>>(`/admin/quotations/${id}/restore`, {});
+  return data.data;
+};

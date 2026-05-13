@@ -50,7 +50,7 @@ export default function StatusBadge({ status, size = 'sm' }: StatusBadgeProps) {
   const label = status.replace(/([a-z])([A-Z])/g, '$1 $2');
 
   return (
-    <span className={`inline-flex items-center rounded-full font-semibold ring-1 ring-inset whitespace-nowrap ${classes} ${sizeClasses}`}>
+    <span className={`inline-flex items-center rounded-lg font-semibold ring-1 ring-inset whitespace-nowrap ${classes} ${sizeClasses}`}>
       {label}
     </span>
   );

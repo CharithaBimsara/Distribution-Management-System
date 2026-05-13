@@ -1,130 +1,161 @@
-// @ts-nocheck
-import { useState } from 'react';
+﻿// @ts-nocheck
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { adminGetCoordinator, adminUpdateCoordinator, adminAssignRepToCoordinator } from '../../services/api/coordinatorApi';
+import {
+  adminGetCoordinator, adminUpdateCoordinator, adminAssignRepToCoordinator,
+} from '../../services/api/coordinatorApi';
 import { authApi } from '../../services/api/authApi';
 import { repsApi } from '../../services/api/repsApi';
 import { customersApi } from '../../services/api/customersApi';
 import { regionsApi } from '../../services/api/regionsApi';
-import { formatDate } from '../../utils/formatters';
 import {
-  ArrowLeft, MapPin, Users, Phone, Mail, Calendar,
-  ChevronRight, BarChart2, TrendingUp, Power, UserPlus, User, UserMinus, Trash2, KeyRound, Copy
+  ArrowLeft, MapPin, Users, User, TrendingUp,
+  ChevronRight, Power, UserPlus, UserMinus,
+  Eye, EyeOff, KeyRound, Copy, PencilLine, Save, Check,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import StatusBadge from '../../components/common/StatusBadge';
-import BottomSheet from '../../components/common/BottomSheet';
+import ConfirmModal from '../../components/common/ConfirmModal';
 
-// ── Shared small components ────────────────────────────────────────────────
+// --- Per-field inline editable row ------------------------------------------
 
-function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+function InlineEditRow({ label, displayValue, isEditing, onDoubleClick, onCommit, onCancel, inputType = 'text' }) {
+  const [draft, setDraft] = useState(displayValue);
+  const inputRef = useRef(null);
+  const committedRef = useRef(false);
+
+  useEffect(() => {
+    if (isEditing) {
+      setDraft(displayValue);
+      committedRef.current = false;
+      setTimeout(() => { inputRef.current?.focus(); inputRef.current?.select?.(); }, 0);
+    }
+  }, [isEditing, displayValue]);
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); committedRef.current = true; onCommit(draft); }
+    if (e.key === 'Escape') { committedRef.current = true; onCancel(); }
+  };
+
+  const handleBlur = () => {
+    if (!committedRef.current) { committedRef.current = true; onCommit(draft); }
+  };
+
   return (
-    <div className={`bg-white rounded-xl border border-slate-200 shadow-sm ${className}`}>
-      {children}
+    <div className="flex items-center justify-between gap-4 px-5 py-3.5 group">
+      <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider w-32 flex-shrink-0">{label}</span>
+      {isEditing ? (
+        <input
+          ref={inputRef}
+          type={inputType}
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onBlur={handleBlur}
+          onKeyDown={handleKeyDown}
+          className="flex-1 min-w-0 px-3 py-1.5 border border-blue-400 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 bg-white transition"
+        />
+      ) : (
+        <span
+          className="text-sm font-medium text-slate-800 text-right truncate flex-1 min-w-0 flex items-center justify-end gap-1.5 cursor-pointer hover:text-blue-600 transition-colors"
+          onDoubleClick={onDoubleClick}
+          title="Double-click to edit"
+        >
+          <span className="truncate">{displayValue || '—'}</span>
+          <PencilLine className="w-3 h-3 opacity-0 group-hover:opacity-40 flex-shrink-0 transition-opacity" />
+        </span>
+      )}
     </div>
   );
 }
 
-function CardHeader({
-  title, icon, action,
-}: { title: string; icon: React.ReactNode; action?: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-      <div className="flex items-center gap-2.5">
-        <span className="text-blue-500">{icon}</span>
-        <h3 className="text-sm font-semibold text-slate-800">{title}</h3>
-      </div>
-      {action}
-    </div>
-  );
-}
+// --- Credential inline input -------------------------------------------------
 
-function StatTile({
-  label, value, icon, accent = false,
-}: { label: string; value: string | number; icon: React.ReactNode; accent?: boolean }) {
-  return (
-    <div className={`flex flex-col gap-2 p-4 rounded-xl ${accent ? 'bg-blue-600 text-white' : 'bg-slate-50'}`}>
-      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${accent ? 'bg-white/20' : 'bg-blue-100'}`}>
-        <span className={accent ? 'text-white' : 'text-blue-600'}>{icon}</span>
-      </div>
-      <div>
-        <p className={`text-xl font-bold leading-none ${accent ? 'text-white' : 'text-slate-900'}`}>{value}</p>
-        <p className={`text-[11px] mt-1 ${accent ? 'text-blue-100' : 'text-slate-500'}`}>{label}</p>
-      </div>
-    </div>
-  );
-}
+function CredInlineInput({ defaultValue, inputType, showToggle, showPassword, onToggleShow, onCommit, onCancel }) {
+  const [draft, setDraft] = useState(defaultValue);
+  const inputRef = useRef(null);
+  const committedRef = useRef(false);
 
-function InputField({
-  label, value, onChange, placeholder,
-}: { label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
+  useEffect(() => {
+    setDraft(defaultValue);
+    committedRef.current = false;
+    setTimeout(() => { inputRef.current?.focus(); }, 0);
+  }, []);
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); committedRef.current = true; onCommit(draft); }
+    if (e.key === 'Escape') { committedRef.current = true; onCancel(); }
+  };
+
+  const handleBlur = () => {
+    if (!committedRef.current) { committedRef.current = true; onCommit(draft); }
+  };
+
   return (
-    <div className="flex flex-col gap-1">
-      <label className="text-[11px] font-semibold text-blue-600 uppercase tracking-wider">{label}</label>
+    <div className="relative flex-1 min-w-0">
       <input
-        value={value}
-        placeholder={placeholder}
-        onChange={e => onChange(e.target.value)}
-        className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm text-slate-800
-                   focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+        ref={inputRef}
+        type={inputType}
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
+        placeholder="Enter new password"
+        className={`w-full px-3 py-1.5 border border-blue-400 rounded-lg text-sm text-slate-800 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition ${showToggle ? 'pr-9' : ''}`}
       />
+      {showToggle && (
+        <button
+          onMouseDown={e => { e.preventDefault(); onToggleShow?.(); }}
+          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition"
+          type="button"
+          tabIndex={-1}
+        >
+          {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+        </button>
+      )}
     </div>
   );
 }
 
-function SelectField({
-  label, value, onChange, children,
-}: { label: string; value: string; onChange: (v: string) => void; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-1">
-      <label className="text-[11px] font-semibold text-blue-600 uppercase tracking-wider">{label}</label>
-      <select
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm text-slate-800 bg-white
-                   focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
-      >
-        {children}
-      </select>
-    </div>
-  );
-}
-
-// ── Main Page ──────────────────────────────────────────────────────────────
-
-type Tab = 'overview' | 'reps' | 'customers';
+// --- Main Page ----------------------------------------------------------------
 
 export default function AdminCoordinatorDetail() {
-  const { id } = useParams<{ id: string }>();
+  const { id } = useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
 
-  const [activeTab, setActiveTab] = useState<Tab>('overview');
-  const [infoEditMode, setInfoEditMode] = useState(false);
-  const [infoForm, setInfoForm] = useState({ fullName: '', employeeCode: '', phoneNumber: '', regionId: '', hireDate: '' });
+  const [activeTab, setActiveTab] = useState('details');
+
+  // Inline edit
+  const [editingField, setEditingField] = useState(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+
+  // Region assignment
+  const [selectedRegionId, setSelectedRegionId] = useState('');
+
+  // Confirm modal
+  const [pendingConfirm, setPendingConfirm] = useState(null);
+
+  // Assign/unassign rep
   const [showAssignRep, setShowAssignRep] = useState(false);
   const [selectedRepId, setSelectedRepId] = useState('');
-  const [showCreateCustomer, setShowCreateCustomer] = useState(false);
-  const [newCustomerForm, setNewCustomerForm] = useState({ shopName: '', email: '', phoneNumber: '' });
-  const [generatedTempPassword, setGeneratedTempPassword] = useState('');
+  const [unassignRepId, setUnassignRepId] = useState(null);
+  const [unassigningRepId, setUnassigningRepId] = useState(null);
 
-  // ── Queries ───────────────────────────────────────────────────────────────
+  // --- Queries ----------------------------------------------------------------
 
   const { data: coordinator, isLoading } = useQuery({
     queryKey: ['admin-coordinator', id],
-    queryFn: () => adminGetCoordinator(id!),
+    queryFn: () => adminGetCoordinator(id),
     enabled: !!id,
-    onSuccess: (d: any) => {
-      setInfoForm({
-        fullName: d.fullName,
-        employeeCode: d.employeeCode || '',
-        phoneNumber: d.phoneNumber || '',
-        regionId: d.regionId || '',
-        hireDate: d.hireDate ? d.hireDate.split('T')[0] : '',
-      });
-    },
   });
+
+  useEffect(() => {
+    if (!coordinator) return;
+    setSelectedRegionId(coordinator.regionId || '');
+  }, [coordinator]);
 
   const { data: repsData } = useQuery({
     queryKey: ['admin-coordinator-reps', id],
@@ -138,43 +169,6 @@ export default function AdminCoordinatorDetail() {
     enabled: !!id,
   });
 
-  const { data: availableCustomersData } = useQuery({
-    queryKey: ['admin-coordinator-available-customers', id],
-    queryFn: () => customersApi.adminGetAll({ page: 1, pageSize: 200, regionId: coordinator?.regionId }).then(r => r.data.data),
-    enabled: !!id && !!coordinator?.regionId,
-  });
-
-  const createCustomerMut = useMutation({
-    mutationFn: (data: any) => customersApi.adminCreate(data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin-coordinator-customers', id] });
-      setShowCreateCustomer(false);
-      setNewCustomerForm({ shopName: '', email: '', phoneNumber: '' });
-      toast.success('Customer created');
-    },
-    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to create customer'),
-  });
-
-  const assignCustomerMut = useMutation({
-    mutationFn: (customerId: string) => customersApi.adminUpdate(customerId, { assignedCoordinatorId: id }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin-coordinator-customers', id] });
-      qc.invalidateQueries({ queryKey: ['admin-coordinator-available-customers', id] });
-      toast.success('Customer assigned');
-    },
-    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to assign customer'),
-  });
-
-  const unassignCustomerMut = useMutation({
-    mutationFn: (customerId: string) => customersApi.adminUpdate(customerId, { clearAssignedCoordinator: true }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin-coordinator-customers', id] });
-      qc.invalidateQueries({ queryKey: ['admin-coordinator-available-customers', id] });
-      toast.success('Customer unassigned');
-    },
-    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to unassign customer'),
-  });
-
   const { data: regionsData } = useQuery({
     queryKey: ['regions'],
     queryFn: () => regionsApi.getAll().then(r => r.data || []),
@@ -186,89 +180,99 @@ export default function AdminCoordinatorDetail() {
     enabled: showAssignRep,
   });
 
-  // ── Mutations ─────────────────────────────────────────────────────────────
+  // --- Mutations --------------------------------------------------------------
 
-  const updateMut = useMutation({
-    mutationFn: (data: any) => adminUpdateCoordinator(id!, data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin-coordinator', id] });
-      qc.invalidateQueries({ queryKey: ['admin-coordinators'] });
-      toast.success('Coordinator updated');
-    },
-    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed'),
-  });
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['admin-coordinator', id] });
+    qc.invalidateQueries({ queryKey: ['admin-coordinators'] });
+  };
 
   const updateInfoMut = useMutation({
-    mutationFn: (data: any) => adminUpdateCoordinator(id!, data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin-coordinator', id] });
-      qc.invalidateQueries({ queryKey: ['admin-coordinators'] });
-      setInfoEditMode(false);
-      toast.success('Coordinator information updated');
-    },
-    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to update'),
+    mutationFn: (data) => adminUpdateCoordinator(id, data),
+    onSuccess: () => { invalidate(); setPendingConfirm(null); toast.success('Saved'); },
+    onError: (e) => { toast.error(e?.response?.data?.message || 'Failed to update'); setPendingConfirm(null); },
+  });
+
+  const setPasswordMut = useMutation({
+    mutationFn: (password) => authApi.adminSetUserPassword(coordinator.userId, password),
+    onSuccess: () => { invalidate(); setPendingConfirm(null); toast.success('Password updated'); },
+    onError: (e) => { toast.error(e?.response?.data?.message || 'Failed to update password'); setPendingConfirm(null); },
+  });
+
+  const handleInfoCommit = (field, label, currentRaw, newVal) => {
+    setEditingField(null);
+    const trimmed = newVal.trim();
+    if (trimmed === currentRaw.trim()) return;
+    setPendingConfirm({ field, label, oldValue: currentRaw || '(empty)', newValue: trimmed, type: 'info' });
+  };
+
+  const handleCredCommit = (type, field, label, oldVal, newVal) => {
+    setEditingField(null);
+    setShowPassword(false);
+    const trimmed = newVal.trim();
+    if (!trimmed) return;
+    setPendingConfirm({ field, label, oldValue: oldVal || '(empty)', newValue: trimmed, type });
+  };
+
+  const handleConfirmSave = () => {
+    if (!pendingConfirm) return;
+    if (pendingConfirm.type === 'password') {
+      setPasswordMut.mutate(pendingConfirm.newValue);
+    } else {
+      updateInfoMut.mutate({ [pendingConfirm.field]: pendingConfirm.newValue || null });
+    }
+  };
+
+  const regionChanged = selectedRegionId !== (coordinator?.regionId || '');
+
+  const updateRegionMut = useMutation({
+    mutationFn: () => adminUpdateCoordinator(id, { regionId: selectedRegionId || null }),
+    onSuccess: () => { invalidate(); toast.success('Region saved'); },
+    onError: (e) => toast.error(e?.response?.data?.message || 'Failed to save region'),
   });
 
   const toggleActiveMut = useMutation({
-    mutationFn: () => adminUpdateCoordinator(id!, { isActive: !coordinator?.isActive }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin-coordinator', id] });
-      qc.invalidateQueries({ queryKey: ['admin-coordinators'] });
-      toast.success(coordinator?.isActive ? 'Coordinator deactivated' : 'Coordinator activated');
-    },
-    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed'),
+    mutationFn: () => adminUpdateCoordinator(id, { isActive: !coordinator?.isActive }),
+    onSuccess: () => { invalidate(); toast.success(coordinator?.isActive ? 'Coordinator deactivated' : 'Coordinator activated'); },
+    onError: (e) => toast.error(e?.response?.data?.message || 'Failed'),
   });
 
   const assignRepMut = useMutation({
-    mutationFn: () => adminAssignRepToCoordinator(id!, selectedRepId),
+    mutationFn: () => adminAssignRepToCoordinator(id, selectedRepId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-coordinator-reps', id] });
       qc.invalidateQueries({ queryKey: ['admin-coordinator', id] });
       setShowAssignRep(false);
       setSelectedRepId('');
-      toast.success('Rep assigned to coordinator');
+      toast.success('Rep assigned');
     },
-    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed'),
+    onError: (e) => toast.error(e?.response?.data?.message || 'Failed to assign rep'),
   });
 
-  const [unassigningRepId, setUnassigningRepId] = useState<string | null>(null);
   const unassignRepMut = useMutation({
-    mutationFn: (repId: string) => repsApi.adminUnassignCoordinator(repId),
-    onMutate: (repId: string) => setUnassigningRepId(repId),
-    onSettled: () => setUnassigningRepId(null),
+    mutationFn: (repId) => repsApi.adminUnassignCoordinator(repId),
+    onMutate: (repId) => setUnassigningRepId(repId),
+    onSettled: () => { setUnassigningRepId(null); setUnassignRepId(null); },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-coordinator-reps', id] });
       qc.invalidateQueries({ queryKey: ['admin-coordinator', id] });
       toast.success('Rep unassigned');
     },
-    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to unassign'),
+    onError: (e) => toast.error(e?.response?.data?.message || 'Failed to unassign rep'),
   });
 
-  const resetTempPasswordMut = useMutation({
-    mutationFn: () => authApi.adminResetUserTempPassword(coordinator.userId),
-    onSuccess: (res: any) => {
-      setGeneratedTempPassword(res.data.data.temporaryPassword);
-      qc.invalidateQueries({ queryKey: ['admin-coordinator', id] });
-      toast.success('New password generated');
-    },
-    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to generate password'),
-  });
+  // --- Derived ----------------------------------------------------------------
 
-  // ── Derived ───────────────────────────────────────────────────────────────
-
-  const reps = (repsData as any)?.items || [];
-  const customers = (customersData as any)?.items || [];
+  const reps = repsData?.items || [];
+  const customers = customersData?.items || [];
   const regionList = Array.isArray(regionsData) ? regionsData : [];
 
-  // ── Loading / Not found ───────────────────────────────────────────────────
+  // --- Loading / Not found ----------------------------------------------------
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-32">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-9 h-9 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin" />
-          <p className="text-sm text-slate-400">Loading coordinator details…</p>
-        </div>
+        <div className="w-9 h-9 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin" />
       </div>
     );
   }
@@ -279,55 +283,77 @@ export default function AdminCoordinatorDetail() {
         <User className="w-12 h-12 mx-auto mb-3 opacity-20" />
         <p className="font-medium">Coordinator not found.</p>
         <button onClick={() => navigate('/admin/coordinators')} className="mt-4 text-blue-600 text-sm font-medium hover:underline">
-          ← Back to Coordinators
+          Back to Coordinators
         </button>
       </div>
     );
   }
 
-  const tabs: { id: Tab; label: string; icon: any; count?: number }[] = [
-    { id: 'overview', label: 'Overview', icon: BarChart2 },
+  const tabs = [
+    { id: 'details', label: 'Details', icon: User },
     { id: 'reps', label: 'Reps', icon: Users, count: coordinator.assignedRepsCount },
     { id: 'customers', label: 'Customers', icon: TrendingUp, count: coordinator.assignedCustomersCount },
   ];
-  const visibleTempPassword = generatedTempPassword || coordinator?.temporaryPassword || '';
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  // --- Render -----------------------------------------------------------------
 
   return (
-    <div className="space-y-6 pb-16 animate-fade-in">
+    <div className="space-y-5 pb-16">
 
-      {/* ── Page Header ── */}
-      <div className="flex items-center gap-4">
-        <button
-          onClick={() => navigate('/admin/coordinators')}
-          className="p-2 rounded-lg hover:bg-slate-100 transition text-slate-500"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </button>
+      {/* Page Header */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+        <div className="flex items-start gap-4">
+          <button
+            onClick={() => navigate('/admin/coordinators')}
+            className="p-2 rounded-lg hover:bg-slate-100 transition text-slate-400 flex-shrink-0 mt-0.5"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
 
-        <div className="flex-1 min-w-0">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <h1 className="text-xl lg:text-2xl font-bold text-slate-900 truncate">{coordinator.fullName}</h1>
-            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
-              coordinator.isActive
-                ? 'bg-blue-50 text-blue-700 border-blue-200'
-                : 'bg-slate-100 text-slate-500 border-slate-200'
-            }`}>
-              {coordinator.isActive ? 'Active' : 'Inactive'}
-            </span>
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-700 flex items-center justify-center flex-shrink-0 shadow-sm select-none">
+            <span className="text-white font-bold text-xl">{coordinator.fullName?.charAt(0)?.toUpperCase() || '?'}</span>
           </div>
-          <p className="text-sm text-slate-400 mt-0.5">{coordinator.employeeCode} &nbsp;·&nbsp; Coordinator</p>
-        </div>
 
-        <div className="hidden lg:flex items-center gap-2">
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-2 mb-0.5">
+              <h1 className="text-xl font-bold text-slate-900">{coordinator.fullName}</h1>
+              <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
+                coordinator.isActive
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  : 'bg-slate-100 text-slate-500 border-slate-200'
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${coordinator.isActive ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                {coordinator.isActive ? 'Active' : 'Inactive'}
+              </span>
+            </div>
+            <p className="text-sm text-slate-400 mb-3">{coordinator.employeeCode} · Coordinator</p>
+            <div className="flex flex-wrap gap-x-5 gap-y-1.5">
+              <div className="flex items-center gap-1.5">
+                <Users className="w-3.5 h-3.5 text-slate-400" />
+                <span className="text-sm font-semibold text-slate-700">{coordinator.assignedRepsCount ?? reps.length}</span>
+                <span className="text-xs text-slate-400">reps</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <TrendingUp className="w-3.5 h-3.5 text-slate-400" />
+                <span className="text-sm font-semibold text-slate-700">{coordinator.assignedCustomersCount ?? customers.length}</span>
+                <span className="text-xs text-slate-400">customers</span>
+              </div>
+              {coordinator.regionName && (
+                <div className="flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                  <span className="text-sm font-semibold text-slate-700">{coordinator.regionName}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
           <button
             onClick={() => toggleActiveMut.mutate()}
             disabled={toggleActiveMut.isPending}
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition disabled:opacity-50 ${
+            className={`hidden sm:inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border transition flex-shrink-0 disabled:opacity-50 ${
               coordinator.isActive
                 ? 'border-red-200 text-red-600 bg-red-50 hover:bg-red-100'
-                : 'border-blue-200 text-blue-600 bg-blue-50 hover:bg-blue-100'
+                : 'border-emerald-200 text-emerald-600 bg-emerald-50 hover:bg-emerald-100'
             }`}
           >
             <Power className="w-4 h-4" />
@@ -336,32 +362,7 @@ export default function AdminCoordinatorDetail() {
         </div>
       </div>
 
-      {/* ── Snapshot Stats ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatTile
-          label="Sales Reps"
-          value={coordinator.assignedRepsCount ?? reps.length}
-          icon={<Users className="w-4 h-4" />}
-          accent
-        />
-        <StatTile
-          label="Customers"
-          value={coordinator.assignedCustomersCount ?? customers.length}
-          icon={<TrendingUp className="w-4 h-4" />}
-        />
-        <StatTile
-          label="Region"
-          value={coordinator.regionName || '—'}
-          icon={<MapPin className="w-4 h-4" />}
-        />
-        <StatTile
-          label="Status"
-          value={coordinator.isActive ? 'Active' : 'Inactive'}
-          icon={<Power className="w-4 h-4" />}
-        />
-      </div>
-
-      {/* ── Tab Bar ── */}
+      {/* Tab Bar */}
       <div className="flex gap-1 bg-slate-100 p-1 rounded-xl">
         {tabs.map(tab => {
           const Icon = tab.icon;
@@ -371,366 +372,223 @@ export default function AdminCoordinatorDetail() {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                active
-                  ? 'bg-white text-blue-700 shadow-sm border border-slate-200'
-                  : 'text-slate-500 hover:text-slate-700'
+                active ? 'bg-white text-blue-700 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700'
               }`}
             >
               <Icon className="w-4 h-4" />
-              {tab.label}
+              <span>{tab.label}</span>
               {tab.count !== undefined && tab.count > 0 && (
                 <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
                   active ? 'bg-blue-100 text-blue-600' : 'bg-slate-200 text-slate-500'
-                }`}>
-                  {tab.count}
-                </span>
+                }`}>{tab.count}</span>
               )}
             </button>
           );
         })}
       </div>
 
-      {/* ════════════════════════════════════════════
-          OVERVIEW TAB
-      ════════════════════════════════════════════ */}
-      {activeTab === 'overview' && (
+      {/* DETAILS TAB */}
+      {activeTab === 'details' && (
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
 
-          {/* Left – Coordinator info */}
+          {/* Left: Info + Credentials */}
           <div className="lg:col-span-3 space-y-5">
-            <Card>
-              <CardHeader
-                title="Coordinator Information"
-                icon={<User className="w-4 h-4" />}
-                action={
-                  infoEditMode ? (
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => {
-                          setInfoEditMode(false);
-                          if (coordinator) {
-                            setInfoForm({
-                              fullName: coordinator.fullName,
-                              employeeCode: coordinator.employeeCode || '',
-                              phoneNumber: coordinator.phoneNumber || '',
-                              regionId: coordinator.regionId || '',
-                              hireDate: coordinator.hireDate ? coordinator.hireDate.split('T')[0] : '',
-                            });
-                          }
-                        }}
-                        className="px-3 py-1 rounded-lg bg-slate-100 text-slate-700 text-xs font-semibold hover:bg-slate-200"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={() => updateInfoMut.mutate({
-                          fullName: infoForm.fullName,
-                          employeeCode: infoForm.employeeCode,
-                          phoneNumber: infoForm.phoneNumber,
-                          hireDate: infoForm.hireDate || null,
-                        })}
-                        disabled={updateInfoMut.isPending}
-                        className="px-3 py-1 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 disabled:opacity-50"
-                      >
-                        {updateInfoMut.isPending ? 'Saving…' : 'Save'}
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setInfoEditMode(true)}
-                      className="px-3 py-1 rounded-lg bg-slate-100 text-slate-700 text-xs font-semibold hover:bg-slate-200"
-                    >
-                      Edit
-                    </button>
-                  )
-                }
-              />
-              <div className="p-5 divide-y divide-slate-100">
-                <div onDoubleClick={() => setInfoEditMode(true)} className="space-y-3">
-                  <div className="flex items-center justify-between py-2.5 gap-4">
-                    <span className="text-xs text-slate-400 uppercase tracking-wider w-32 flex-shrink-0">Full Name</span>
-                    {infoEditMode ? (
-                      <input
-                        value={infoForm.fullName}
-                        onChange={e => setInfoForm(p => ({ ...p, fullName: e.target.value }))}
-                        className="w-full max-w-sm px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    ) : (
-                      <span className="text-sm font-medium text-slate-800 text-right truncate">{coordinator.fullName}</span>
-                    )}
-                  </div>
 
-                  <div className="flex items-center justify-between py-2.5 gap-4">
-                    <span className="text-xs text-slate-400 uppercase tracking-wider w-32 flex-shrink-0">Employee Code</span>
-                    {infoEditMode ? (
-                      <input
-                        value={infoForm.employeeCode}
-                        onChange={e => setInfoForm(p => ({ ...p, employeeCode: e.target.value }))}
-                        className="w-full max-w-sm px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    ) : (
-                      <span className="text-sm font-medium text-slate-800 text-right truncate">{coordinator.employeeCode}</span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-between py-2.5 gap-4">
-                    <span className="text-xs text-slate-400 uppercase tracking-wider w-32 flex-shrink-0">Phone</span>
-                    {infoEditMode ? (
-                      <input
-                        value={infoForm.phoneNumber}
-                        onChange={e => setInfoForm(p => ({ ...p, phoneNumber: e.target.value }))}
-                        className="w-full max-w-sm px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    ) : (
-                      <span className="text-sm font-medium text-slate-800 text-right truncate">{coordinator.phoneNumber}</span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-between py-2.5 gap-4">
-                    <span className="text-xs text-slate-400 uppercase tracking-wider w-32 flex-shrink-0">Hire Date</span>
-                    {infoEditMode ? (
-                      <input
-                        type="date"
-                        value={infoForm.hireDate}
-                        onChange={e => setInfoForm(p => ({ ...p, hireDate: e.target.value }))}
-                        className="w-full max-w-sm px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    ) : (
-                      <span className="text-sm font-medium text-slate-800 text-right truncate">{coordinator.hireDate ? formatDate(coordinator.hireDate) : '—'}</span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-between py-2.5 gap-4">
-                    <span className="text-xs text-slate-400 uppercase tracking-wider w-32 flex-shrink-0">Email</span>
-                    <span className="text-sm font-medium text-slate-800 text-right truncate">{coordinator.email || '—'}</span>
-                  </div>
-
-                </div>
+            {/* Coordinator Info */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-100">
+                <User className="w-4 h-4 text-blue-500" />
+                <h3 className="text-sm font-semibold text-slate-800">Coordinator Info</h3>
               </div>
-            </Card>
+              <div className="divide-y divide-slate-50">
+                <InlineEditRow
+                  label="Full Name"
+                  displayValue={coordinator.fullName || ''}
+                  isEditing={editingField === 'fullName'}
+                  onDoubleClick={() => setEditingField('fullName')}
+                  onCommit={v => handleInfoCommit('fullName', 'Full Name', coordinator.fullName || '', v)}
+                  onCancel={() => setEditingField(null)}
+                />
+                <InlineEditRow
+                  label="Employee Code"
+                  displayValue={coordinator.employeeCode || ''}
+                  isEditing={editingField === 'employeeCode'}
+                  onDoubleClick={() => setEditingField('employeeCode')}
+                  onCommit={v => handleInfoCommit('employeeCode', 'Employee Code', coordinator.employeeCode || '', v)}
+                  onCancel={() => setEditingField(null)}
+                />
+                <InlineEditRow
+                  label="Phone"
+                  displayValue={coordinator.phoneNumber || ''}
+                  isEditing={editingField === 'phoneNumber'}
+                  onDoubleClick={() => setEditingField('phoneNumber')}
+                  onCommit={v => handleInfoCommit('phoneNumber', 'Phone', coordinator.phoneNumber || '', v)}
+                  onCancel={() => setEditingField(null)}
+                  inputType="tel"
+                />
+                <InlineEditRow
+                  label="Email"
+                  displayValue={coordinator.email || ''}
+                  isEditing={editingField === 'email'}
+                  onDoubleClick={() => setEditingField('email')}
+                  onCommit={v => handleInfoCommit('email', 'Email', coordinator.email || '', v)}
+                  onCancel={() => setEditingField(null)}
+                  inputType="email"
+                />
+                <InlineEditRow
+                  label="Hire Date"
+                  displayValue={coordinator.hireDate ? coordinator.hireDate.split('T')[0] : ''}
+                  isEditing={editingField === 'hireDate'}
+                  onDoubleClick={() => setEditingField('hireDate')}
+                  onCommit={v => handleInfoCommit('hireDate', 'Hire Date', coordinator.hireDate ? coordinator.hireDate.split('T')[0] : '', v)}
+                  onCancel={() => setEditingField(null)}
+                  inputType="date"
+                />
+              </div>
+              <p className="px-5 py-2 text-[10px] text-slate-400 italic border-t border-slate-50">Double-click any value to edit</p>
+            </div>
 
-            {/* Credentials Card (New Layout) */}
-            <Card>
-              <CardHeader title="Credentials" icon={<KeyRound className="w-4 h-4" />} />
-              <div className="p-5 flex flex-col">
-                
-                {/* Username Row */}
-                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 pb-3 border-b border-slate-100">
-                  <span className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Username</span>
-                  
-                  <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200/60 px-3 py-1.5 rounded-lg w-fit">
-                    <span className="text-sm text-slate-700 font-medium select-all">
-                      {coordinator.employeeCode || coordinator.username || '-'}
+            {/* Login Credentials */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-100">
+                <KeyRound className="w-4 h-4 text-blue-500" />
+                <h3 className="text-sm font-semibold text-slate-800">Login Credentials</h3>
+              </div>
+              <div className="divide-y divide-slate-50">
+                {/* Username */}
+                <div className="flex items-center justify-between gap-4 px-5 py-3 group">
+                  <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider w-32 flex-shrink-0">Username</span>
+                  <div className="flex items-center gap-2 flex-1 min-w-0 justify-end">
+                    <span className="text-sm font-medium text-slate-800 font-mono truncate">
+                      {coordinator.employeeCode || coordinator.username || '—'}
                     </span>
                     <button
-                      onClick={() => {
-                        const text = coordinator.employeeCode || coordinator.username || '';
-                        if (text && text !== '-') {
-                          navigator.clipboard.writeText(text);
-                          toast.success('Username copied!');
-                        }
-                      }}
-                      className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors ml-1"
-                      title="Copy Username"
+                      onClick={() => { navigator.clipboard.writeText(coordinator.employeeCode || coordinator.username || ''); toast.success('Copied!'); }}
+                      className="p-1 text-slate-400 hover:text-blue-600 rounded transition flex-shrink-0"
                     >
                       <Copy className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 </div>
 
-                {/* Password Row */}
-                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 pt-3">
-                  <span className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Current Password</span>
-
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200/60 px-3 py-1.5 rounded-lg w-fit">
-                      <span className="text-sm text-slate-700 font-medium select-all">
-                        {visibleTempPassword || '-'}
-                      </span>
-                      <button
-                        onClick={() => {
-                          if (visibleTempPassword && visibleTempPassword !== '-') {
-                            navigator.clipboard.writeText(visibleTempPassword);
-                            toast.success('Password copied!');
-                          }
-                        }}
-                        className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors ml-1"
-                        title="Copy Password"
+                {/* Password */}
+                <div className="flex items-center justify-between gap-4 px-5 py-3 group">
+                  <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider w-32 flex-shrink-0">Password</span>
+                  {editingField === 'credPassword' ? (
+                    <CredInlineInput
+                      defaultValue={''}
+                      inputType={showPassword ? 'text' : 'password'}
+                      showToggle
+                      showPassword={showPassword}
+                      onToggleShow={() => setShowPassword(p => !p)}
+                      onCommit={v => { handleCredCommit('password', 'password', 'Password', '(current password)', v); }}
+                      onCancel={() => { setEditingField(null); setShowPassword(false); }}
+                    />
+                  ) : (
+                    <div className="flex items-center gap-2 flex-1 min-w-0 justify-end">
+                      <span
+                        className="text-sm font-medium text-slate-800 font-mono flex items-center gap-1.5 cursor-pointer hover:text-blue-600 transition-colors"
+                        onDoubleClick={() => setEditingField('credPassword')}
+                        title="Double-click to change password"
                       >
-                        <Copy className="w-3.5 h-3.5" />
-                      </button>
+                        <span>{coordinator.temporaryPassword ? (showCurrentPassword ? coordinator.temporaryPassword : '••••••••') : '—'}</span>
+                        <PencilLine className="w-3 h-3 opacity-0 group-hover:opacity-40 flex-shrink-0 transition-opacity" />
+                      </span>
+                      {coordinator.temporaryPassword && (
+                        <>
+                          <button
+                            onMouseDown={e => { e.preventDefault(); setShowCurrentPassword(p => !p); }}
+                            className="p-1 text-slate-400 hover:text-slate-600 rounded transition flex-shrink-0"
+                            type="button"
+                            title={showCurrentPassword ? 'Hide password' : 'Show password'}
+                          >
+                            {showCurrentPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                          </button>
+                          <button
+                            onClick={() => { navigator.clipboard.writeText(coordinator.temporaryPassword); toast.success('Password copied!'); }}
+                            className="p-1 text-slate-400 hover:text-blue-600 rounded transition flex-shrink-0"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      )}
                     </div>
-
-                    <button
-                      onClick={() => resetTempPasswordMut.mutate()}
-                      disabled={resetTempPasswordMut.isPending}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-blue-50 text-blue-700 border border-blue-100 hover:bg-blue-100 hover:border-blue-200 transition-all disabled:opacity-50 shadow-sm"
-                    >
-                      <KeyRound className="w-3.5 h-3.5" />
-                      {resetTempPasswordMut.isPending ? 'Generating…' : 'Generate New'}
-                    </button>
-                  </div>
+                  )}
                 </div>
-                
               </div>
-            </Card>
-
-            {/* Mobile-only actions */}
-            <div className="lg:hidden flex gap-3">
-              <button
-                onClick={() => toggleActiveMut.mutate()}
-                disabled={toggleActiveMut.isPending}
-                className={`flex-1 py-2.5 rounded-lg text-sm font-medium border transition disabled:opacity-50 ${
-                  coordinator.isActive
-                    ? 'border-red-200 text-red-600 bg-red-50'
-                    : 'border-blue-200 text-blue-600 bg-blue-50'
-                }`}
-              >
-                {coordinator.isActive ? 'Deactivate' : 'Activate'}
-              </button>
+              <p className="px-5 py-2 text-[10px] text-slate-400 italic border-t border-slate-50">Double-click any value to edit</p>
             </div>
           </div>
 
-          {/* Right – Reps + Customers preview */}
+          {/* Right: Region Assignment + Reps Preview */}
           <div className="lg:col-span-2 space-y-5">
 
-            {/* Reps preview */}
-            <Card>
-              <CardHeader
-                title="Sales Reps"
-                icon={<Users className="w-4 h-4" />}
-                action={
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setShowAssignRep(true)}
-                      className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:underline"
-                    >
-                      <UserPlus className="w-3.5 h-3.5" /> Assign
-                    </button>
-                    {reps.length > 4 && (
-                      <button
-                        onClick={() => setActiveTab('reps')}
-                        className="text-xs text-blue-600 font-medium hover:underline flex items-center gap-0.5"
-                      >
-                        View all <ChevronRight className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
-                }
-              />
-              {reps.length === 0 ? (
-                <div className="p-8 text-center text-slate-400 text-sm">
-                  <Users className="w-8 h-8 mx-auto mb-2 opacity-25" />
-                  No reps assigned yet
-                </div>
-              ) : (
-                <div className="divide-y divide-slate-100">
-                  {reps.slice(0, 4).map((r: any) => (
-                    <button
-                      key={r.id}
-                      onClick={() => navigate(`/admin/reps/${r.id}`)}
-                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition text-left group"
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center font-bold text-blue-600 text-sm flex-shrink-0">
-                        {(r.fullName || '?').charAt(0).toUpperCase()}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-800 truncate">{r.fullName}</p>
-                        <p className="text-xs text-slate-400">{r.employeeCode}</p>
-                      </div>
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                        <StatusBadge status={r.isActive ? 'Active' : 'Inactive'} />
-                        <button
-                          onClick={e => {
-                            e.stopPropagation();
-                            if (!confirm('Remove this rep from the coordinator?')) return;
-                            unassignRepMut.mutate(r.id);
-                          }}
-                          disabled={unassigningRepId === r.id}
-                          className="p-1 rounded-md text-red-600 hover:bg-red-50 disabled:opacity-50"
-                          title="Unassign rep"
-                        >
-                          <UserMinus className="w-4 h-4" />
-                        </button>
-                        <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-400 transition" />
-                      </div>
-                    </button>
-                  ))}
-                  {reps.length > 4 && (
-                    <button
-                      onClick={() => setActiveTab('reps')}
-                      className="w-full py-3 text-xs font-medium text-blue-600 hover:bg-blue-50 transition text-center"
-                    >
-                      +{reps.length - 4} more reps
-                    </button>
+            {/* Region Assignment */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+                <div className="flex items-center gap-2.5">
+                  <MapPin className="w-4 h-4 text-blue-500" />
+                  <h3 className="text-sm font-semibold text-slate-800">Region Assignment</h3>
+                  {regionChanged && (
+                    <span className="text-[10px] font-semibold px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full border border-amber-200 animate-pulse">
+                      Unsaved
+                    </span>
                   )}
                 </div>
-              )}
-            </Card>
+                <div className="flex items-center gap-2">
+                  {regionChanged && (
+                    <button
+                      onClick={() => setSelectedRegionId(coordinator.regionId || '')}
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition"
+                    >
+                      Reset
+                    </button>
+                  )}
+                  <button
+                    onClick={() => updateRegionMut.mutate()}
+                    disabled={!regionChanged || updateRegionMut.isPending}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <Save className="w-3 h-3" />
+                    {updateRegionMut.isPending ? 'Saving…' : 'Save Region'}
+                  </button>
+                </div>
+              </div>
 
-            {/* Customers preview */}
-            <Card>
-              <CardHeader
-                title="Customers"
-                icon={<TrendingUp className="w-4 h-4" />}
-                action={
-                  customers.length > 4 ? (
-                    <button
-                      onClick={() => setActiveTab('customers')}
-                      className="text-xs text-blue-600 font-medium hover:underline flex items-center gap-0.5"
-                    >
-                      View all <ChevronRight className="w-3.5 h-3.5" />
-                    </button>
-                  ) : null
-                }
-              />
-              {customers.length === 0 ? (
-                <div className="p-8 text-center text-slate-400 text-sm">
-                  <TrendingUp className="w-8 h-8 mx-auto mb-2 opacity-25" />
-                  No customers in this region
-                </div>
-              ) : (
-                <div className="divide-y divide-slate-100">
-                  {customers.slice(0, 4).map((c: any) => (
-                    <button
-                      key={c.id}
-                      onClick={() => navigate(`/admin/customers/${c.id}`)}
-                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition text-left group"
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center font-bold text-slate-500 text-sm flex-shrink-0">
-                        {(c.shopName || c.fullName || '?').charAt(0).toUpperCase()}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-800 truncate">{c.shopName || c.fullName}</p>
-                        <p className="text-xs text-slate-400 truncate">{c.email || '—'}</p>
-                      </div>
-                      <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-400 transition flex-shrink-0" />
-                    </button>
-                  ))}
-                  {customers.length > 4 && (
-                    <button
-                      onClick={() => setActiveTab('customers')}
-                      className="w-full py-3 text-xs font-medium text-blue-600 hover:bg-blue-50 transition text-center"
-                    >
-                      +{customers.length - 4} more customers
-                    </button>
-                  )}
+              {coordinator.regionName && (
+                <div className="px-5 py-3 border-b border-slate-100 bg-slate-50/60">
+                  <div className="flex items-baseline gap-1.5 text-xs">
+                    <span className="font-semibold text-blue-600 flex-shrink-0">Region:</span>
+                    <span className="text-slate-700">{coordinator.regionName}</span>
+                  </div>
                 </div>
               )}
-            </Card>
+
+              <div className="p-5">
+                <select
+                  value={selectedRegionId}
+                  onChange={e => setSelectedRegionId(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                >
+                  <option value="">No region assigned</option>
+                  {regionList.map((r) => (
+                    <option key={r.id} value={r.id}>{r.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+           
           </div>
         </div>
       )}
 
-      {/* ════════════════════════════════════════════
-          REPS TAB
-      ════════════════════════════════════════════ */}
+      {/* REPS TAB */}
       {activeTab === 'reps' && (
         <div className="space-y-4">
           <button
             onClick={() => setShowAssignRep(true)}
-            className="w-full flex items-center justify-center gap-2 py-3.5 border-2 border-dashed border-blue-200
-                       rounded-xl text-blue-600 text-sm font-semibold hover:bg-blue-50 hover:border-blue-300 transition"
+            className="w-full flex items-center justify-center gap-2 py-3.5 border-2 border-dashed border-blue-200 rounded-xl text-blue-600 text-sm font-semibold hover:bg-blue-50 hover:border-blue-300 transition"
           >
             <UserPlus className="w-4 h-4" />
             Assign Sales Rep
@@ -745,188 +603,187 @@ export default function AdminCoordinatorDetail() {
           ) : (
             <>
               <p className="text-sm text-slate-500">{reps.length} rep{reps.length !== 1 ? 's' : ''} assigned</p>
-              <Card>
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                 <div className="divide-y divide-slate-100">
-                  {reps.map((r: any) => (
-                    <button
-                      key={r.id}
-                      onClick={() => navigate(`/admin/reps/${r.id}`)}
-                      className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-slate-50 transition text-left group"
-                    >
-                      <div className="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center font-bold text-blue-600 text-sm flex-shrink-0">
+                  {reps.map((r) => (
+                    <div key={r.id} className="flex items-center gap-3 px-4 py-3.5 hover:bg-slate-50 transition">
+                      <div className="w-9 h-9 rounded-xl bg-blue-100 flex items-center justify-center font-bold text-blue-600 text-sm flex-shrink-0 select-none">
                         {(r.fullName || '?').charAt(0).toUpperCase()}
                       </div>
-                      <div className="flex-1 min-w-0">
+                      <button onClick={() => navigate(`/admin/reps/${r.id}`)} className="flex-1 min-w-0 text-left">
                         <p className="text-sm font-semibold text-slate-800 truncate">{r.fullName}</p>
-                        <p className="text-xs text-slate-400">{r.employeeCode} · {r.regionName || 'No region'}</p>
-                      </div>
+                        <p className="text-xs text-slate-400">{r.employeeCode}</p>
+                      </button>
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <StatusBadge status={r.isActive ? 'Active' : 'Inactive'} />
                         <button
-                          onClick={e => {
-                            e.stopPropagation();
-                            if (!confirm('Remove this rep from the coordinator?')) return;
-                            unassignRepMut.mutate(r.id);
-                          }}
+                          onClick={() => setUnassignRepId(r.id)}
                           disabled={unassigningRepId === r.id}
-                          className="p-1 rounded-md text-red-600 hover:bg-red-50 disabled:opacity-50"
+                          className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition disabled:opacity-50"
                           title="Unassign rep"
                         >
                           <UserMinus className="w-4 h-4" />
                         </button>
-                        <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-slate-400 transition" />
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </Card>
-            </>
-          )}
-        </div>
-      )}
-
-      {/* ════════════════════════════════════════════
-          CUSTOMERS TAB
-      ════════════════════════════════════════════ */}
-      {activeTab === 'customers' && (
-        <div className="space-y-4">
-          {customers.length === 0 ? (
-            <div className="text-center py-16 text-slate-400">
-              <TrendingUp className="w-12 h-12 mx-auto mb-3 opacity-20" />
-              <p className="font-medium text-slate-500">No customers in this region</p>
-              <p className="text-sm mt-1">Customers are associated via their assigned sales rep.</p>
-            </div>
-          ) : (
-            <>
-              <div className="flex items-center justify-between">
-                <p className="text-sm text-slate-500">{customers.length} customer{customers.length !== 1 ? 's' : ''} in this coordinator's region</p>
-                <button
-                  onClick={() => setShowCreateCustomer(true)}
-                  className="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition"
-                >
-                  <UserPlus className="w-3.5 h-3.5" />
-                  Add Customer
-                </button>
-              </div>
-              <Card>
-                <div className="divide-y divide-slate-100">
-                  {customers.map((c: any) => (
-                    <div
-                      key={c.id}
-                      className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-slate-50 transition text-left"
-                    >
-                      <button
-                        onClick={() => navigate(`/admin/customers/${c.id}`)}
-                        className="flex-1 flex items-center gap-3 text-left"
-                      >
-                        <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center font-bold text-slate-500 text-sm flex-shrink-0">
-                          {(c.shopName || c.fullName || '?').charAt(0).toUpperCase()}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-slate-800 truncate">{c.shopName || c.fullName}</p>
-                          <p className="text-xs text-slate-400 truncate">{c.email || '—'}</p>
-                        </div>
-                      </button>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <StatusBadge status={c.isActive ? 'Active' : 'Inactive'} />
-                        <button
-                          onClick={() => {
-                            if (!confirm('Remove this customer from the coordinator?')) return;
-                            unassignCustomerMut.mutate(c.id);
-                          }}
-                          disabled={unassignCustomerMut.isPending}
-                          className="p-1 rounded-md text-red-600 hover:bg-red-50 disabled:opacity-50"
-                          title="Unassign customer"
-                        >
-                          <Trash2 className="w-4 h-4" />
+                        <button onClick={() => navigate(`/admin/reps/${r.id}`)} className="text-slate-300 hover:text-slate-500 transition">
+                          <ChevronRight className="w-4 h-4" />
                         </button>
-                        <ChevronRight className="w-4 h-4 text-slate-300" />
                       </div>
                     </div>
                   ))}
                 </div>
-              </Card>
+              </div>
             </>
           )}
         </div>
       )}
 
-      {/* ── Assign Rep Bottom Sheet ── */}
-      {showAssignRep && (
-        <BottomSheet open={true} onClose={() => setShowAssignRep(false)} title="Assign Sales Rep">
-          <div className="p-5 space-y-4">
-            <SelectField
-              label="Select Sales Rep"
-              value={selectedRepId}
-              onChange={setSelectedRepId}
-            >
-              <option value="">Choose a rep…</option>
-              {((allRepsData as any)?.items || []).map((r: any) => (
-                <option key={r.id} value={r.id}>{r.fullName} ({r.employeeCode})</option>
-              ))}
-            </SelectField>
+      {/* CUSTOMERS TAB */}
+      {activeTab === 'customers' && (
+        <div className="space-y-3">
+          <p className="text-sm text-slate-500">
+            {customers.length} customer{customers.length !== 1 ? 's' : ''} assigned
+          </p>
 
-            <div className="flex gap-3 pt-2">
+          {customers.length === 0 ? (
+            <div className="text-center py-16 text-slate-400">
+              <TrendingUp className="w-12 h-12 mx-auto mb-3 opacity-20" />
+              <p className="font-medium text-slate-500">No customers assigned</p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="divide-y divide-slate-100">
+                {customers.map((c) => (
+                  <div key={c.id} className="flex items-center gap-3 px-4 py-3.5 hover:bg-slate-50 transition">
+                    <div className="w-9 h-9 rounded-xl bg-blue-100 flex items-center justify-center font-bold text-blue-600 text-sm flex-shrink-0 select-none">
+                      {(c.shopName || c.fullName || '?').charAt(0).toUpperCase()}
+                    </div>
+                    <button onClick={() => navigate(`/admin/customers/${c.id}`)} className="flex-1 min-w-0 text-left">
+                      <p className="text-sm font-semibold text-slate-800 truncate">{c.shopName || c.fullName}</p>
+                      <p className="text-xs text-slate-400 truncate">{c.email || 'No email'}</p>
+                    </button>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <StatusBadge status={c.isActive ? 'Active' : 'Inactive'} />
+                      <button onClick={() => navigate(`/admin/customers/${c.id}`)} className="text-slate-300 hover:text-slate-500 transition">
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Inline Field Confirm Modal */}
+      {pendingConfirm && createPortal(
+        <div className="fixed inset-0 z-50 flex flex-col items-center" style={{ pointerEvents: 'auto' }}>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={() => setPendingConfirm(null)} />
+          <div
+            className="relative mt-16 w-full max-w-sm mx-4 bg-white rounded-2xl shadow-2xl border border-slate-200"
+            style={{ animation: 'slideDown 0.25s ease-out both' }}
+          >
+            <div className="flex items-start gap-4 p-6 pb-4">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+                <PencilLine className="w-5 h-5 text-blue-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base font-semibold text-slate-900">Update {pendingConfirm.label}?</h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  Confirm this change for <span className="font-semibold text-slate-700">{coordinator.fullName}</span>
+                </p>
+              </div>
+            </div>
+            <div className="mx-6 rounded-xl bg-slate-50 border border-slate-200 p-3.5 mb-5 space-y-2">
+              <div className="flex items-start gap-2 text-sm">
+                <span className="text-slate-400 w-14 shrink-0 font-medium">From:</span>
+                <span className="font-medium text-slate-500 line-through break-words min-w-0">{pendingConfirm.oldValue}</span>
+              </div>
+              <div className="h-px bg-slate-200" />
+              <div className="flex items-start gap-2 text-sm">
+                <span className="text-slate-400 w-14 shrink-0 font-medium">To:</span>
+                <span className="font-bold text-slate-900 break-words min-w-0">
+                  {pendingConfirm.type === 'password' ? '••••••••' : pendingConfirm.newValue}
+                </span>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 px-6 pb-5">
               <button
-                onClick={() => setShowAssignRep(false)}
-                className="flex-1 py-2.5 bg-slate-100 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-200 transition"
+                onClick={() => setPendingConfirm(null)}
+                className="px-4 py-2 rounded-xl border border-slate-200 text-sm font-medium text-slate-700 hover:bg-slate-50 transition"
               >
                 Cancel
               </button>
               <button
-                onClick={() => assignRepMut.mutate()}
-                disabled={!selectedRepId || assignRepMut.isPending}
-                className="flex-1 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-semibold
-                           hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                onClick={handleConfirmSave}
+                disabled={updateInfoMut.isPending || setPasswordMut.isPending}
+                className="px-5 py-2 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 transition flex items-center gap-1.5"
               >
-                {assignRepMut.isPending ? 'Assigning…' : 'Assign Rep'}
+                {(updateInfoMut.isPending || setPasswordMut.isPending)
+                  ? 'Saving…'
+                  : <><Check className="w-4 h-4" /> Save</>}
               </button>
             </div>
           </div>
-        </BottomSheet>
+        </div>,
+        document.body
       )}
 
-      {showCreateCustomer && (
-        <BottomSheet open={true} onClose={() => setShowCreateCustomer(false)} title="Add Customer">
-          <div className="p-5 space-y-4">
-            <p className="text-sm text-slate-500">
-              Select an existing customer in this region to assign to this coordinator.
-            </p>
-            <div className="max-h-72 overflow-y-auto space-y-2">
-              {((availableCustomersData as any)?.items || [])
-                .filter((c: any) => !c.assignedCoordinatorId)
-                .map((c: any) => (
-                  <button
-                    key={c.id}
-                    onClick={() => assignCustomerMut.mutate(c.id)}
-                    className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-lg border border-slate-200 hover:bg-slate-50 transition"
-                  >
-                    <div className="flex items-center gap-3 text-left">
-                      <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center font-bold text-slate-500 text-sm flex-shrink-0">
-                        {(c.shopName || c.fullName || '?').charAt(0).toUpperCase()}
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold text-slate-800 truncate">{c.shopName || c.fullName}</p>
-                        <p className="text-xs text-slate-400 truncate">{c.email || '—'}</p>
-                      </div>
-                    </div>
-                    <span className="text-xs font-semibold text-blue-600">Assign</span>
-                  </button>
-                ))}
-              {((availableCustomersData as any)?.items || []).filter((c: any) => !c.assignedCoordinatorId).length === 0 && (
-                <div className="text-sm text-slate-500">No available customers in this region.</div>
-              )}
+      {/* Unassign Rep Confirm */}
+      <ConfirmModal
+        open={!!unassignRepId}
+        title="Unassign Sales Rep"
+        description="Remove this sales rep from the coordinator? The rep will no longer be managed by this coordinator."
+        confirmLabel="Unassign"
+        confirmVariant="orange"
+        onConfirm={() => { if (unassignRepId) unassignRepMut.mutate(unassignRepId); }}
+        onCancel={() => setUnassignRepId(null)}
+      />
+
+      {/* Assign Rep Modal */}
+      {showAssignRep && createPortal(
+        <div className="fixed inset-0 z-50 flex flex-col items-center" style={{ pointerEvents: 'auto' }}>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={() => { setShowAssignRep(false); setSelectedRepId(''); }} />
+          <div
+            className="relative mt-16 w-full max-w-sm mx-4 bg-white rounded-2xl shadow-2xl border border-slate-200"
+            style={{ animation: 'slideDown 0.25s ease-out both' }}
+          >
+            <div className="flex items-center gap-3 p-6 pb-4">
+              <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                <UserPlus className="w-5 h-5 text-blue-600" />
+              </div>
+              <h3 className="text-base font-semibold text-slate-900">Assign Sales Rep</h3>
             </div>
-            <div className="flex gap-3 pt-2">
-              <button
-                onClick={() => setShowCreateCustomer(false)}
-                className="flex-1 py-2.5 bg-slate-100 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-200 transition"
+            <div className="px-6 pb-5 space-y-4">
+              <select
+                value={selectedRepId}
+                onChange={e => setSelectedRepId(e.target.value)}
+                className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
               >
-                Close
-              </button>
+                <option value="">Choose a rep…</option>
+                {(allRepsData?.items || []).map((r) => (
+                  <option key={r.id} value={r.id}>{r.fullName} ({r.employeeCode})</option>
+                ))}
+              </select>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => { setShowAssignRep(false); setSelectedRepId(''); }}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-200 text-sm font-medium text-slate-700 hover:bg-slate-50 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => assignRepMut.mutate()}
+                  disabled={!selectedRepId || assignRepMut.isPending}
+                  className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-40 transition"
+                >
+                  {assignRepMut.isPending ? 'Assigning…' : 'Assign'}
+                </button>
+              </div>
             </div>
           </div>
-        </BottomSheet>
+        </div>,
+        document.body
       )}
     </div>
   );

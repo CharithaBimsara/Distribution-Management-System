@@ -46,6 +46,15 @@ export const customersApi = {
       headers: { 'Content-Type': 'application/json' },
     }),
 
+  adminSoftDelete: (id: string) =>
+    api.delete<ApiResponse<string>>(`/admin/customers/${id}`),
+
+  adminGetTrash: (params?: Record<string, unknown>) =>
+    api.get<ApiResponse<PagedResult<Customer>>>('/admin/customers/trash', { params }),
+
+  adminRestore: (id: string) =>
+    api.put<ApiResponse<string>>(`/admin/customers/${id}/restore`, {}),
+
   adminGetSpecialPrices: (customerId: string) =>
     api.get<ApiResponse<PriceDetail[]>>(`/admin/customers/${customerId}/special-prices`),
 

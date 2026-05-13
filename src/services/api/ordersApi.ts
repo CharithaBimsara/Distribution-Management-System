@@ -24,6 +24,12 @@ export const ordersApi = {
   adminDelete: (id: string) =>
     api.delete<ApiResponse<void>>(`/admin/orders/${id}`),
 
+  adminGetTrash: (page = 1, pageSize = 20) =>
+    api.get<ApiResponse<PagedResult<Order>>>('/admin/orders/trash', { params: { page, pageSize } }),
+
+  adminRestore: (id: string) =>
+    api.post<ApiResponse<string>>(`/admin/orders/${id}/restore`),
+
   // Rep
   repCreate: (data: CreateOrderRequest) =>
     api.post<ApiResponse<Order>>('/rep/orders', data),

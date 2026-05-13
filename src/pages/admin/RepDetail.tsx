@@ -1,5 +1,6 @@
-﻿// @ts-nocheck
-import { useEffect, useMemo, useState } from 'react';
+// @ts-nocheck
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { repsApi } from '../../services/api/repsApi';
@@ -10,179 +11,271 @@ import { authApi } from '../../services/api/authApi';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import {
   ArrowLeft, MapPin, Users, User, Target, TrendingUp,
-  Calendar, Trash2, Plus, BarChart2, ChevronRight, Power,
-  ShoppingBag, DollarSign, Eye, Package, KeyRound, Copy
+  Calendar, Trash2, Plus, ChevronRight, Power,
+  Eye, EyeOff, KeyRound, Copy, Search, PencilLine, Save, Check,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import StatusBadge from '../../components/common/StatusBadge';
 import ConfirmModal from '../../components/common/ConfirmModal';
 
-// ── Shared small components ────────────────────────────────────────────────
+// ─── Searchable multi-select panel ────────────────────────────────────────────
 
-function SelectField({
-  label, value, onChange, disabled = false, children,
+function SelectPanel({
+  label, color, items, selectedIds, onToggle, onClear, getLabel, getSublabel,
 }: {
   label: string;
-  value: string;
-  onChange: (v: string) => void;
-  disabled?: boolean;
-  children: React.ReactNode;
+  color: 'blue' | 'indigo' | 'violet';
+  items: any[];
+  selectedIds: string[];
+  onToggle: (id: string) => void;
+  onClear: () => void;
+  getLabel: (item: any) => string;
+  getSublabel?: (item: any) => string;
 }) {
+  const [search, setSearch] = useState('');
+
+  const filtered = items.filter(item =>
+    getLabel(item).toLowerCase().includes(search.toLowerCase()) ||
+    (getSublabel && getSublabel(item).toLowerCase().includes(search.toLowerCase()))
+  );
+  const selected = filtered.filter(i => selectedIds.includes(i.id));
+  const unselected = filtered.filter(i => !selectedIds.includes(i.id));
+  const sorted = [...selected, ...unselected];
+
+  const c = {
+    blue:   { accent: 'text-blue-600',   badge: 'bg-blue-100 text-blue-700',     check: 'accent-blue-600',   row: 'bg-blue-50 border-l-2 border-blue-500',     text: 'text-blue-700 font-medium' },
+    indigo: { accent: 'text-indigo-600', badge: 'bg-indigo-100 text-indigo-700', check: 'accent-indigo-600', row: 'bg-indigo-50 border-l-2 border-indigo-500', text: 'text-indigo-700 font-medium' },
+    violet: { accent: 'text-violet-600', badge: 'bg-violet-100 text-violet-700', check: 'accent-violet-600', row: 'bg-violet-50 border-l-2 border-violet-500', text: 'text-violet-700 font-medium' },
+  }[color];
+
   return (
-    <div className="flex flex-col gap-1">
-      <label className="text-[11px] font-semibold text-blue-600 uppercase tracking-wider">{label}</label>
-      <select
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        disabled={disabled}
-        className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm text-slate-800 bg-white
-                   focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
-                   disabled:opacity-50 disabled:cursor-not-allowed transition"
-      >
-        {children}
-      </select>
+    <div className="flex flex-col border border-slate-200 rounded-xl overflow-hidden bg-white">
+      {/* Header */}
+      <div className="flex items-center justify-between px-3 py-2.5 bg-slate-50 border-b border-slate-200 flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <span className={`text-[11px] font-bold uppercase tracking-wider ${c.accent}`}>{label}</span>
+          {selectedIds.length > 0 && (
+            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${c.badge}`}>
+              {selectedIds.length}
+            </span>
+          )}
+        </div>
+        {selectedIds.length > 0 && (
+          <button onClick={onClear} className="text-[10px] text-slate-400 hover:text-red-500 font-medium transition">
+            Clear
+          </button>
+        )}
+      </div>
+      {/* Search */}
+      <div className="relative border-b border-slate-100 flex-shrink-0">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
+        <input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search…"
+          className="w-full pl-7 pr-3 py-2 text-xs text-slate-700 bg-white focus:outline-none placeholder:text-slate-400 transition"
+        />
+      </div>
+      {/* List */}
+      <div className="overflow-y-auto divide-y divide-slate-50" style={{ maxHeight: '200px' }}>
+        {items.length === 0 ? (
+          <p className="text-xs text-slate-400 p-3 text-center">None available</p>
+        ) : sorted.length === 0 ? (
+          <p className="text-xs text-slate-400 p-3 text-center">No matches</p>
+        ) : sorted.map((item: any) => {
+          const isSelected = selectedIds.includes(item.id);
+          return (
+            <label
+              key={item.id}
+              className={`flex items-center gap-2.5 px-3 py-2 cursor-pointer transition-colors ${
+                isSelected ? c.row : 'hover:bg-slate-50 border-l-2 border-transparent'
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={isSelected}
+                onChange={() => onToggle(item.id)}
+                className={`${c.check} w-3.5 h-3.5 flex-shrink-0`}
+              />
+              <div className="min-w-0 leading-tight flex items-baseline gap-1.5 flex-wrap">
+                <span className={`text-sm truncate ${isSelected ? c.text : 'text-slate-700'}`}>
+                  {getLabel(item)}
+                </span>
+                {getSublabel && (
+                  <span className="text-[10px] text-slate-400 font-normal flex-shrink-0">{getSublabel(item)}</span>
+                )}
+              </div>
+            </label>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
-function InputField({
-  label, type = 'text', value, onChange, placeholder,
-}: {
-  label: string; type?: string; value: string;
-  onChange: (v: string) => void; placeholder?: string;
+// ─── Per-field inline editable row — double-click to edit ───────────────────
+
+function InlineEditRow({ label, displayValue, isEditing, onDoubleClick, onCommit, onCancel, inputType = 'text' }: {
+  label: string;
+  displayValue: string;
+  isEditing: boolean;
+  onDoubleClick: () => void;
+  onCommit: (val: string) => void;
+  onCancel: () => void;
+  inputType?: string;
 }) {
+  const [draft, setDraft] = useState(displayValue);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const committedRef = useRef(false);
+
+  useEffect(() => {
+    if (isEditing) {
+      setDraft(displayValue);
+      committedRef.current = false;
+      setTimeout(() => { inputRef.current?.focus(); inputRef.current?.select?.(); }, 0);
+    }
+  }, [isEditing, displayValue]);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') { e.preventDefault(); committedRef.current = true; onCommit(draft); }
+    if (e.key === 'Escape') { committedRef.current = true; onCancel(); }
+  };
+
+  const handleBlur = () => {
+    if (!committedRef.current) { committedRef.current = true; onCommit(draft); }
+  };
+
   return (
-    <div className="flex flex-col gap-1">
-      <label className="text-[11px] font-semibold text-blue-600 uppercase tracking-wider">{label}</label>
+    <div className="flex items-center justify-between gap-4 px-5 py-3 group">
+      <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider w-28 flex-shrink-0">{label}</span>
+      {isEditing ? (
+        <input
+          ref={inputRef}
+          type={inputType}
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onBlur={handleBlur}
+          onKeyDown={handleKeyDown}
+          className="flex-1 min-w-0 px-3 py-1.5 border border-blue-400 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 bg-white transition"
+        />
+      ) : (
+        <span
+          className="text-sm font-medium text-slate-800 text-right truncate flex-1 min-w-0 flex items-center justify-end gap-1.5 cursor-pointer hover:text-blue-600 transition-colors"
+          onDoubleClick={onDoubleClick}
+          title="Double-click to edit"
+        >
+          <span className="truncate">{displayValue || '—'}</span>
+          <PencilLine className="w-3 h-3 opacity-0 group-hover:opacity-40 flex-shrink-0 transition-opacity" />
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ─── Credential inline input (with optional eye toggle) ──────────────────────
+
+function CredInlineInput({ defaultValue, inputType, showToggle, showPassword, onToggleShow, onCommit, onCancel }: {
+  defaultValue: string;
+  inputType: string;
+  showToggle?: boolean;
+  showPassword?: boolean;
+  onToggleShow?: () => void;
+  onCommit: (val: string) => void;
+  onCancel: () => void;
+}) {
+  const [draft, setDraft] = useState(defaultValue);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const committedRef = useRef(false);
+
+  useEffect(() => {
+    setDraft(defaultValue);
+    committedRef.current = false;
+    setTimeout(() => { inputRef.current?.focus(); }, 0);
+  }, []);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') { e.preventDefault(); committedRef.current = true; onCommit(draft); }
+    if (e.key === 'Escape') { committedRef.current = true; onCancel(); }
+  };
+
+  const handleBlur = () => {
+    if (!committedRef.current) { committedRef.current = true; onCommit(draft); }
+  };
+
+  return (
+    <div className="relative flex-1 min-w-0">
       <input
-        type={type}
-        value={value}
-        placeholder={placeholder}
-        onChange={e => onChange(e.target.value)}
-        className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm text-slate-800
-                   focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+        ref={inputRef}
+        type={inputType}
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
+        placeholder="Enter new password"
+        className={`w-full px-3 py-1.5 border border-blue-400 rounded-lg text-sm text-slate-800 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition ${showToggle ? 'pr-9' : ''}`}
       />
+      {showToggle && (
+        <button
+          onMouseDown={e => { e.preventDefault(); onToggleShow?.(); }}
+          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition"
+          type="button"
+          tabIndex={-1}
+        >
+          {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+        </button>
+      )}
     </div>
   );
 }
 
-function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
-  return (
-    <div className={`bg-white rounded-xl border border-slate-200 shadow-sm ${className}`}>
-      {children}
-    </div>
-  );
-}
+type Tab = 'details' | 'targets' | 'customers';
 
-function CardHeader({ title, icon, action }: { title: string; icon: React.ReactNode; action?: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-      <div className="flex items-center gap-2.5">
-        <span className="text-blue-500">{icon}</span>
-        <h3 className="text-sm font-semibold text-slate-800">{title}</h3>
-      </div>
-      {action}
-    </div>
-  );
-}
-
-function StatTile({
-  label, value, icon, accent = false,
-}: {
-  label: string; value: string | number; icon: React.ReactNode; accent?: boolean;
-}) {
-  return (
-    <div className={`flex flex-col gap-2 p-4 rounded-xl shadow-sm ${accent ? 'bg-blue-600 text-white' : 'bg-slate-50 text-slate-800'}`}>
-      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${accent ? 'bg-white/20' : 'bg-blue-100'}`}>
-        <span className={accent ? 'text-white' : 'text-blue-600'}>{icon}</span>
-      </div>
-      <div>
-        <p className={`text-xl font-bold leading-none ${accent ? 'text-white' : 'text-slate-900'}`}>{value}</p>
-        <p className={`text-[11px] mt-1 ${accent ? 'text-blue-100' : 'text-slate-500'}`}>{label}</p>
-      </div>
-    </div>
-  );
-}
-
-type Tab = 'overview' | 'targets' | 'customers';
-
-// ── Main Page ──────────────────────────────────────────────────────────────
+// ─── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function AdminRepDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const qc = useQueryClient();
 
-  const [activeTab, setActiveTab] = useState<Tab>('overview');
+  const [activeTab, setActiveTab] = useState<Tab>('details');
 
-  const [infoEditMode, setInfoEditMode] = useState(false);
-  const [infoForm, setInfoForm] = useState({
-    fullName: '',
-    employeeCode: '',
-    phoneNumber: '',
-    hireDate: '',
-  });
+  // Inline edit
+  const [editingField, setEditingField] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
 
-  const resetAssignmentFields = () => {
-    if (!rep) return;
-    setSelectedRegionIds(rep.regionIds || []);
-    setSelectedSubRegionIds(rep.subRegionIds || []);
-    setSelectedCoordIds(rep.coordinatorIds || []);
-  };
-
-  const handleTabChange = (tab: Tab) => {
-    if (activeTab === 'overview' && tab !== 'overview') {
-      resetAssignmentFields();
-    }
-    setActiveTab(tab);
-  };
-  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
-
-  const [targetForm, setTargetForm] = useState({
-    targetPeriod: 'Monthly',
-    startDate: '',
-    endDate: '',
-    targetAmount: '',
-  });
-  const [generatedTempPassword, setGeneratedTempPassword] = useState<string>('');
-  const [selectedCoordIds, setSelectedCoordIds] = useState<string[]>([]);
+  // Territory
   const [selectedRegionIds, setSelectedRegionIds] = useState<string[]>([]);
   const [selectedSubRegionIds, setSelectedSubRegionIds] = useState<string[]>([]);
+  const [selectedCoordIds, setSelectedCoordIds] = useState<string[]>([]);
 
-  // ── Queries ──────────────────────────────────────────────────────────────
+  // Targets
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [targetForm, setTargetForm] = useState({
+    targetPeriod: 'Monthly', startDate: '', endDate: '', targetAmount: '',
+  });
+
+  // ── Queries ────────────────────────────────────────────────────────────────
 
   const { data: rep, isLoading: repLoading } = useQuery({
     queryKey: ['admin-rep', id],
     queryFn: () => repsApi.adminGetById(id!).then(r => r.data.data),
     enabled: !!id,
-    onSuccess: (rep) => {
-      setInfoForm({
-        fullName: rep.fullName || '',
-        employeeCode: rep.employeeCode || '',
-        phoneNumber: rep.phoneNumber || '',
-        hireDate: rep.hireDate ? rep.hireDate.split('T')[0] : '',
-      });
-    },
   });
 
-  // Keep edit form in sync with the loaded rep values
   useEffect(() => {
     if (!rep) return;
-    setInfoForm({
-      fullName: rep.fullName || '',
-      employeeCode: rep.employeeCode || '',
-      phoneNumber: rep.phoneNumber || '',
-      hireDate: rep.hireDate ? rep.hireDate.split('T')[0] : '',
-    });
+    setSelectedRegionIds(rep.regionIds || []);
+    setSelectedSubRegionIds(rep.subRegionIds || []);
+    setSelectedCoordIds(rep.coordinatorIds || []);
   }, [rep]);
 
   const { data: performance } = useQuery({
     queryKey: ['admin-rep-performance', id],
-    queryFn: () =>
-      repsApi.adminGetPerformance(id!, {
-        from: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString(),
-        to: new Date().toISOString(),
-      }).then(r => r.data.data),
+    queryFn: () => repsApi.adminGetPerformance(id!, {
+      from: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString(),
+      to: new Date().toISOString(),
+    }).then(r => r.data.data),
     enabled: !!id,
   });
 
@@ -194,8 +287,7 @@ export default function AdminRepDetail() {
 
   const { data: customersData } = useQuery({
     queryKey: ['admin-rep-customers', id],
-    queryFn: () =>
-      customersApi.adminGetAll({ page: 1, pageSize: 200, assignedRepId: id }).then(r => r.data.data),
+    queryFn: () => customersApi.adminGetAll({ page: 1, pageSize: 200, assignedRepId: id }).then(r => r.data.data),
     enabled: !!id,
   });
 
@@ -204,42 +296,67 @@ export default function AdminRepDetail() {
     queryFn: () => regionsApi.getAll().then(r => r.data || []),
   });
 
-
   const { data: coordinatorsData } = useQuery({
     queryKey: ['coordinators-list'],
     queryFn: () => adminGetAllCoordinators(1, 100).then(r => r.items || []),
   });
 
-  // ── Mutations ─────────────────────────────────────────────────────────────
+  // ── Mutations ──────────────────────────────────────────────────────────────
 
-  const updateMut = useMutation({
-    mutationFn: (data: any) => repsApi.adminUpdate(id!, data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin-rep', id] });
-      qc.invalidateQueries({ queryKey: ['admin-reps'] });
-      toast.success('Updated successfully');
-    },
-    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed'),
-  });
+  const invalidateRep = () => {
+    qc.invalidateQueries({ queryKey: ['admin-rep', id] });
+    qc.invalidateQueries({ queryKey: ['admin-reps'] });
+  };
+
+  const [pendingConfirm, setPendingConfirm] = useState<{
+    field: string; label: string; oldValue: string; newValue: string; type: 'info' | 'password';
+  } | null>(null);
 
   const updateInfoMut = useMutation({
     mutationFn: (data: any) => repsApi.adminUpdate(id!, data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin-rep', id] });
-      qc.invalidateQueries({ queryKey: ['admin-reps'] });
-      setInfoEditMode(false);
-      toast.success('Representative information updated');
-    },
-    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to update'),
+    onSuccess: () => { invalidateRep(); setPendingConfirm(null); toast.success('Saved'); },
+    onError: (e: any) => { toast.error(e?.response?.data?.message || 'Failed to update'); setPendingConfirm(null); },
+  });
+
+  const setPasswordMut = useMutation({
+    mutationFn: (password: string) => authApi.adminSetUserPassword(rep!.userId, password),
+    onSuccess: () => { invalidateRep(); setPendingConfirm(null); toast.success('Password updated'); },
+    onError: (e: any) => { toast.error(e?.response?.data?.message || 'Failed to update password'); setPendingConfirm(null); },
+  });
+
+  const handleInfoCommit = (field: string, label: string, currentRaw: string, newVal: string) => {
+    setEditingField(null);
+    const trimmed = newVal.trim();
+    if (trimmed === currentRaw.trim()) return;
+    setPendingConfirm({ field, label, oldValue: currentRaw || '(empty)', newValue: trimmed, type: 'info' });
+  };
+
+  const handleCredCommit = (type: 'info' | 'password', field: string, label: string, oldVal: string, newVal: string) => {
+    setEditingField(null);
+    setShowPassword(false);
+    const trimmed = newVal.trim();
+    if (!trimmed) return;
+    setPendingConfirm({ field, label, oldValue: oldVal || '(empty)', newValue: trimmed, type });
+  };
+
+  const handleConfirmSave = () => {
+    if (!pendingConfirm) return;
+    if (pendingConfirm.type === 'password') {
+      setPasswordMut.mutate(pendingConfirm.newValue);
+    } else {
+      updateInfoMut.mutate({ [pendingConfirm.field]: pendingConfirm.newValue || null });
+    }
+  };
+
+  const updateAssignmentMut = useMutation({
+    mutationFn: (data: any) => repsApi.adminUpdate(id!, data),
+    onSuccess: () => { invalidateRep(); toast.success('Territory saved'); },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to save assignment'),
   });
 
   const toggleActiveMut = useMutation({
     mutationFn: () => repsApi.adminUpdate(id!, { isActive: !rep?.isActive }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin-rep', id] });
-      qc.invalidateQueries({ queryKey: ['admin-reps'] });
-      toast.success(rep?.isActive ? 'Rep deactivated' : 'Rep activated');
-    },
+    onSuccess: () => { invalidateRep(); toast.success(rep?.isActive ? 'Rep deactivated' : 'Rep activated'); },
     onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed'),
   });
 
@@ -248,13 +365,13 @@ export default function AdminRepDetail() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-rep-targets', id] });
       setTargetForm({ targetPeriod: 'Monthly', startDate: '', endDate: '', targetAmount: '' });
-      toast.success('Target set');
+      toast.success('Target added');
     },
     onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed'),
   });
 
   const deleteTargetMut = useMutation({
-    mutationFn: (targetId: string) => repsApi.adminDeleteTarget(targetId),
+    mutationFn: (tid: string) => repsApi.adminDeleteTarget(tid),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-rep-targets', id] });
       setDeleteTargetId(null);
@@ -263,61 +380,32 @@ export default function AdminRepDetail() {
     onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed'),
   });
 
-  const resetTempPasswordMut = useMutation({
-    mutationFn: () => authApi.adminResetUserTempPassword(rep.userId),
-    onSuccess: (res) => {
-      const temp = res.data.data.temporaryPassword;
-      setGeneratedTempPassword(temp);
-      qc.invalidateQueries({ queryKey: ['admin-rep', id] });
-      toast.success('New password generated');
-    },
-    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to generate password'),
-  });
-
-  // ── Derived ───────────────────────────────────────────────────────────────
+  // ── Derived ────────────────────────────────────────────────────────────────
 
   const customers = customersData?.items || [];
   const coordinators = coordinatorsData || [];
   const regionList = Array.isArray(regions) ? regions : [];
 
-  useEffect(() => {
-    if (!rep) return;
-    setSelectedRegionIds(rep.regionIds || []);
-    setSelectedSubRegionIds(rep.subRegionIds || []);
-    setSelectedCoordIds(rep.coordinatorIds || []);
-  }, [rep]);
-
-  const allSubRegions = useMemo(() => {
-    return regionList.flatMap((r: any) => (r.subRegions || []).map((s: any) => ({ ...s, regionName: r.name })));
-  }, [regionList]);
+  const allSubRegions = useMemo(() =>
+    regionList.flatMap((r: any) => (r.subRegions || []).map((s: any) => ({ ...s, regionName: r.name }))),
+    [regionList]
+  );
 
   const assignmentChanged =
     JSON.stringify([...selectedRegionIds].sort()) !== JSON.stringify([...(rep?.regionIds || [])].sort()) ||
     JSON.stringify([...selectedSubRegionIds].sort()) !== JSON.stringify([...(rep?.subRegionIds || [])].sort()) ||
     JSON.stringify([...selectedCoordIds].sort()) !== JSON.stringify([...(rep?.coordinatorIds || [])].sort());
 
-  const handleUpdateAssignment = () => {
-    updateMut.mutate({
-      regionIds: selectedRegionIds,
-      subRegionIds: selectedSubRegionIds,
-      coordinatorIds: selectedCoordIds,
-    });
-  };
-
   const achievementPct = performance
     ? Math.min(Math.round((performance.achievedAmount / (performance.targetAmount || 1)) * 100), 100)
     : 0;
-  const visibleTempPassword = generatedTempPassword || rep?.temporaryPassword || '';
 
-  // ── Loading / Not found ───────────────────────────────────────────────────
+  // ── Loading / not found ────────────────────────────────────────────────────
 
   if (repLoading) {
     return (
       <div className="flex items-center justify-center py-32">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-9 h-9 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin" />
-          <p className="text-sm text-slate-400">Loading rep details…</p>
-        </div>
+        <div className="w-9 h-9 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin" />
       </div>
     );
   }
@@ -334,76 +422,85 @@ export default function AdminRepDetail() {
     );
   }
 
-  const tabs: { id: Tab; label: string; icon: any; count?: number }[] = [
-    { id: 'overview', label: 'Overview', icon: BarChart2 },
-    { id: 'targets', label: 'Targets', icon: Target, count: targets?.length ?? 0 },
-    { id: 'customers', label: 'Customers', icon: Users, count: rep?.assignedCustomersCount ?? customers.length },
+  const tabs = [
+    { id: 'details' as Tab,   label: 'Details',   icon: User },
+    { id: 'targets' as Tab,   label: 'Targets',   icon: Target, count: targets?.length ?? 0 },
+    { id: 'customers' as Tab, label: 'Customers', icon: Users,  count: rep?.assignedCustomersCount ?? customers.length },
   ];
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-6 pb-16 animate-fade-in">
+    <div className="space-y-5 pb-16">
 
       {/* ── Page Header ── */}
-      <div className="flex items-center gap-4">
-        <button
-          onClick={() => navigate('/admin/reps')}
-          className="p-2 rounded-lg hover:bg-slate-100 transition text-slate-500"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </button>
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+        <div className="flex items-start gap-4">
+          <button
+            onClick={() => navigate('/admin/reps')}
+            className="p-2 rounded-lg hover:bg-slate-100 transition text-slate-400 flex-shrink-0 mt-0.5"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
 
-        <div className="flex-1 min-w-0">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <h1 className="text-xl lg:text-2xl font-bold text-slate-900 truncate">{rep.fullName}</h1>
-            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
-              rep.isActive
-                ? 'bg-blue-50 text-blue-700 border-blue-200'
-                : 'bg-slate-100 text-slate-500 border-slate-200'
-            }`}>
-              {rep.isActive ? 'Active' : 'Inactive'}
-            </span>
+          {/* Avatar */}
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center flex-shrink-0 shadow-sm select-none">
+            <span className="text-white font-bold text-xl">{rep.fullName?.charAt(0)?.toUpperCase() || '?'}</span>
           </div>
-          <p className="text-sm text-slate-400 mt-0.5">{rep.employeeCode} &nbsp;·&nbsp; Sales Representative</p>
+
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-2 mb-0.5">
+              <h1 className="text-xl font-bold text-slate-900">{rep.fullName}</h1>
+              <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
+                rep.isActive
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  : 'bg-slate-100 text-slate-500 border-slate-200'
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${rep.isActive ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                {rep.isActive ? 'Active' : 'Inactive'}
+              </span>
+            </div>
+            <p className="text-sm text-slate-400 mb-3">{rep.employeeCode} · Sales Representative</p>
+
+            {/* Inline stats */}
+            <div className="flex flex-wrap gap-x-5 gap-y-1.5">
+              <div className="flex items-center gap-1.5">
+                <Users className="w-3.5 h-3.5 text-slate-400" />
+                <span className="text-sm font-semibold text-slate-700">{rep.assignedCustomersCount ?? customers.length}</span>
+                <span className="text-xs text-slate-400">customers</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Target className="w-3.5 h-3.5 text-slate-400" />
+                <span className="text-sm font-semibold text-slate-700">{targets?.length ?? 0}</span>
+                <span className="text-xs text-slate-400">targets</span>
+              </div>
+              {performance && <>
+                <div className="flex items-center gap-1.5">
+                  <TrendingUp className="w-3.5 h-3.5 text-slate-400" />
+                  <span className="text-sm font-semibold text-slate-700">{achievementPct}%</span>
+                  <span className="text-xs text-slate-400">achievement</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-slate-400">Sales:</span>
+                  <span className="text-sm font-semibold text-slate-700">{formatCurrency(performance.totalSales)}</span>
+                </div>
+              </>}
+            </div>
+          </div>
+
+          <button
+            onClick={() => toggleActiveMut.mutate()}
+            disabled={toggleActiveMut.isPending}
+            className={`hidden sm:inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border transition flex-shrink-0 disabled:opacity-50 ${
+              rep.isActive
+                ? 'border-red-200 text-red-600 bg-red-50 hover:bg-red-100'
+                : 'border-emerald-200 text-emerald-600 bg-emerald-50 hover:bg-emerald-100'
+            }`}
+          >
+            <Power className="w-4 h-4" />
+            {toggleActiveMut.isPending ? '…' : rep.isActive ? 'Deactivate' : 'Activate'}
+          </button>
         </div>
-
-        <button
-          onClick={() => toggleActiveMut.mutate()}
-          disabled={toggleActiveMut.isPending}
-          className={`hidden lg:inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition ${
-            rep.isActive
-              ? 'border-red-200 text-red-600 bg-red-50 hover:bg-red-100'
-              : 'border-blue-200 text-blue-600 bg-blue-50 hover:bg-blue-100'
-          } disabled:opacity-50`}
-        >
-          <Power className="w-4 h-4" />
-          {toggleActiveMut.isPending ? '…' : rep.isActive ? 'Deactivate' : 'Activate'}
-        </button>
-      </div>
-
-      {/* ── Snapshot Stats ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatTile
-          label="Assigned Customers"
-          value={rep.assignedCustomersCount ?? customers.length}
-          icon={<Users className="w-4 h-4" />}
-        />
-        <StatTile
-          label="Active Targets"
-          value={targets?.length ?? 0}
-          icon={<Target className="w-4 h-4" />}
-        />
-        <StatTile
-          label="This Month Sales"
-          value={performance ? formatCurrency(performance.totalSales) : '—'}
-          icon={<DollarSign className="w-4 h-4" />}
-        />
-        <StatTile
-          label="Target Achievement"
-          value={`${achievementPct}%`}
-          icon={<TrendingUp className="w-4 h-4" />}
-        />
       </div>
 
       {/* ── Tab Bar ── */}
@@ -414,530 +511,314 @@ export default function AdminRepDetail() {
           return (
             <button
               key={tab.id}
-              onClick={() => handleTabChange(tab.id)}
+              onClick={() => setActiveTab(tab.id)}
               className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                active
-                  ? 'bg-white text-blue-700 shadow-sm border border-slate-200'
-                  : 'text-slate-500 hover:text-slate-700'
+                active ? 'bg-white text-blue-700 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700'
               }`}
             >
               <Icon className="w-4 h-4" />
-              {tab.label}
+              <span>{tab.label}</span>
               {tab.count !== undefined && tab.count > 0 && (
                 <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
                   active ? 'bg-blue-100 text-blue-600' : 'bg-slate-200 text-slate-500'
-                }`}>
-                  {tab.count}
-                </span>
+                }`}>{tab.count}</span>
               )}
             </button>
           );
         })}
       </div>
 
-      {/* ════════════════════════════════════════════
-          OVERVIEW TAB
-      ════════════════════════════════════════════ */}
-      {activeTab === 'overview' && (
+      {/* ════════════════════════════════════════
+          DETAILS TAB
+      ════════════════════════════════════════ */}
+      {activeTab === 'details' && (
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
 
-          {/* Left column – Rep info + Assignment */}
-          <div className="lg:col-span-3 space-y-5">
+          {/* Left: Info + Credentials */}
+          <div className="lg:col-span-2 space-y-5">
 
-            {/* Rep Info */}
-            <Card>
-              <CardHeader
-                title="Representative Information"
-                icon={<User className="w-4 h-4" />}
-                action={
-                  infoEditMode ? (
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => {
-                          setInfoEditMode(false);
-                          if (rep) {
-                            setInfoForm({
-                              fullName: rep.fullName || '',
-                              employeeCode: rep.employeeCode || '',
-                              phoneNumber: rep.phoneNumber || '',
-                              hireDate: rep.hireDate ? rep.hireDate.split('T')[0] : '',
-                            });
-                          }
-                        }}
-                        className="px-3 py-1 rounded-lg bg-slate-100 text-slate-700 text-xs font-semibold hover:bg-slate-200"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={() => updateInfoMut.mutate({
-                          fullName: infoForm.fullName,
-                          employeeCode: infoForm.employeeCode,
-                          phoneNumber: infoForm.phoneNumber,
-                          hireDate: infoForm.hireDate || null,
-                        })}
-                        disabled={updateInfoMut.isPending}
-                        className="px-3 py-1 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 disabled:opacity-50"
-                      >
-                        {updateInfoMut.isPending ? 'Saving…' : 'Save'}
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setInfoEditMode(true)}
-                      className="px-3 py-1 rounded-lg bg-slate-100 text-slate-700 text-xs font-semibold hover:bg-slate-200"
-                    >
-                      Edit
-                    </button>
-                  )
-                }
-              />
-              <div className="p-5 divide-y divide-slate-100">
-                <div
-                  onDoubleClick={() => setInfoEditMode(true)}
-                  className="space-y-3"
-                >
-                  <div className="flex items-center justify-between py-2.5 gap-4">
-                    <span className="text-xs text-slate-400 uppercase tracking-wider w-32 flex-shrink-0">Full Name</span>
-                    {infoEditMode ? (
-                      <input
-                        value={infoForm.fullName}
-                        onChange={e => setInfoForm(p => ({ ...p, fullName: e.target.value }))}
-                        className="w-full max-w-sm px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    ) : (
-                      <span className="text-sm font-medium text-slate-800 text-right truncate">{rep.fullName}</span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-between py-2.5 gap-4">
-                    <span className="text-xs text-slate-400 uppercase tracking-wider w-32 flex-shrink-0">Employee Code</span>
-                    {infoEditMode ? (
-                      <input
-                        value={infoForm.employeeCode}
-                        onChange={e => setInfoForm(p => ({ ...p, employeeCode: e.target.value }))}
-                        className="w-full max-w-sm px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    ) : (
-                      <span className="text-sm font-medium text-slate-800 text-right truncate">{rep.employeeCode}</span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-between py-2.5 gap-4">
-                    <span className="text-xs text-slate-400 uppercase tracking-wider w-32 flex-shrink-0">Phone</span>
-                    {infoEditMode ? (
-                      <input
-                        value={infoForm.phoneNumber}
-                        onChange={e => setInfoForm(p => ({ ...p, phoneNumber: e.target.value }))}
-                        className="w-full max-w-sm px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    ) : (
-                      <span className="text-sm font-medium text-slate-800 text-right truncate">{rep.phoneNumber}</span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-between py-2.5 gap-4">
-                    <span className="text-xs text-slate-400 uppercase tracking-wider w-32 flex-shrink-0">Hire Date</span>
-                    {infoEditMode ? (
-                      <input
-                        type="date"
-                        value={infoForm.hireDate}
-                        onChange={e => setInfoForm(p => ({ ...p, hireDate: e.target.value }))}
-                        className="w-full max-w-sm px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    ) : (
-                      <span className="text-sm font-medium text-slate-800 text-right truncate">{rep.hireDate ? formatDate(rep.hireDate) : '—'}</span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-between py-2.5 gap-4">
-                    <span className="text-xs text-slate-400 uppercase tracking-wider w-32 flex-shrink-0">Email</span>
-                    <span className="text-sm font-medium text-slate-800 text-right truncate">{rep.email}</span>
-                  </div>
-
-                </div>
+            {/* Representative Info */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-100">
+                <User className="w-4 h-4 text-blue-500" />
+                <h3 className="text-sm font-semibold text-slate-800">Representative Info</h3>
               </div>
-            </Card>
+              <div className="divide-y divide-slate-50">
+                <InlineEditRow
+                  label="Full Name"
+                  displayValue={rep.fullName || ''}
+                  isEditing={editingField === 'fullName'}
+                  onDoubleClick={() => setEditingField('fullName')}
+                  onCommit={v => handleInfoCommit('fullName', 'Full Name', rep.fullName || '', v)}
+                  onCancel={() => setEditingField(null)}
+                />
+                <InlineEditRow
+                  label="Employee Code"
+                  displayValue={rep.employeeCode || ''}
+                  isEditing={editingField === 'employeeCode'}
+                  onDoubleClick={() => setEditingField('employeeCode')}
+                  onCommit={v => handleInfoCommit('employeeCode', 'Employee Code', rep.employeeCode || '', v)}
+                  onCancel={() => setEditingField(null)}
+                />
+                <InlineEditRow
+                  label="Phone"
+                  displayValue={rep.phoneNumber || ''}
+                  isEditing={editingField === 'phoneNumber'}
+                  onDoubleClick={() => setEditingField('phoneNumber')}
+                  onCommit={v => handleInfoCommit('phoneNumber', 'Phone', rep.phoneNumber || '', v)}
+                  onCancel={() => setEditingField(null)}
+                  inputType="tel"
+                />
+                <InlineEditRow
+                  label="Email"
+                  displayValue={rep.email || ''}
+                  isEditing={editingField === 'email'}
+                  onDoubleClick={() => setEditingField('email')}
+                  onCommit={v => handleInfoCommit('email', 'Email', rep.email || '', v)}
+                  onCancel={() => setEditingField(null)}
+                  inputType="email"
+                />
+                <InlineEditRow
+                  label="Hire Date"
+                  displayValue={rep.hireDate ? rep.hireDate.split('T')[0] : ''}
+                  isEditing={editingField === 'hireDate'}
+                  onDoubleClick={() => setEditingField('hireDate')}
+                  onCommit={v => handleInfoCommit('hireDate', 'Hire Date', rep.hireDate ? rep.hireDate.split('T')[0] : '', v)}
+                  onCancel={() => setEditingField(null)}
+                  inputType="date"
+                />
+              </div>
+              <p className="px-5 py-2 text-[10px] text-slate-400 italic border-t border-slate-50">Double-click any value to edit</p>
+            </div>
 
-            {/* Credentials Card (New Layout) */}
-            <Card>
-              <CardHeader title="Credentials" icon={<KeyRound className="w-4 h-4" />} />
-              <div className="p-5 flex flex-col">
-                
-                {/* Username Row */}
-                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 pb-3 border-b border-slate-100">
-                  <span className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Username</span>
-                  
-                  <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200/60 px-3 py-1.5 rounded-lg w-fit">
-                    <span className="text-sm text-slate-700 font-medium select-all">
-                      {rep.employeeCode || rep.username || '-'}
-                    </span>
-                    <button
-                      onClick={() => {
-                        const text = rep.employeeCode || rep.username || '';
-                        if (text && text !== '-') {
-                          navigator.clipboard.writeText(text);
-                          toast.success('Username copied!');
-                        }
-                      }}
-                      className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors ml-1"
-                      title="Copy Username"
-                    >
-                      <Copy className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
+            {/* Login Credentials */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-100">
+                <KeyRound className="w-4 h-4 text-blue-500" />
+                <h3 className="text-sm font-semibold text-slate-800">Login Credentials</h3>
+              </div>
 
-                {/* Password Row */}
-                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 pt-3">
-                  <span className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Current Password</span>
-
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200/60 px-3 py-1.5 rounded-lg w-fit">
-                      <span className="text-sm text-slate-700 font-medium select-all">
-                        {visibleTempPassword || '-'}
+              <div className="divide-y divide-slate-50">
+                {/* Username */}
+                <div className="flex items-center justify-between gap-4 px-5 py-3 group">
+                  <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider w-28 flex-shrink-0">Username</span>
+                  {editingField === 'credUsername' ? (
+                    <CredInlineInput
+                      defaultValue={rep.employeeCode || rep.username || ''}
+                      inputType="text"
+                      onCommit={v => handleCredCommit('info', 'employeeCode', 'Username', rep.employeeCode || rep.username || '', v)}
+                      onCancel={() => setEditingField(null)}
+                    />
+                  ) : (
+                    <div className="flex items-center gap-2 flex-1 min-w-0 justify-end">
+                      <span
+                        className="text-sm font-medium text-slate-800 font-mono truncate flex items-center gap-1.5 cursor-pointer hover:text-blue-600 transition-colors"
+                        onDoubleClick={() => setEditingField('credUsername')}
+                        title="Double-click to edit"
+                      >
+                        <span className="truncate">{rep.employeeCode || rep.username || '—'}</span>
+                        <PencilLine className="w-3 h-3 opacity-0 group-hover:opacity-40 flex-shrink-0 transition-opacity" />
                       </span>
                       <button
-                        onClick={() => {
-                          if (visibleTempPassword && visibleTempPassword !== '-') {
-                            navigator.clipboard.writeText(visibleTempPassword);
-                            toast.success('Password copied!');
-                          }
-                        }}
-                        className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors ml-1"
-                        title="Copy Password"
+                        onClick={() => { navigator.clipboard.writeText(rep.employeeCode || rep.username || ''); toast.success('Copied!'); }}
+                        className="p-1 text-slate-400 hover:text-blue-600 rounded transition flex-shrink-0"
                       >
                         <Copy className="w-3.5 h-3.5" />
                       </button>
                     </div>
-
-                    <button
-                      onClick={() => resetTempPasswordMut.mutate()}
-                      disabled={resetTempPasswordMut.isPending}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-blue-50 text-blue-700 border border-blue-100 hover:bg-blue-100 hover:border-blue-200 transition-all disabled:opacity-50 shadow-sm"
-                    >
-                      <KeyRound className="w-3.5 h-3.5" />
-                      {resetTempPasswordMut.isPending ? 'Generating…' : 'Generate New'}
-                    </button>
-                  </div>
-                </div>
-                
-              </div>
-            </Card>
-
-            {/* Assignment */}
-            <Card>
-              <CardHeader
-                title="Territory Assignment"
-                icon={<MapPin className="w-4 h-4" />}
-                action={
-                  assignmentChanged && (
-                    <span className="text-xs font-semibold px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full border border-amber-200 animate-pulse">
-                      Unsaved changes
-                    </span>
-                  )
-                }
-              />
-              <div className="p-5 space-y-5">
-
-                {/* Current summary chips */}
-                {(rep.regionIds?.length > 0 || rep.subRegionIds?.length > 0 || rep.coordinatorIds?.length > 0) && (
-                  <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 space-y-2">
-                    <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Currently Assigned</p>
-                    {rep.regionIds?.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5">
-                        <span className="text-[10px] font-bold text-blue-500 uppercase tracking-wider w-20 pt-1">Regions</span>
-                        {rep.regionNames?.map((name: string, i: number) => (
-                          <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded-full border border-blue-200">
-                            <MapPin className="w-2.5 h-2.5" />{name}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    {rep.subRegionIds?.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5">
-                        <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-wider w-20 pt-1">Sub-Reg.</span>
-                        {rep.subRegionNames?.map((name: string, i: number) => (
-                          <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-100 text-indigo-700 text-xs font-medium rounded-full border border-indigo-200">
-                            {name}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    {rep.coordinatorIds?.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5">
-                        <span className="text-[10px] font-bold text-violet-500 uppercase tracking-wider w-20 pt-1">Coord.</span>
-                        {rep.coordinatorNames?.map((name: string, i: number) => (
-                          <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-violet-100 text-violet-700 text-xs font-medium rounded-full border border-violet-200">
-                            <User className="w-2.5 h-2.5" />{name}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Checkbox panels */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {/* Regions */}
-                  <div className="flex flex-col gap-2">
-                    <div className="flex items-center justify-between">
-                      <label className="text-[11px] font-semibold text-blue-600 uppercase tracking-wider">Regions</label>
-                      {selectedRegionIds.length > 0 && (
-                        <span className="text-[10px] bg-blue-100 text-blue-700 font-bold px-1.5 py-0.5 rounded-full">{selectedRegionIds.length}</span>
-                      )}
-                    </div>
-                    <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm">
-                      {regionList.length === 0 ? (
-                        <p className="text-xs text-slate-400 p-3">None available</p>
-                      ) : regionList.map((r: any) => (
-                        <label key={r.id} className={`flex items-center gap-2.5 px-3 py-2 cursor-pointer transition-colors ${
-                          selectedRegionIds.includes(r.id) ? 'bg-blue-50 border-l-2 border-blue-500' : 'hover:bg-slate-50 border-l-2 border-transparent'
-                        }`}>
-                          <input
-                            type="checkbox"
-                            checked={selectedRegionIds.includes(r.id)}
-                            onChange={() => setSelectedRegionIds(prev =>
-                              prev.includes(r.id) ? prev.filter(x => x !== r.id) : [...prev, r.id]
-                            )}
-                            className="accent-blue-600 w-3.5 h-3.5"
-                          />
-                          <span className={`text-sm ${selectedRegionIds.includes(r.id) ? 'text-blue-700 font-medium' : 'text-slate-700'}`}>
-                            {r.name}
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Sub-Regions */}
-                  <div className="flex flex-col gap-2">
-                    <div className="flex items-center justify-between">
-                      <label className="text-[11px] font-semibold text-indigo-600 uppercase tracking-wider">Sub-Regions</label>
-                      {selectedSubRegionIds.length > 0 && (
-                        <span className="text-[10px] bg-indigo-100 text-indigo-700 font-bold px-1.5 py-0.5 rounded-full">{selectedSubRegionIds.length}</span>
-                      )}
-                    </div>
-                    <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm">
-                      {allSubRegions.length === 0 ? (
-                        <p className="text-xs text-slate-400 p-3">None available</p>
-                      ) : allSubRegions.map((s: any) => (
-                        <label key={s.id} className={`flex items-center gap-2.5 px-3 py-2 cursor-pointer transition-colors ${
-                          selectedSubRegionIds.includes(s.id) ? 'bg-indigo-50 border-l-2 border-indigo-500' : 'hover:bg-slate-50 border-l-2 border-transparent'
-                        }`}>
-                          <input
-                            type="checkbox"
-                            checked={selectedSubRegionIds.includes(s.id)}
-                            onChange={() => setSelectedSubRegionIds(prev =>
-                              prev.includes(s.id) ? prev.filter(x => x !== s.id) : [...prev, s.id]
-                            )}
-                            className="accent-indigo-600 w-3.5 h-3.5"
-                          />
-                          <span className={`text-sm ${selectedSubRegionIds.includes(s.id) ? 'text-indigo-700 font-medium' : 'text-slate-700'}`}>
-                            {s.name}
-                            <span className="text-slate-400 text-[11px] ml-1">({s.regionName})</span>
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Coordinators */}
-                  <div className="flex flex-col gap-2">
-                    <div className="flex items-center justify-between">
-                      <label className="text-[11px] font-semibold text-violet-600 uppercase tracking-wider">Coordinators</label>
-                      {selectedCoordIds.length > 0 && (
-                        <span className="text-[10px] bg-violet-100 text-violet-700 font-bold px-1.5 py-0.5 rounded-full">{selectedCoordIds.length}</span>
-                      )}
-                    </div>
-                    <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm">
-                      {coordinators.length === 0 ? (
-                        <p className="text-xs text-slate-400 p-3">None available</p>
-                      ) : coordinators.map((c: any) => (
-                        <label key={c.id} className={`flex items-center gap-2.5 px-3 py-2 cursor-pointer transition-colors ${
-                          selectedCoordIds.includes(c.id) ? 'bg-violet-50 border-l-2 border-violet-500' : 'hover:bg-slate-50 border-l-2 border-transparent'
-                        }`}>
-                          <input
-                            type="checkbox"
-                            checked={selectedCoordIds.includes(c.id)}
-                            onChange={() => setSelectedCoordIds(prev =>
-                              prev.includes(c.id) ? prev.filter(x => x !== c.id) : [...prev, c.id]
-                            )}
-                            className="accent-violet-600 w-3.5 h-3.5"
-                          />
-                          <span className={`text-sm ${selectedCoordIds.includes(c.id) ? 'text-violet-700 font-medium' : 'text-slate-700'}`}>
-                            {c.fullName}
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
+                  )}
                 </div>
 
-                <div className="flex items-center justify-between pt-1 border-t border-slate-100">
-                  <button
-                    onClick={resetAssignmentFields}
-                    className="text-xs text-slate-400 hover:text-slate-600 font-medium transition"
-                  >
-                    Reset changes
-                  </button>
-                  <button
-                    onClick={handleUpdateAssignment}
-                    disabled={!assignmentChanged || updateMut.isPending}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold
-                               hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition shadow-sm"
-                  >
-                    {updateMut.isPending ? 'Saving…' : 'Save Assignment'}
-                  </button>
+                {/* Password */}
+                <div className="flex items-center justify-between gap-4 px-5 py-3 group">
+                  <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider w-28 flex-shrink-0">Password</span>
+                  {editingField === 'credPassword' ? (
+                    <CredInlineInput
+                      defaultValue={''}
+                      inputType={showPassword ? 'text' : 'password'}
+                      showToggle
+                      showPassword={showPassword}
+                      onToggleShow={() => setShowPassword(p => !p)}
+                      onCommit={v => { handleCredCommit('password', 'password', 'Password', '(current password)', v); }}
+                      onCancel={() => { setEditingField(null); setShowPassword(false); }}
+                    />
+                  ) : (
+                    <div className="flex items-center gap-2 flex-1 min-w-0 justify-end">
+                      <span
+                        className="text-sm font-medium text-slate-800 font-mono flex items-center gap-1.5 cursor-pointer hover:text-blue-600 transition-colors"
+                        onDoubleClick={() => setEditingField('credPassword')}
+                        title="Double-click to change password"
+                      >
+                        <span>{rep.temporaryPassword ? (showCurrentPassword ? rep.temporaryPassword : '••••••••') : '—'}</span>
+                        <PencilLine className="w-3 h-3 opacity-0 group-hover:opacity-40 flex-shrink-0 transition-opacity" />
+                      </span>
+                      {rep.temporaryPassword && (
+                        <>
+                          <button
+                            onMouseDown={e => { e.preventDefault(); setShowCurrentPassword(p => !p); }}
+                            className="p-1 text-slate-400 hover:text-slate-600 rounded transition flex-shrink-0"
+                            type="button"
+                            title={showCurrentPassword ? 'Hide password' : 'Show password'}
+                          >
+                            {showCurrentPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                          </button>
+                          <button
+                            onClick={() => { navigator.clipboard.writeText(rep.temporaryPassword); toast.success('Password copied!'); }}
+                            className="p-1 text-slate-400 hover:text-blue-600 rounded transition flex-shrink-0"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
-            </Card>
-
+              <p className="px-5 py-2 text-[10px] text-slate-400 italic border-t border-slate-50">Double-click any value to edit</p>
+            </div>
           </div>
 
-          {/* Right column – Performance + Customers preview */}
-          <div className="lg:col-span-2 space-y-5">
-
-            {/* This Month */}
-            <Card>
-              <CardHeader title="This Month" icon={<TrendingUp className="w-4 h-4" />} />
-              {performance ? (
-                <div className="p-5 space-y-4">
-                  <div className="grid grid-cols-2 gap-3">
-                    {[
-                      { label: 'Total Sales', value: formatCurrency(performance.totalSales), icon: <DollarSign className="w-3.5 h-3.5" /> },
-                      { label: 'Orders', value: performance.totalOrders, icon: <Package className="w-3.5 h-3.5" /> },
-                      { label: 'Customers Visited', value: performance.customersVisited, icon: <Eye className="w-3.5 h-3.5" /> },
-                      { label: 'Collected', value: formatCurrency(performance.collectedPayments), icon: <DollarSign className="w-3.5 h-3.5" /> },
-                    ].map(s => (
-                      <div key={s.label} className="bg-slate-50 rounded-lg p-3 border border-slate-100">
-                        <div className="flex items-center gap-1.5 mb-1.5">
-                          <span className="text-blue-500">{s.icon}</span>
-                          <span className="text-[11px] text-slate-500">{s.label}</span>
-                        </div>
-                        <p className="text-base font-bold text-slate-900">{s.value}</p>
-                      </div>
-                    ))}
-                  </div>
-
-                  {performance.targetAmount > 0 && (
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs text-slate-500 font-medium">Target Progress</span>
-                        <span className="text-xs font-bold text-blue-700">{achievementPct}%</span>
-                      </div>
-                      <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
-                        <div
-                          className="h-full rounded-full bg-blue-600 transition-all duration-700"
-                          style={{ width: `${achievementPct}%` }}
-                        />
-                      </div>
-                      <div className="flex items-center justify-between mt-1.5">
-                        <span className="text-[11px] text-slate-400">{formatCurrency(performance.achievedAmount)} achieved</span>
-                        <span className="text-[11px] text-slate-400">of {formatCurrency(performance.targetAmount)}</span>
-                      </div>
-                    </div>
+          {/* Right: Territory Assignment */}
+          <div className="lg:col-span-3">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+                <div className="flex items-center gap-2.5">
+                  <MapPin className="w-4 h-4 text-blue-500" />
+                  <h3 className="text-sm font-semibold text-slate-800">Territory Assignment</h3>
+                  {assignmentChanged && (
+                    <span className="text-[10px] font-semibold px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full border border-amber-200 animate-pulse">
+                      Unsaved
+                    </span>
                   )}
                 </div>
-              ) : (
-                <div className="p-8 text-center text-slate-400 text-sm">No performance data yet</div>
-              )}
-            </Card>
-
-            {/* Customers preview */}
-            <Card>
-              <CardHeader
-                title="Assigned Customers"
-                icon={<Users className="w-4 h-4" />}
-                action={
-                  <button
-                    onClick={() => handleTabChange('customers')}
-                    className="text-xs text-blue-600 font-medium hover:underline flex items-center gap-0.5"
-                  >
-                    View all <ChevronRight className="w-3.5 h-3.5" />
-                  </button>
-                }
-              />
-              {customers.length === 0 ? (
-                <div className="p-8 text-center text-slate-400 text-sm">
-                  <Users className="w-8 h-8 mx-auto mb-2 opacity-25" />
-                  No customers assigned
-                </div>
-              ) : (
-                <div className="divide-y divide-slate-100">
-                  {customers.slice(0, 5).map((c: any) => (
-                    <div key={c.id} className="flex items-center gap-3 px-4 py-3">
-                      <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center font-bold text-blue-600 text-sm flex-shrink-0">
-                        {(c.shopName || c.fullName || '?').charAt(0).toUpperCase()}
-                      </div>
-                      <button
-                        onClick={() => navigate(`/admin/customers/${c.id}`)}
-                        className="flex-1 min-w-0 text-left"
-                      >
-                        <p className="text-sm font-medium text-slate-800 truncate">{c.shopName || c.fullName}</p>
-                        <p className="text-xs text-slate-400 truncate">{c.email || 'No email'}</p>
-                      </button>
-                      <button
-                        onClick={() => navigate(`/admin/customers/${c.id}`)}
-                        className="text-slate-300 hover:text-slate-500 transition"
-                      >
-                        <ChevronRight className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ))}
-                  {customers.length > 5 && (
+                <div className="flex items-center gap-2">
+                  {assignmentChanged && (
                     <button
-                      onClick={() => setActiveTab('customers')}
-                      className="w-full py-3 text-xs font-medium text-blue-600 hover:bg-blue-50 transition text-center"
+                      onClick={() => {
+                        setSelectedRegionIds(rep.regionIds || []);
+                        setSelectedSubRegionIds(rep.subRegionIds || []);
+                        setSelectedCoordIds(rep.coordinatorIds || []);
+                      }}
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition"
                     >
-                      +{customers.length - 5} more customers
+                      Reset
                     </button>
                   )}
+                  <button
+                    onClick={() => updateAssignmentMut.mutate({
+                      regionIds: selectedRegionIds,
+                      subRegionIds: selectedSubRegionIds,
+                      coordinatorIds: selectedCoordIds,
+                    })}
+                    disabled={!assignmentChanged || updateAssignmentMut.isPending}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <Save className="w-3 h-3" />
+                    {updateAssignmentMut.isPending ? 'Saving…' : 'Save Assignment'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Selected summary — labeled text */}
+              {(selectedRegionIds.length > 0 || selectedSubRegionIds.length > 0 || selectedCoordIds.length > 0) && (
+                <div className="px-5 py-3 border-b border-slate-100 bg-slate-50/60 space-y-1.5">
+                  {selectedRegionIds.length > 0 && (
+                    <div className="flex items-baseline gap-1.5 flex-wrap text-xs">
+                      <span className="font-semibold text-blue-600 flex-shrink-0">Regions:</span>
+                      <span className="text-slate-700">{selectedRegionIds.map(rid => regionList.find((x: any) => x.id === rid)?.name).filter(Boolean).join(', ')}</span>
+                    </div>
+                  )}
+                  {selectedSubRegionIds.length > 0 && (
+                    <div className="flex items-baseline gap-1.5 flex-wrap text-xs">
+                      <span className="font-semibold text-indigo-600 flex-shrink-0">Sub-Regions:</span>
+                      <span className="text-slate-700">{selectedSubRegionIds.map(sid => allSubRegions.find((x: any) => x.id === sid)?.name).filter(Boolean).join(', ')}</span>
+                    </div>
+                  )}
+                  {selectedCoordIds.length > 0 && (
+                    <div className="flex items-baseline gap-1.5 flex-wrap text-xs">
+                      <span className="font-semibold text-violet-600 flex-shrink-0">Coordinators:</span>
+                      <span className="text-slate-700">{selectedCoordIds.map(cid => coordinators.find((x: any) => x.id === cid)?.fullName).filter(Boolean).join(', ')}</span>
+                    </div>
+                  )}
                 </div>
               )}
-            </Card>
+
+              <div className="p-5 mb-12 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <SelectPanel
+                  label="Regions"
+                  color="blue"
+                  items={regionList}
+                  selectedIds={selectedRegionIds}
+                  onToggle={itemId => setSelectedRegionIds(prev => prev.includes(itemId) ? prev.filter(x => x !== itemId) : [...prev, itemId])}
+                  onClear={() => setSelectedRegionIds([])}
+                  getLabel={(item: any) => item.name}
+                />
+                <SelectPanel
+                  label="Sub-Regions"
+                  color="indigo"
+                  items={allSubRegions}
+                  selectedIds={selectedSubRegionIds}
+                  onToggle={itemId => setSelectedSubRegionIds(prev => prev.includes(itemId) ? prev.filter(x => x !== itemId) : [...prev, itemId])}
+                  onClear={() => setSelectedSubRegionIds([])}
+                  getLabel={(item: any) => item.name}
+                  getSublabel={(item: any) => item.regionName}
+                />
+                <SelectPanel
+                  label="Coordinators"
+                  color="violet"
+                  items={coordinators}
+                  selectedIds={selectedCoordIds}
+                  onToggle={itemId => setSelectedCoordIds(prev => prev.includes(itemId) ? prev.filter(x => x !== itemId) : [...prev, itemId])}
+                  onClear={() => setSelectedCoordIds([])}
+                  getLabel={(item: any) => item.fullName}
+                />
+              </div>
+            </div>
           </div>
         </div>
       )}
 
-      {/* ════════════════════════════════════════════
+      {/* ════════════════════════════════════════
           TARGETS TAB
-      ════════════════════════════════════════════ */}
+      ════════════════════════════════════════ */}
       {activeTab === 'targets' && (
         <div className="space-y-5">
 
-          {/* Add Target form */}
-          <Card>
-            <CardHeader title="New Target" icon={<Plus className="w-4 h-4" />} />
-            <div className="p-5 space-y-4">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <SelectField
-                  label="Period"
-                  value={targetForm.targetPeriod}
-                  onChange={v => setTargetForm(p => ({ ...p, targetPeriod: v }))}
-                >
-                  <option>Monthly</option>
-                  <option>Quarterly</option>
-                  <option>Yearly</option>
-                </SelectField>
-                <InputField
-                  label="Start Date"
-                  type="date"
-                  value={targetForm.startDate}
-                  onChange={v => setTargetForm(p => ({ ...p, startDate: v }))}
-                />
-                <InputField
-                  label="End Date"
-                  type="date"
-                  value={targetForm.endDate}
-                  onChange={v => setTargetForm(p => ({ ...p, endDate: v }))}
-                />
-                <InputField
-                  label="Amount (LKR)"
-                  type="number"
-                  placeholder="0"
-                  value={targetForm.targetAmount}
-                  onChange={v => setTargetForm(p => ({ ...p, targetAmount: v }))}
-                />
+          {/* Add Target */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-100">
+              <Plus className="w-4 h-4 text-blue-500" />
+              <h3 className="text-sm font-semibold text-slate-800">New Target</h3>
+            </div>
+            <div className="p-5">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Period</label>
+                  <select
+                    value={targetForm.targetPeriod}
+                    onChange={e => setTargetForm(p => ({ ...p, targetPeriod: e.target.value }))}
+                    className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                  >
+                    <option>Monthly</option>
+                    <option>Quarterly</option>
+                    <option>Yearly</option>
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Start Date</label>
+                  <input type="date" value={targetForm.startDate} onChange={e => setTargetForm(p => ({ ...p, startDate: e.target.value }))}
+                    className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 transition" />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">End Date</label>
+                  <input type="date" value={targetForm.endDate} onChange={e => setTargetForm(p => ({ ...p, endDate: e.target.value }))}
+                    className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 transition" />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Amount (LKR)</label>
+                  <input type="number" placeholder="0" value={targetForm.targetAmount} onChange={e => setTargetForm(p => ({ ...p, targetAmount: e.target.value }))}
+                    className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 transition" />
+                </div>
               </div>
               <div className="flex justify-end">
                 <button
@@ -948,15 +829,14 @@ export default function AdminRepDetail() {
                     targetAmount: Number(targetForm.targetAmount),
                   })}
                   disabled={setTargetMut.isPending || !targetForm.startDate || !targetForm.endDate || !targetForm.targetAmount}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-semibold
-                             hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition shadow-sm"
                 >
                   <Plus className="w-4 h-4" />
-                  {setTargetMut.isPending ? 'Saving…' : 'Add Target'}
+                  {setTargetMut.isPending ? 'Adding…' : 'Add Target'}
                 </button>
               </div>
             </div>
-          </Card>
+          </div>
 
           {/* Targets list */}
           {!targets || targets.length === 0 ? (
@@ -968,56 +848,45 @@ export default function AdminRepDetail() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {targets.map((t: any) => {
-                const pct = t.targetAmount > 0
-                  ? Math.min(Math.round((t.achievedAmount / t.targetAmount) * 100), 100)
-                  : 0;
+                const pct = t.targetAmount > 0 ? Math.min(Math.round((t.achievedAmount / t.targetAmount) * 100), 100) : 0;
                 const isAchieved = t.status === 'Achieved';
                 return (
-                  <Card key={t.id}>
-                    <div className="p-5">
-                      <div className="flex items-start justify-between mb-4">
-                        <div>
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="text-sm font-bold text-slate-900">{t.targetPeriod}</span>
-                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
-                              isAchieved
-                                ? 'bg-blue-50 text-blue-700 border-blue-200'
-                                : 'bg-slate-100 text-slate-600 border-slate-200'
-                            }`}>
-                              {t.status}
-                            </span>
-                          </div>
-                          <p className="text-xs text-slate-400 flex items-center gap-1">
-                            <Calendar className="w-3 h-3" />
-                            {formatDate(t.startDate)} – {formatDate(t.endDate)}
-                          </p>
+                  <div key={t.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                    <div className="flex items-start justify-between mb-4">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-sm font-bold text-slate-900">{t.targetPeriod}</span>
+                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                            isAchieved ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-slate-100 text-slate-600 border-slate-200'
+                          }`}>{t.status}</span>
                         </div>
-                        <button
-                          onClick={() => setDeleteTargetId(t.id)}
-                          className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <p className="text-xs text-slate-400 flex items-center gap-1">
+                          <Calendar className="w-3 h-3" />
+                          {formatDate(t.startDate)} – {formatDate(t.endDate)}
+                        </p>
                       </div>
-
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs text-slate-500">Progress</span>
-                        <span className="text-sm font-bold text-slate-900">{pct}%</span>
-                      </div>
-                      <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all duration-700 ${
-                            isAchieved ? 'bg-blue-600' : 'bg-blue-400'
-                          }`}
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                      <div className="flex items-center justify-between mt-2">
-                        <span className="text-xs text-slate-500">{formatCurrency(t.achievedAmount)}</span>
-                        <span className="text-xs text-slate-400">of {formatCurrency(t.targetAmount)}</span>
-                      </div>
+                      <button
+                        onClick={() => setDeleteTargetId(t.id)}
+                        className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
-                  </Card>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs text-slate-500">Progress</span>
+                      <span className="text-sm font-bold text-slate-900">{pct}%</span>
+                    </div>
+                    <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden mb-2">
+                      <div
+                        className={`h-full rounded-full transition-all duration-700 ${isAchieved ? 'bg-blue-600' : 'bg-blue-400'}`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-500">{formatCurrency(t.achievedAmount)}</span>
+                      <span className="text-xs text-slate-400">of {formatCurrency(t.targetAmount)}</span>
+                    </div>
+                  </div>
                 );
               })}
             </div>
@@ -1025,14 +894,14 @@ export default function AdminRepDetail() {
         </div>
       )}
 
-      {/* ════════════════════════════════════════════
+      {/* ════════════════════════════════════════
           CUSTOMERS TAB
-      ════════════════════════════════════════════ */}
+      ════════════════════════════════════════ */}
       {activeTab === 'customers' && (
         <div className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm text-slate-500">{customers.length} customer{customers.length !== 1 ? 's' : ''} assigned</p>
-          </div>
+          <p className="text-sm text-slate-500">
+            {customers.length} customer{customers.length !== 1 ? 's' : ''} assigned
+          </p>
 
           {customers.length === 0 ? (
             <div className="text-center py-16 text-slate-400">
@@ -1041,41 +910,86 @@ export default function AdminRepDetail() {
               <p className="text-sm mt-1">Customers become visible to reps through route assignment.</p>
             </div>
           ) : (
-            <Card>
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
               <div className="divide-y divide-slate-100">
                 {customers.map((c: any) => (
-                  <div key={c.id} className="flex items-center gap-3 px-4 py-3.5 hover:bg-slate-50 transition group">
-                    <div className="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center font-bold text-blue-600 text-sm flex-shrink-0">
+                  <div key={c.id} className="flex items-center gap-3 px-4 py-3.5 hover:bg-slate-50 transition">
+                    <div className="w-9 h-9 rounded-xl bg-blue-100 flex items-center justify-center font-bold text-blue-600 text-sm flex-shrink-0 select-none">
                       {(c.shopName || c.fullName || '?').charAt(0).toUpperCase()}
                     </div>
-
-                    <button
-                      onClick={() => navigate(`/admin/customers/${c.id}`)}
-                      className="flex-1 min-w-0 text-left"
-                    >
+                    <button onClick={() => navigate(`/admin/customers/${c.id}`)} className="flex-1 min-w-0 text-left">
                       <p className="text-sm font-semibold text-slate-800 truncate">{c.shopName || c.fullName}</p>
                       <p className="text-xs text-slate-400 truncate">{c.email || 'No email'}</p>
                     </button>
-
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <StatusBadge status={c.isActive ? 'Active' : 'Inactive'} />
-
-                      <button
-                        onClick={() => navigate(`/admin/customers/${c.id}`)}
-                        className="text-slate-300 hover:text-slate-500 transition"
-                      >
+                      <button onClick={() => navigate(`/admin/customers/${c.id}`)} className="text-slate-300 hover:text-slate-500 transition">
                         <ChevronRight className="w-4 h-4" />
                       </button>
                     </div>
                   </div>
                 ))}
               </div>
-            </Card>
+            </div>
           )}
         </div>
       )}
 
-      {/* ── Confirm Modals ── */}
+      {/* ── Inline Field Confirm Modal ── */}
+      {pendingConfirm && createPortal(
+        <div className="fixed inset-0 z-50 flex flex-col items-center" style={{ pointerEvents: 'auto' }}>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={() => setPendingConfirm(null)} />
+          <div
+            className="relative mt-16 w-full max-w-sm mx-4 bg-white rounded-2xl shadow-2xl border border-slate-200"
+            style={{ animation: 'slideDown 0.25s ease-out both' }}
+          >
+            <div className="flex items-start gap-4 p-6 pb-4">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+                <PencilLine className="w-5 h-5 text-blue-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base font-semibold text-slate-900">Update {pendingConfirm.label}?</h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  Confirm this change for <span className="font-semibold text-slate-700">{rep.fullName}</span>
+                </p>
+              </div>
+            </div>
+            <div className="mx-6 rounded-xl bg-slate-50 border border-slate-200 p-3.5 mb-5 space-y-2">
+              <div className="flex items-start gap-2 text-sm">
+                <span className="text-slate-400 w-14 shrink-0 font-medium">From:</span>
+                <span className="font-medium text-slate-500 line-through break-words min-w-0">{pendingConfirm.oldValue}</span>
+              </div>
+              <div className="h-px bg-slate-200" />
+              <div className="flex items-start gap-2 text-sm">
+                <span className="text-slate-400 w-14 shrink-0 font-medium">To:</span>
+                <span className="font-bold text-slate-900 break-words min-w-0">
+                  {pendingConfirm.type === 'password' ? '••••••••' : pendingConfirm.newValue}
+                </span>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 px-6 pb-5">
+              <button
+                onClick={() => setPendingConfirm(null)}
+                className="px-4 py-2 rounded-xl border border-slate-200 text-sm font-medium text-slate-700 hover:bg-slate-50 transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmSave}
+                disabled={updateInfoMut.isPending || setPasswordMut.isPending}
+                className="px-5 py-2 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 transition flex items-center gap-1.5"
+              >
+                {(updateInfoMut.isPending || setPasswordMut.isPending)
+                  ? 'Saving…'
+                  : <><Check className="w-4 h-4" /> Save</>}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ── Confirm Modal ── */}
       <ConfirmModal
         open={!!deleteTargetId}
         title="Delete Target"

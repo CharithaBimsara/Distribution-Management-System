@@ -66,31 +66,23 @@ function renderQuotationPage(doc: any, autoTable: any, quotation: Quotation, isT
   doc.rect(gridX + 25, 29, 36, 6); 
   doc.text('CENTRAL', gridX + 27, 33);
 
-  // --- CUSTOMER & SHIP TO SECTION ---
+  // --- CUSTOMER SECTION ---
   const sectionY = 40;
-  const colWidth = (pageWidth - 28) / 2;
+  const colWidth = pageWidth - 28;
   
   doc.rect(14, sectionY, colWidth, 6);
-  doc.rect(14 + colWidth, sectionY, colWidth, 6);
   doc.setFont('helvetica', 'bold');
-  doc.text('Shop Name', 16, sectionY + 4);
-  doc.text('Ship To', 16 + colWidth, sectionY + 4);
+  doc.text('Customer', 16, sectionY + 4);
   
-  doc.rect(14, sectionY + 6, colWidth, 18);
-  doc.rect(14 + colWidth, sectionY + 6, colWidth, 18);
+  doc.rect(14, sectionY + 6, colWidth, 12);
   doc.setFont('helvetica', 'normal');
   
   const shopName = getShopNameOrPlaceholder(quotation);
-  const custAddress = doc.splitTextToSize('[Address]', colWidth - 4); // Address not directly in Quotation type, placeholder or add if needed
   const custName = doc.splitTextToSize(shopName, colWidth - 4);
   doc.text(custName, 16, sectionY + 11);
-  doc.text(custAddress, 16, sectionY + 16);
-  
-  doc.text(custName, 16 + colWidth, sectionY + 11);
-  doc.text(custAddress, 16 + colWidth, sectionY + 16);
 
   // --- TABLE SECTION ---
-  const tableStartY = sectionY + 28;
+  const tableStartY = sectionY + 22;
   
   const baseCols = ['No', 'Item Code', 'Item Description', 'Qty', 'Rate', 'Disc %', 'Disc Amt'];
   const cols = isTax 
@@ -181,14 +173,6 @@ function renderQuotationPage(doc: any, autoTable: any, quotation: Quotation, isT
   const boxW = 62;
   const rowH = 6;
 
-  doc.setFontSize(8);
-  doc.setDrawColor(0, 0, 0);
-
-  // Signatures
-  doc.text('Received By / Customer', 50, afterTableY + 20, { align: 'center' });
-  doc.text('...................................', 50, afterTableY + 28, { align: 'center' });
-  doc.text('Seal & signature', 50, afterTableY + 32, { align: 'center' });
-
   // Totals Grid
   if (isTax) {
     const netAmount = totalGross - totalDiscount;
@@ -229,6 +213,19 @@ function renderQuotationPage(doc: any, autoTable: any, quotation: Quotation, isT
       doc.text(val, totalsX + boxW - 2, y + 4, { align: 'right' });
     });
   }
+
+  // --- PAGE FOOTER ---
+  const pageH = doc.internal.pageSize.getHeight();
+  doc.setDrawColor(180, 180, 180);
+  doc.setLineWidth(0.3);
+  doc.line(14, pageH - 18, pageWidth - 14, pageH - 18);
+  doc.setFontSize(7);
+  doc.setTextColor(120, 120, 120);
+  doc.setFont('helvetica', 'italic');
+  doc.text('This is a computer-generated quotation issued by Janasiri Distributors (Pvt) Ltd. No signature or stamp is required.', pageWidth / 2, pageH - 13, { align: 'center' });
+  doc.text('For queries, contact us at 0777 675322 or janasiridistributors@yahoo.com', pageWidth / 2, pageH - 8, { align: 'center' });
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(0, 0, 0);
 }
 
 export async function downloadQuotationPdf(quotation: Quotation, isTaxCustomer?: boolean) {

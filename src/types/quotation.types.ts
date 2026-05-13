@@ -30,6 +30,8 @@ export interface Quotation {
   convertedOrderId?: string;
   items: QuotationItem[];
   createdAt: string;
+  isDeleted?: boolean;
+  deletedAt?: string;
 }
 
 export interface QuotationItem {

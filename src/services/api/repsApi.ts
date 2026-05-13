@@ -35,8 +35,17 @@ export const repsApi = {
   adminCreate: (data: { username?: string; email?: string; password: string; fullName: string; phoneNumber?: string; employeeCode?: string; hireDate?: string; regionIds?: string[]; subRegionIds?: string[]; coordinatorIds?: string[] }) =>
     api.post<ApiResponse<Rep>>('/admin/reps', data),
 
-  adminUpdate: (id: string, data: { fullName?: string; employeeCode?: string; phoneNumber?: string; hireDate?: string; regionIds?: string[]; subRegionIds?: string[]; coordinatorIds?: string[]; isActive?: boolean }) =>
+  adminUpdate: (id: string, data: { fullName?: string; employeeCode?: string; phoneNumber?: string; email?: string; hireDate?: string; regionIds?: string[]; subRegionIds?: string[]; coordinatorIds?: string[]; isActive?: boolean }) =>
     api.put<ApiResponse<Rep>>(`/admin/reps/${id}`, data),
+
+  adminDelete: (id: string) =>
+    api.delete<ApiResponse<string>>(`/admin/reps/${id}`),
+
+  adminGetTrash: (params?: { page?: number; pageSize?: number }) =>
+    api.get<ApiResponse<PagedResult<Rep>>>('/admin/reps/trash', { params }),
+
+  adminRestore: (id: string) =>
+    api.post<ApiResponse<string>>(`/admin/reps/${id}/restore`),
 
   adminUnassignCoordinator: (id: string) =>
     api.delete<ApiResponse<string>>(`/admin/reps/${id}/coordinator`),

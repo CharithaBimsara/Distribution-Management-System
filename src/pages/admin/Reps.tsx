@@ -1,5 +1,5 @@
 ﻿// @ts-nocheck
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -7,7 +7,7 @@ import * as XLSX from 'xlsx';
 import { repsApi } from '../../services/api/repsApi';
 import { regionsApi } from '../../services/api/regionsApi';
 import { adminGetAllCoordinators } from '../../services/api/coordinatorApi';
-import { Users, Plus, Search, Eye, FileSpreadsheet, FileText, Check, X, Filter } from 'lucide-react';
+import { Users, Plus, Search, Eye, FileSpreadsheet, FileText, Check, X, SlidersHorizontal, Trash2, RotateCcw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
 import MobileTileList from '../../components/common/MobileTileList';
@@ -22,11 +22,18 @@ export default function AdminReps() {
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
   const [filterRegionId, setFilterRegionId] = useState('');
   const [filterCoordinatorId, setFilterCoordinatorId] = useState('');
+  const [activeTab, setActiveTab] = useState<'active' | 'trash'>('active');
+  const [trashPage, setTrashPage] = useState(1);
+  const [filterSubPanel, setFilterSubPanel] = useState<'status' | 'region' | 'coordinator' | null>(null);
   const isDesktop = useIsDesktop();
   const qc = useQueryClient();
   const navigate = useNavigate();
 
-  const hasActiveFilters = !!(search || filterStatus !== 'all' || filterRegionId || filterCoordinatorId);
+  const [filterPanelOpen, setFilterPanelOpen] = useState(false);
+  const [selectAllPages, setSelectAllPages] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+
+  const activeFilterCount = [filterStatus !== 'all', !!filterRegionId, !!filterCoordinatorId].filter(Boolean).length;
 
   const [repForm, setRepForm] = useState({
     fullName: '',
@@ -64,6 +71,12 @@ export default function AdminReps() {
     queryFn: () => adminGetAllCoordinators(1, 100).then(r => r.items || []),
   });
 
+  const { data: trashData, isLoading: trashLoading } = useQuery({
+    queryKey: ['admin-reps-trash', trashPage],
+    queryFn: () => repsApi.adminGetTrash({ page: trashPage, pageSize: 20 }).then(r => r.data.data),
+    enabled: activeTab === 'trash',
+  });
+
   const regionList = Array.isArray(regionsData) ? regionsData : [];
   const coordinatorList = coordinatorsData || [];
 
@@ -76,6 +89,16 @@ export default function AdminReps() {
       toast.success('Rep created successfully.');
     },
     onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed'),
+  });
+
+  const restoreRepMut = useMutation({
+    mutationFn: (id: string) => repsApi.adminRestore(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-reps-trash'] });
+      qc.invalidateQueries({ queryKey: ['admin-reps'] });
+      toast.success('Rep restored successfully.');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to restore'),
   });
 
   const reps = (repsData as any)?.items || [];
@@ -141,130 +164,377 @@ export default function AdminReps() {
     }
   };
 
-  const allSelected = reps.length > 0 && selectedIds.size === reps.length;
-  const someSelected = selectedIds.size > 0;
+  const selectionMode = selectedIds.size > 0 || selectAllPages;
+  const headerCheckboxChecked = selectAllPages || (reps.length > 0 && selectedIds.size === reps.length);
+  const headerCheckboxIndeterminate = !selectAllPages && selectedIds.size > 0 && selectedIds.size < reps.length;
+  const deleteLabel = selectAllPages
+    ? `Delete (all ${(repsData as any)?.totalCount ?? '…'})`
+    : selectedIds.size > 0 ? `Delete (${selectedIds.size})` : 'Delete';
+
+  const handleHeaderCheckbox = () => {
+    if (selectAllPages) { setSelectAllPages(false); setSelectedIds(new Set()); }
+    else if (selectedIds.size === reps.length && reps.length > 0) { setSelectedIds(new Set()); }
+    else { setSelectedIds(new Set(reps.map((r: any) => r.id))); setSelectAllPages(false); }
+  };
+
+  const clearSelection = () => { setSelectedIds(new Set()); setSelectAllPages(false); };
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') clearSelection(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
+  const repDeleteMut = useMutation({
+    mutationFn: (id: string) => repsApi.adminDelete(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-reps'] }),
+  });
+
+  const handleDeleteSelected = async () => {
+    const ids = Array.from(selectedIds);
+    if (!ids.length) return;
+    let failed = 0;
+    for (const id of ids) {
+      try { await repsApi.adminDelete(id); }
+      catch { failed++; }
+    }
+    qc.invalidateQueries({ queryKey: ['admin-reps'] });
+    qc.invalidateQueries({ queryKey: ['admin-reps-trash'] });
+    if (failed === 0) toast.success(`${ids.length} rep${ids.length > 1 ? 's' : ''} moved to trash`);
+    else toast.error(`${ids.length - failed} moved to trash, ${failed} failed`);
+    clearSelection();
+    setDeleteConfirmOpen(false);
+  };
 
   return (
     <div className="animate-fade-in flex flex-col gap-4 pb-28">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Sales Reps</h1>
-        <p className="text-slate-500 text-sm mt-1">Manage your sales team</p>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Sales Reps</h1>
+          <p className="text-slate-500 text-sm mt-1">Manage your sales team</p>
+        </div>
+        {/* Active / Trash tabs */}
+        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+          <button
+            onClick={() => setActiveTab('active')}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${activeTab === 'active' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            <Users className="w-3.5 h-3.5" /> Active
+          </button>
+          <button
+            onClick={() => setActiveTab('trash')}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${activeTab === 'trash' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            <Trash2 className="w-3.5 h-3.5" /> Trash
+          </button>
+        </div>
       </div>
 
+      {/* ── Sticky Toolbar ─────────────────────────────────────────────────── */}
       <div className="sticky top-0 z-30">
-        <div className="bg-white/90 backdrop-blur-md border border-slate-200/70 rounded-2xl shadow-[0_2px_16px_-4px_rgba(0,0,0,0.10)] px-4 py-3 space-y-2.5">
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <div className="relative flex-1 min-w-[200px] group">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
+        <div className="bg-white/95 backdrop-blur-sm border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+          <div className="px-3 py-2.5 flex flex-wrap sm:flex-nowrap items-center gap-x-2 gap-y-2">
+
+            {/* Search */}
+            <div className="relative group order-2 sm:order-1 w-full sm:w-auto sm:flex-1">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
               <input
                 type="text"
-                placeholder="Search reps..."
+                placeholder="Search reps…"
                 value={search}
                 onChange={e => { setSearch(e.target.value); setPage(1); }}
-                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm placeholder-slate-400 focus:bg-white focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/15 outline-none transition-all"
+                className="w-full pl-8 pr-7 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm placeholder-slate-400 focus:bg-white focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/15 outline-none transition-all"
               />
               {search && (
-                <button onClick={() => { setSearch(''); setPage(1); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                <button onClick={() => { setSearch(''); setPage(1); }} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
                   <X className="w-3.5 h-3.5" />
                 </button>
               )}
             </div>
 
-            <div className="hidden sm:block h-7 w-px bg-slate-200" />
+            {/* Right buttons */}
+            <div className="order-1 sm:order-2 ml-auto sm:ml-0 flex items-center gap-1 shrink-0">
+              {/* Filter */}
+              <button
+                onClick={() => setFilterPanelOpen(p => !p)}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-xs font-semibold transition-all ${
+                  filterPanelOpen
+                    ? 'bg-indigo-600 text-white'
+                    : activeFilterCount > 0
+                    ? 'bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200'
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Filter</span>
+                {activeFilterCount > 0 && (
+                  <span className={`inline-flex items-center justify-center w-4 h-4 rounded-full text-[9px] font-bold ${filterPanelOpen ? 'bg-white/30 text-white' : 'bg-indigo-600 text-white'}`}>{activeFilterCount}</span>
+                )}
+              </button>
 
-            <div className="flex items-center gap-2">
+              <div className="w-px h-5 bg-slate-200 mx-0.5" />
+
+              {/* Excel */}
+              <button
+                onClick={() => exportReps('excel', selectedIds.size > 0)}
+                className="inline-flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 transition-all"
+                title={selectedIds.size > 0 ? `Export ${selectedIds.size} selected` : 'Export all'}
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5" />
+                <span className="hidden lg:inline">Excel</span>
+              </button>
+
+              {/* PDF */}
+              <button
+                onClick={() => exportReps('pdf', selectedIds.size > 0)}
+                className="inline-flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-rose-50 hover:text-rose-600 transition-all"
+                title={selectedIds.size > 0 ? `Export ${selectedIds.size} selected` : 'Export all'}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span className="hidden lg:inline">PDF</span>
+              </button>
+
+              <div className="w-px h-5 bg-slate-200 mx-0.5" />
+
+              {/* Add */}
               <button
                 onClick={() => isDesktop ? navigate('/admin/reps/new') : setShowCreate(true)}
-                className="flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700"
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-700 transition-all"
               >
-                <Plus className="w-4 h-4" /><span className="hidden sm:inline">Add Rep</span>
+                <Plus className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Add Rep</span>
               </button>
+
+              {/* Selection actions */}
+              {selectionMode && (
+                <>
+                  <div className="w-px h-5 bg-slate-200 mx-0.5" />
+                  {!selectAllPages && selectedIds.size === reps.length && reps.length > 0 && ((repsData as any)?.totalPages ?? 1) > 1 && (
+                    <button onClick={() => setSelectAllPages(true)} className="hidden md:inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-semibold text-indigo-600 hover:bg-indigo-50 transition-all">
+                      Select all {(repsData as any)?.totalCount}
+                    </button>
+                  )}
+                  {selectAllPages && (
+                    <span className="hidden md:inline text-[10px] font-semibold text-indigo-600 px-2">All {(repsData as any)?.totalCount} selected</span>
+                  )}
+                  <button
+                    onClick={() => setDeleteConfirmOpen(true)}
+                    title={deleteLabel}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-xs font-semibold text-red-600 hover:bg-red-50 hover:text-red-700 transition-all"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span className="hidden lg:inline">{deleteLabel}</span>
+                  </button>
+                  <button onClick={clearSelection} title="Clear selection (Esc)" className="p-2 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1.5 text-slate-400">
-              <Filter className="w-3.5 h-3.5" />
-              <span className="text-xs font-medium uppercase tracking-wide">Filters</span>
+          {/* Filter Panel — Quotations tabbed style */}
+          {filterPanelOpen && (
+            <div className="border-t border-slate-100">
+              {/* Category tabs */}
+              <div className="flex flex-wrap bg-slate-50 px-3 pt-3 gap-1">
+                {[
+                  { key: 'status', label: 'Status', count: filterStatus !== 'all' ? 1 : 0 },
+                  { key: 'region', label: 'Region', count: filterRegionId ? 1 : 0 },
+                  { key: 'coordinator', label: 'Coordinator', count: filterCoordinatorId ? 1 : 0 },
+                ].map(({ key, label, count }) => (
+                  <button
+                    key={key}
+                    onClick={() => setFilterSubPanel(p => p === key ? null : key as any)}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-t-lg text-xs font-semibold border border-b-0 transition-all ${
+                      filterSubPanel === key
+                        ? 'bg-white border-slate-200 text-slate-800 -mb-px pb-[7px] z-10 relative'
+                        : count > 0
+                        ? 'bg-indigo-50 border-indigo-100 text-indigo-700'
+                        : 'bg-transparent border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    {label}
+                    {count > 0 && <span className="w-4 h-4 rounded-full bg-indigo-600 text-white text-[9px] font-bold inline-flex items-center justify-center">{count}</span>}
+                  </button>
+                ))}
+                {activeFilterCount > 0 && (
+                  <button
+                    onClick={() => { setFilterStatus('all'); setFilterRegionId(''); setFilterCoordinatorId(''); setPage(1); }}
+                    className="ml-auto inline-flex items-center gap-1 px-2.5 py-1.5 rounded-t-lg text-xs font-semibold text-red-500 hover:text-red-700 hover:bg-red-50 transition-all border border-transparent"
+                  >
+                    <X className="w-3 h-3" /> Clear all
+                  </button>
+                )}
+              </div>
+              {/* Filter content panel */}
+              <div className="bg-white border-t border-slate-200 px-4 py-4">
+                {!filterSubPanel && <p className="text-xs text-slate-400 text-center py-2">Select a filter category above</p>}
+                {filterSubPanel === 'status' && (
+                  <div className="flex flex-wrap gap-2">
+                    {(['all', 'active', 'inactive'] as const).map(s => (
+                      <button
+                        key={s}
+                        onClick={() => { setFilterStatus(s); setPage(1); }}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                          filterStatus === s
+                            ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm'
+                            : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-300 hover:text-indigo-700 hover:bg-indigo-50'
+                        }`}
+                      >
+                        {filterStatus === s && <Check className="w-3 h-3" />}
+                        {s === 'all' ? 'All' : s === 'active' ? 'Active' : 'Inactive'}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {filterSubPanel === 'region' && (
+                  <select value={filterRegionId} onChange={e => { setFilterRegionId(e.target.value); setPage(1); }} className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/15 focus:border-indigo-400 transition cursor-pointer">
+                    <option value="">All Regions</option>
+                    {regionList.map((r: any) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                  </select>
+                )}
+                {filterSubPanel === 'coordinator' && (
+                  <select value={filterCoordinatorId} onChange={e => { setFilterCoordinatorId(e.target.value); setPage(1); }} className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/15 focus:border-indigo-400 transition cursor-pointer">
+                    <option value="">All Coordinators</option>
+                    {coordinatorList.map((c: any) => <option key={c.id} value={c.id}>{c.fullName}</option>)}
+                  </select>
+                )}
+              </div>
             </div>
-            <select value={filterStatus} onChange={e => { setFilterStatus(e.target.value as any); setPage(1); }} className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/15 focus:border-indigo-300 transition cursor-pointer">
-              <option value="all">All Status</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-            </select>
-            <select value={filterRegionId} onChange={e => { setFilterRegionId(e.target.value); setPage(1); }} className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/15 focus:border-indigo-300 transition cursor-pointer">
-              <option value="">All Regions</option>
-              {regionList.map((r: any) => <option key={r.id} value={r.id}>{r.name}</option>)}
-            </select>
-            <select value={filterCoordinatorId} onChange={e => { setFilterCoordinatorId(e.target.value); setPage(1); }} className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/15 focus:border-indigo-300 transition cursor-pointer">
-              <option value="">All Coordinators</option>
-              {coordinatorList.map((c: any) => <option key={c.id} value={c.id}>{c.fullName}</option>)}
-            </select>
-            {hasActiveFilters && (
-              <button onClick={() => { setSearch(''); setFilterStatus('all'); setFilterRegionId(''); setFilterCoordinatorId(''); setPage(1); }} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-red-50 text-red-600 border border-red-200 text-xs font-medium hover:bg-red-100 transition">
-                <X className="w-3 h-3" /> Clear
-              </button>
-            )}
-          </div>
+          )}
         </div>
       </div>
 
-      {/* Desktop table */}
-      {isDesktop ? (
-        <div className="bg-white rounded-xl border border-slate-100 overflow-hidden shadow-sm">
-          {repsLoading ? (
-            <div className="py-12 text-center text-slate-400 text-sm">Loading...</div>
-          ) : reps.length === 0 ? (
-            <div className="py-12 text-center text-slate-400">
-              <Users className="w-10 h-10 mx-auto mb-2 opacity-40" />
-              <p className="text-sm">No reps found</p>
+      {/* Trash Tab */}
+      {activeTab === 'trash' && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
+            <Trash2 className="w-4 h-4 text-slate-400" />
+            <span className="text-sm font-semibold text-slate-700">Trash</span>
+            <span className="text-xs text-slate-400 ml-auto">Items are permanently deleted after 30 days</span>
+          </div>
+          {trashLoading ? (
+            <div className="p-10 text-center text-slate-400 text-sm">Loading…</div>
+          ) : (trashData?.items?.length ?? 0) === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+              <Trash2 className="w-10 h-10 mb-3 opacity-30" />
+              <p className="text-sm font-medium">Trash is empty</p>
             </div>
           ) : (
-            <table className="w-full">
+            <table className="w-full text-sm border-collapse">
               <thead>
-                <tr className="border-b border-slate-100 bg-slate-50/70">
-                  <th className="w-10 px-4 py-3">
-                    <input
-                      type="checkbox"
-                      checked={allSelected}
-                      onChange={toggleAll}
-                      className="shrink-0"
-                    />
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Name</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Region</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Sub-Region</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Coordinator</th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider">Customers</th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider">Actions</th>
+                <tr className="bg-slate-800 text-white">
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-wider border-r border-slate-600">Name</th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-wider border-r border-slate-600">Region</th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-wider border-r border-slate-600">Coordinator</th>
+                  <th className="px-4 py-3.5 text-center text-xs font-semibold uppercase tracking-wider border-r border-slate-600">Deleted At</th>
+                  <th className="px-4 py-3.5 text-center text-xs font-semibold uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-50">
-                {reps.map((r: any) => (
-                  <tr
-                    key={r.id}
-                    className={`hover:bg-slate-50/60 transition-colors cursor-pointer ${selectedIds.has(r.id) ? 'bg-indigo-50/40' : ''}`}
-                    onClick={() => navigate(`/admin/reps/${r.id}`)}
-                  >
-                    <td className="px-4 py-3">
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.has(r.id)}
-                      onChange={e => { e.stopPropagation(); toggleSelect(r.id); }}
-                      onClick={e => e.stopPropagation()}
-                      className="shrink-0"
-                    />
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className="font-semibold text-slate-900 text-sm">{r.fullName}</p>
+              <tbody>
+                {trashData?.items?.map((r: any) => (
+                  <tr key={r.id} className="border-b border-slate-100 text-sm">
+                    <td className="px-4 py-3 border-r border-slate-100">
+                      <p className="font-semibold text-slate-800">{r.fullName}</p>
                       <p className="text-xs text-slate-400">{r.employeeCode}</p>
                     </td>
-                    <td className="px-4 py-3 text-slate-600 text-sm">{r.regionNames?.join(', ') || '—'}</td>
-                    <td className="px-4 py-3 text-slate-600 text-sm">{r.subRegionNames?.join(', ') || '—'}</td>
-                    <td className="px-4 py-3 text-slate-600 text-sm">{r.coordinatorNames?.join(', ') || '—'}</td>
-                    <td className="px-4 py-3 text-center font-medium text-sm">{r.assignedCustomersCount || 0}</td>
-                    <td className="px-4 py-3 text-center"><StatusBadge status={r.isActive ? 'Active' : 'Inactive'} /></td>
+                    <td className="px-4 py-3 text-slate-600 border-r border-slate-100">{r.regionNames?.join(', ') || '—'}</td>
+                    <td className="px-4 py-3 text-slate-600 border-r border-slate-100">{r.coordinatorNames?.join(', ') || '—'}</td>
+                    <td className="px-4 py-3 text-center text-slate-500 border-r border-slate-100">
+                      {r.deletedAt ? new Date(r.deletedAt).toLocaleDateString() : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <button
+                        onClick={() => restoreRepMut.mutate(r.id)}
+                        disabled={restoreRepMut.isPending}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-600 text-xs font-medium hover:bg-emerald-100 transition"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" /> Restore
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          {(trashData?.totalPages ?? 0) > 1 && (
+            <div className="px-4 py-3 border-t border-slate-100 flex items-center justify-between">
+              <span className="text-xs text-slate-500">{trashData?.totalCount} total · p{trashData?.page}/{trashData?.totalPages}</span>
+              <div className="flex gap-1">
+                <button onClick={() => setTrashPage(p => Math.max(1, p - 1))} disabled={trashPage <= 1} className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none transition">Prev</button>
+                <button onClick={() => setTrashPage(p => Math.min(trashData!.totalPages, p + 1))} disabled={trashPage >= (trashData?.totalPages ?? 1)} className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none transition">Next</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Desktop table — Active Tab */}
+      {activeTab === 'active' && isDesktop ? (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          {repsLoading ? (
+            <div className="p-10 text-center text-slate-400 text-sm">Loading…</div>
+          ) : reps.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+              <Users className="w-10 h-10 mb-3 opacity-30" />
+              <p className="text-sm font-medium">No reps found</p>
+            </div>
+          ) : (
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="bg-slate-800 text-white">
+                  <th className="w-10 px-3 py-3.5 text-center border-r border-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={headerCheckboxChecked}
+                      ref={el => { if (el) el.indeterminate = headerCheckboxIndeterminate; }}
+                      onChange={handleHeaderCheckbox}
+                      className="accent-indigo-400 w-3.5 h-3.5 cursor-pointer"
+                    />
+                  </th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-wider border-r border-slate-600">Name</th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-wider border-r border-slate-600">Region</th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-wider border-r border-slate-600">Sub-Region</th>
+                  <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-wider border-r border-slate-600">Coordinator</th>
+                  <th className="px-4 py-3.5 text-center text-xs font-semibold uppercase tracking-wider border-r border-slate-600">Customers</th>
+                  <th className="px-4 py-3.5 text-center text-xs font-semibold uppercase tracking-wider border-r border-slate-600">Status</th>
+                  <th className="px-4 py-3.5 text-center text-xs font-semibold uppercase tracking-wider">Actions</th>
+                </tr>
+                {!selectAllPages && selectedIds.size === reps.length && reps.length > 0 && ((repsData as any)?.totalPages ?? 1) > 1 && (
+                  <tr className="bg-indigo-50 border-b border-indigo-100">
+                    <td colSpan={8} className="px-4 py-1.5 text-center text-xs text-indigo-600">
+                      All {reps.length} on this page selected —{' '}
+                      <button onClick={() => setSelectAllPages(true)} className="font-semibold underline underline-offset-2 hover:text-indigo-800">
+                        Select all {(repsData as any)?.totalCount} across all pages
+                      </button>
+                    </td>
+                  </tr>
+                )}
+              </thead>
+              <tbody>
+                {reps.map((r: any) => {
+                  const isSelected = selectedIds.has(r.id);
+                  return (
+                  <tr
+                    key={r.id}
+                    onClick={() => { if (selectionMode) toggleSelect(r.id); else navigate(`/admin/reps/${r.id}`); }}
+                    className={`border-b border-slate-100 cursor-pointer transition-colors select-none text-sm ${
+                      isSelected ? 'bg-indigo-50/70' : 'hover:bg-slate-50/70'
+                    }`}
+                  >
+                    <td className="px-3 py-3 text-center border-r border-slate-100" onClick={e => { e.stopPropagation(); toggleSelect(r.id); }}>
+                      <input type="checkbox" readOnly checked={isSelected} className="pointer-events-none accent-indigo-500 w-3.5 h-3.5" />
+                    </td>
+                    <td className="px-4 py-3 border-r border-slate-100">
+                      <p className="font-semibold text-slate-800 text-sm">{r.fullName}</p>
+                      <p className="text-xs text-slate-400">{r.employeeCode}</p>
+                    </td>
+                    <td className="px-4 py-3 text-sm font-medium text-slate-800 border-r border-slate-100">{r.regionNames?.join(', ') || '—'}</td>
+                    <td className="px-4 py-3 text-sm font-medium text-slate-800 border-r border-slate-100">{r.subRegionNames?.join(', ') || '—'}</td>
+                    <td className="px-4 py-3 text-sm font-medium text-slate-800 border-r border-slate-100">{r.coordinatorNames?.join(', ') || '—'}</td>
+                    <td className="px-4 py-3 text-center text-sm font-medium text-slate-800 border-r border-slate-100">{r.assignedCustomersCount || 0}</td>
+                    <td className="px-4 py-3 text-center border-r border-slate-100"><StatusBadge status={r.isActive ? 'Active' : 'Inactive'} /></td>
                     <td className="px-4 py-3 text-center">
                       <button
                         onClick={e => { e.stopPropagation(); navigate(`/admin/reps/${r.id}`); }}
@@ -274,22 +544,22 @@ export default function AdminReps() {
                       </button>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           )}
           {(repsData as any)?.totalPages > 1 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100 bg-slate-50/40">
-              <span className="text-xs text-slate-500">Page {(repsData as any)?.page} of {(repsData as any)?.totalPages}</span>
+            <div className="px-4 py-3 border-t border-slate-100 flex items-center justify-between">
+              <span className="text-xs text-slate-500">{(repsData as any)?.totalCount} total · p{(repsData as any)?.page}/{(repsData as any)?.totalPages}</span>
               <div className="flex gap-1">
-                {Array.from({ length: (repsData as any).totalPages }, (_: any, i: number) => i + 1).map((p: number) => (
-                  <button key={p} onClick={() => setPage(p)} className={`w-7 h-7 rounded-lg text-xs font-medium transition ${p === page ? 'bg-indigo-600 text-white' : 'hover:bg-slate-100 text-slate-600'}`}>{p}</button>
-                ))}
+                <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none transition">Prev</button>
+                <button onClick={() => setPage(p => Math.min((repsData as any).totalPages, p + 1))} disabled={page >= (repsData as any).totalPages} className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none transition">Next</button>
               </div>
             </div>
           )}
         </div>
-      ) : (
+      ) : activeTab === 'active' ? (
         <MobileTileList
           data={reps}
           keyExtractor={r => r.id}
@@ -332,7 +602,7 @@ export default function AdminReps() {
             </div>
           )}
         />
-      )}
+      ) : null}
 
       {/* Create Rep */}
       {showCreate && (
@@ -441,22 +711,16 @@ export default function AdminReps() {
         </BottomSheet>
       )}
 
-      {/* Selection bar portal */}
-      {someSelected && createPortal(
-        <div style={{ animation: 'slideDown 0.2s ease-out' }} className="fixed bottom-6 inset-x-0 flex justify-center z-50 px-4">
-          <div className="bg-slate-900 text-white rounded-2xl px-5 py-3 flex items-center gap-3 shadow-2xl">
-            <span className="text-sm font-medium">{selectedIds.size} rep{selectedIds.size !== 1 ? 's' : ''} selected</span>
-            <div className="w-px h-4 bg-white/20" />
-            <button onClick={() => exportReps('excel', true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-medium transition">
-              <FileSpreadsheet className="w-3.5 h-3.5" /> Excel
-            </button>
-            <button onClick={() => exportReps('pdf', true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-xs font-medium transition">
-              <FileText className="w-3.5 h-3.5" /> PDF
-            </button>
-            <div className="w-px h-4 bg-white/20" />
-            <button onClick={() => setSelectedIds(new Set())} className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-medium transition">
-              <X className="w-3.5 h-3.5" /> Clear
-            </button>
+      {/* Delete confirm dialog */}
+      {deleteConfirmOpen && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <h2 className="text-base font-bold text-slate-900 mb-1">Move {selectAllPages ? 'all' : selectedIds.size} rep{(!selectAllPages && selectedIds.size === 1) ? '' : 's'} to trash?</h2>
+            <p className="text-sm text-slate-500 mb-5">They will be automatically removed after 30 days.</p>
+            <div className="flex gap-3">
+              <button onClick={() => setDeleteConfirmOpen(false)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition">Cancel</button>
+              <button onClick={handleDeleteSelected} className="flex-1 py-2.5 rounded-xl bg-red-600 text-white text-sm font-semibold hover:bg-red-700 transition">Move to Trash</button>
+            </div>
           </div>
         </div>,
         document.body

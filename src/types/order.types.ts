@@ -33,6 +33,9 @@ export interface Order {
   rating?: number;
   isFromApprovedQuotation?: boolean;
   sourceQuotationNumber?: string;
+  isDeleted?: boolean;
+  deletedAt?: string;
+  shopName?: string;
   items: OrderItem[];
   createdAt: string;
 }

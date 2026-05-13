@@ -513,15 +513,16 @@ export default function CustomerCreateQuotation() {
                         <td className="px-4 py-2.5 text-right border-r border-slate-100">
                           {prod ? (
                             <input
-                              type="text"
-                              inputMode="decimal"
-                              value={row.requestPrice != null ? row.requestPrice.toString() : ''}
+                              type="number"
+                              min={0}
+                              step="any"
+                              value={row.requestPrice ?? ''}
                               onChange={e => {
-                                const parsed = parseFloat(e.target.value);
-                                updateQuotationRow(row.id, { requestPrice: Number.isNaN(parsed) ? undefined : parsed });
+                                const val = e.target.value;
+                                updateQuotationRow(row.id, { requestPrice: val === '' ? undefined : Number(val) });
                               }}
                               placeholder="Optional"
-                              className="w-24 text-right font-semibold text-[12px] text-orange-600 bg-white border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400 placeholder-slate-300 transition-all"
+                              className="w-24 text-right font-semibold text-[12px] text-orange-600 bg-white border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400 placeholder-slate-300 transition-all [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                             />
                           ) : <span className="text-slate-300">—</span>}
                         </td>

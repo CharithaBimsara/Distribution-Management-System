@@ -70,32 +70,24 @@ export async function downloadPurchaseOrderPdf(order: Order & { isTaxCustomer?: 
   doc.rect(gridX + 25, 29, 36, 6); 
   doc.text('CENTRAL', gridX + 27, 33);
 
-  // --- SUPPLIER & CUSTOMER SECTION ---
+  // --- CUSTOMER SECTION ---
   const sectionY = 40;
-  const colWidth = (pageWidth - 28) / 2;
+  const colWidth = pageWidth - 28;
 
   doc.rect(14, sectionY, colWidth, 6);
-  doc.rect(14 + colWidth, sectionY, colWidth, 6);
   doc.setFont('helvetica', 'bold');
-  doc.text('Supplier', 16, sectionY + 4);
-  doc.text('Customer', 16 + colWidth, sectionY + 4);
+  doc.text('Customer', 16, sectionY + 4);
 
-  doc.rect(14, sectionY + 6, colWidth, 18);
-  doc.rect(14 + colWidth, sectionY + 6, colWidth, 18);
+  doc.rect(14, sectionY + 6, colWidth, 12);
   doc.setFont('helvetica', 'normal');
 
   const shopName = getShopNameOrPlaceholder(order);
-  const custAddress = doc.splitTextToSize(order.deliveryAddress || '[Address]', colWidth - 4);
   const custName = doc.splitTextToSize(shopName, colWidth - 4);
 
-  doc.text('JANASIRI DISTRIBUTORS (PVT) LTD', 16, sectionY + 11);
-  doc.text(custAddress, 16, sectionY + 16);
-
-  doc.text(custName, 16 + colWidth, sectionY + 11);
-  doc.text(custAddress, 16 + colWidth, sectionY + 16);
+  doc.text(custName, 16, sectionY + 11);
 
   // --- TABLE SECTION ---
-  const tableStartY = sectionY + 28;
+  const tableStartY = sectionY + 22;
   
   const baseCols = ['No', 'Item Code', 'Item Description', 'Qty', 'Rate', 'Disc %', 'Disc Amt'];
   const cols = isTax ? [...baseCols, 'Tax', 'Line Gross'] : [...baseCols, 'Line Gross'];

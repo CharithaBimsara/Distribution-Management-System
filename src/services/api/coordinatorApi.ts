@@ -40,6 +40,17 @@ export const adminDeleteCoordinator = async (id: string) => {
   return data.data;
 };
 
+export const adminGetTrashedCoordinators = async (page = 1, pageSize = 20) => {
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+  const { data } = await api.get<ApiResponse<PagedResult<Coordinator>>>(`/admin/coordinators/trash?${params}`);
+  return data.data;
+};
+
+export const adminRestoreCoordinator = async (id: string) => {
+  const { data } = await api.post<ApiResponse<string>>(`/admin/coordinators/${id}/restore`);
+  return data.data;
+};
+
 export const adminAssignRepToCoordinator = async (coordinatorId: string, repId: string) => {
   const { data } = await api.post<ApiResponse<string>>(`/admin/coordinators/${coordinatorId}/assign-rep`, { repId });
   return data.data;
