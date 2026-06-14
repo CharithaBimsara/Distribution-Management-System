@@ -445,7 +445,7 @@ export default function CustomerProducts() {
   return (
     <div className="animate-fade-in space-y-5 lg:space-y-6 pb-20">
       {/* Page Header */}
-      <div className="flex items-center justify-between gap-3 px-4 lg:px-0">
+      <div className="flex items-center justify-between gap-3 px-4 lg:px-0 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Create New Order</h1>
           <p className="text-sm text-slate-500 mt-1">Select products using the table below to add to your cart.</p>

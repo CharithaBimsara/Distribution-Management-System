@@ -92,6 +92,7 @@ import CoordinatorCustomerSpecialPrices from './pages/coordinator/CustomerSpecia
 import CustomerHome from './pages/customer/Home';
 import CustomerProducts from './pages/customer/Products';
 import CustomerProductCatalog from './pages/customer/ProductCatalog';
+import CustomerGallery from './pages/customer/Gallery';
 import CustomerCheckout from './pages/customer/Checkout';
 import CustomerOrders from './pages/customer/Orders';
 import CustomerLedger from './pages/customer/Ledger';
@@ -204,6 +205,7 @@ export default function App() {
         <Route path="/shop" element={<ProtectedRoute allowedRoles={['Customer']}><CustomerLayout /></ProtectedRoute>}>
           <Route index element={<CustomerHome />} />
           <Route path="catalog" element={<CustomerProductCatalog />} />
+          <Route path="gallery" element={<CustomerGallery />} />
           <Route path="products" element={<CustomerProducts />} />
           <Route path="checkout" element={<CustomerCheckout />} />
           <Route path="orders" element={<CustomerOrders />}>

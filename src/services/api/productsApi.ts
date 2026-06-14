@@ -100,4 +100,13 @@ export const productsApi = {
 
   customerToggleFavorite: (id: string) =>
     api.post<ApiResponse<string>>(`/customer/products/${id}/favorite`),
+
+  // Product images (admin)
+  addImage: (id: string, formData: FormData) =>
+    api.post<ApiResponse<Product>>(`/admin/products/${id}/images`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+
+  removeImage: (id: string, index: number) =>
+    api.delete<ApiResponse<Product>>(`/admin/products/${id}/images/${index}`),
 };

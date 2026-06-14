@@ -4,9 +4,11 @@ import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { productsApi } from '../../services/api/productsApi';
 import { systemConfigApi } from '../../services/api/systemConfigApi';
+import { galleryApi } from '../../services/api/galleryApi';
+import type { GalleryItem } from '../../services/api/galleryApi';
 import * as XLSX from 'xlsx';
 import { formatCurrency, formatNumber } from '../../utils/formatters';
-import { Plus, Search, Trash2, X, Layers, Package, Check, SlidersHorizontal, FileSpreadsheet, FileText, Upload, Info, ArrowUpDown, ChevronDown, Zap } from 'lucide-react';
+import { Plus, Search, Trash2, X, Layers, Package, Check, SlidersHorizontal, FileSpreadsheet, FileText, Upload, Info, ArrowUpDown, ChevronDown, Zap, Images, ImagePlus, Pencil, Eye, EyeOff } from 'lucide-react';
 import type { Product, Category, CreateProductRequest } from '../../types/product.types';
 import toast from 'react-hot-toast';
 
@@ -17,6 +19,13 @@ export default function AdminProducts() {
   const [showForm, setShowForm] = useState(false);
   const [editProduct, setEditProduct] = useState<Product | null>(null);
   const [showCategoryForm, setShowCategoryForm] = useState(false);
+  // Main tab: products or gallery
+  const [mainTab, setMainTab] = useState<'products' | 'gallery'>('products');
+  // Gallery state
+  const [galleryForm, setGalleryForm] = useState<{ title: string; description: string; displayOrder: number; imageFiles: File[]; imagePreviews: string[] }>({ title: '', description: '', displayOrder: 0, imageFiles: [], imagePreviews: [] });
+  const [editingGallery, setEditingGallery] = useState<GalleryItem | null>(null);
+  const [editGalleryForm, setEditGalleryForm] = useState<{ title: string; description: string; displayOrder: number; isActive: boolean }>({ title: '', description: '', displayOrder: 0, isActive: true });
+  const galleryFileRef = useRef<HTMLInputElement>(null);
   // new two‑level filters — multi-select Sets
   const [mainFilters, setMainFilters] = useState<Set<string>>(new Set());
   const [subFilters, setSubFilters] = useState<Set<string>>(new Set());
@@ -89,6 +98,57 @@ export default function AdminProducts() {
 
   const { data: categories } = useQuery({ queryKey: ['categories'], queryFn: () => productsApi.getCategories().then(r => r.data.data) });
 
+  // Gallery queries & mutations
+  const { data: galleryItems, isLoading: galleryLoading } = useQuery({
+    queryKey: ['admin-gallery'],
+    queryFn: () => galleryApi.adminGetAll().then(r => r.data.data),
+    enabled: mainTab === 'gallery',
+  });
+  const createGalleryMut = useMutation({
+    mutationFn: (fd: FormData) => galleryApi.adminCreate(fd),
+    onSuccess: async (res) => {
+      queryClient.invalidateQueries({ queryKey: ['admin-gallery'] });
+      // Upload remaining images (index 1+) as extras
+      const extras = pendingExtraImagesRef.current;
+      const newId = res.data?.data?.id;
+      if (extras.length > 0 && newId) {
+        for (const file of extras) {
+          const fd = new FormData();
+          fd.append('image', file);
+          try { await galleryApi.adminAddExtraImage(newId, fd); } catch {}
+        }
+        queryClient.invalidateQueries({ queryKey: ['admin-gallery'] });
+      }
+      pendingExtraImagesRef.current = [];
+      setGalleryForm({ title: '', description: '', displayOrder: 0, imageFiles: [], imagePreviews: [] });
+      toast.success('Gallery item added');
+    },
+    onError: () => { pendingExtraImagesRef.current = []; toast.error('Failed to add gallery item'); },
+  });
+  const updateGalleryMut = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => galleryApi.adminUpdate(id, data),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admin-gallery'] }); setEditingGallery(null); toast.success('Gallery item updated'); },
+    onError: () => toast.error('Failed to update gallery item'),
+  });
+  const deleteGalleryMut = useMutation({
+    mutationFn: (id: string) => galleryApi.adminDelete(id),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admin-gallery'] }); toast.success('Gallery item deleted'); },
+    onError: () => toast.error('Failed to delete gallery item'),
+  });
+  const addExtraImageMut = useMutation({
+    mutationFn: ({ id, fd }: { id: string; fd: FormData }) => galleryApi.adminAddExtraImage(id, fd),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admin-gallery'] }); toast.success('Image added'); },
+    onError: () => toast.error('Failed to add image'),
+  });
+  const removeExtraImageMut = useMutation({
+    mutationFn: ({ id, index }: { id: string; index: number }) => galleryApi.adminRemoveExtraImage(id, index),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admin-gallery'] }); toast.success('Image removed'); },
+    onError: () => toast.error('Failed to remove image'),
+  });
+  const extraImageFileRef = useRef<HTMLInputElement>(null);
+  const [extraImageTargetId, setExtraImageTargetId] = useState<string | null>(null);
+  const pendingExtraImagesRef = useRef<File[]>([]);
+
   const sortedItems = useMemo(() => {
     if (!data?.items) return [];
     // 1. Category filter
@@ -147,6 +207,32 @@ export default function AdminProducts() {
         return 0;
       });
   }, [data?.items, sortField, sortDir, mainFilters, subFilters, categories, taxFilters, stockFilter]);
+
+  const adminCatMap = useMemo(() => {
+    const m = new Map<string, string>();
+    if (categories) {
+      for (const main of (categories as Category[])) {
+        if (!main.subCategories?.length) {
+          m.set(main.id, main.name);
+        } else {
+          for (const sub of main.subCategories) {
+            m.set(sub.id, `${main.name} - ${sub.name}`);
+          }
+        }
+      }
+    }
+    return m;
+  }, [categories]);
+
+  const groupedItems = useMemo(() => {
+    const map = new Map<string, Product[]>();
+    for (const p of sortedItems) {
+      const group = (p.categoryId && adminCatMap.get(p.categoryId)) || p.categoryName || 'Uncategorized';
+      if (!map.has(group)) map.set(group, []);
+      map.get(group)!.push(p);
+    }
+    return new Map([...map.entries()].sort(([a], [b]) => a.localeCompare(b)));
+  }, [sortedItems, adminCatMap]);
 
   // whenever the loaded list changes clear any stray selections
   useEffect(() => {
@@ -690,9 +776,9 @@ export default function AdminProducts() {
             0: { cellWidth: 'auto' },
             1: { cellWidth: 28, halign: 'center' },
             2: { cellWidth: 'auto' },
-            3: { cellWidth: 20, halign: 'center' },
+            3: { cellWidth: 34, halign: 'center' },
             4: { cellWidth: 28, halign: 'right' },
-            5: { cellWidth: 22, halign: 'center' },
+            5: { cellWidth: 16, halign: 'center' },
             6: { cellWidth: 32, halign: 'right' },
             7: { cellWidth: 28, halign: 'right' },
           },
@@ -750,6 +836,33 @@ export default function AdminProducts() {
     );
   };
 
+  // Gallery handlers
+  const handleGalleryFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    const previews = files.map(f => URL.createObjectURL(f));
+    setGalleryForm(f => ({ ...f, imageFiles: [...f.imageFiles, ...files], imagePreviews: [...f.imagePreviews, ...previews] }));
+    e.target.value = '';
+  };
+  const handleGalleryRemoveImage = (idx: number) => {
+    setGalleryForm(f => {
+      URL.revokeObjectURL(f.imagePreviews[idx]);
+      return { ...f, imageFiles: f.imageFiles.filter((_, i) => i !== idx), imagePreviews: f.imagePreviews.filter((_, i) => i !== idx) };
+    });
+  };
+  const handleGallerySubmit = () => {
+    if (!galleryForm.title.trim()) { toast.error('Title is required'); return; }
+    if (!galleryForm.imageFiles.length) { toast.error('Please select at least one image'); return; }
+    const [cover, ...extras] = galleryForm.imageFiles;
+    pendingExtraImagesRef.current = extras;
+    const fd = new FormData();
+    fd.append('title', galleryForm.title.trim());
+    fd.append('description', galleryForm.description.trim());
+    fd.append('displayOrder', String(galleryForm.displayOrder));
+    fd.append('image', cover);
+    createGalleryMut.mutate(fd);
+  };
+
   // sort helper
   const handleSort = (field: string) => {
     if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -786,11 +899,276 @@ export default function AdminProducts() {
 
   return (
     <div className="animate-fade-in flex flex-col gap-4">
-      {/* Page title */}
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Products</h1>
-        <p className="text-slate-500 text-sm mt-1">Manage your product catalog</p>
+      {/* Page title + Tab switcher */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Products</h1>
+          <p className="text-slate-500 text-sm mt-1">{mainTab === 'products' ? 'Manage your product catalog' : 'Manage showcase gallery for customers'}</p>
+        </div>
+        {/* Tab pills */}
+        <div className="flex items-center gap-1 bg-slate-100 rounded-xl p-1">
+          <button
+            onClick={() => setMainTab('products')}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${mainTab === 'products' ? 'bg-white shadow text-indigo-700' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            <Package className="w-4 h-4" /> Price List
+          </button>
+          <button
+            onClick={() => setMainTab('gallery')}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${mainTab === 'gallery' ? 'bg-white shadow text-indigo-700' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            <Images className="w-4 h-4" /> Gallery
+          </button>
+        </div>
       </div>
+
+      {/* ── GALLERY TAB ─────────────────────────────────────────────────── */}
+      {mainTab === 'gallery' && (
+        <div className="flex flex-col gap-5">
+          {/* Upload form */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5">
+            <h2 className="text-base font-bold text-slate-800 mb-4 flex items-center gap-2"><ImagePlus className="w-5 h-5 text-indigo-500" /> Add Gallery Item</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="flex flex-col gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 mb-1 block">Title *</label>
+                  <input
+                    type="text"
+                    value={galleryForm.title}
+                    onChange={e => setGalleryForm(f => ({ ...f, title: e.target.value }))}
+                    placeholder="e.g. New Arrivals"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/15"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 mb-1 block">Description</label>
+                  <textarea
+                    value={galleryForm.description}
+                    onChange={e => setGalleryForm(f => ({ ...f, description: e.target.value }))}
+                    placeholder="Optional caption or details..."
+                    rows={3}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/15 resize-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 mb-1 block">Display Order</label>
+                  <input
+                    type="number"
+                    value={galleryForm.displayOrder}
+                    onChange={e => setGalleryForm(f => ({ ...f, displayOrder: parseInt(e.target.value) || 0 }))}
+                    className="w-32 px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/15"
+                  />
+                </div>
+              </div>
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-600">Images * <span className="font-normal text-slate-400">(first = cover)</span></label>
+                  <button
+                    type="button"
+                    onClick={() => galleryFileRef.current?.click()}
+                    className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-700 font-semibold transition"
+                  ><ImagePlus className="w-3.5 h-3.5" /> Add images</button>
+                </div>
+                <input ref={galleryFileRef} type="file" accept="image/*" multiple className="hidden" onChange={handleGalleryFileChange} />
+                {galleryForm.imagePreviews.length === 0 ? (
+                  <div
+                    onClick={() => galleryFileRef.current?.click()}
+                    className="flex-1 border-2 border-dashed border-indigo-200 rounded-2xl bg-indigo-50/30 hover:bg-indigo-50 cursor-pointer transition flex items-center justify-center min-h-[160px]"
+                  >
+                    <div className="text-center p-6">
+                      <Upload className="w-8 h-8 text-indigo-400 mx-auto mb-2" />
+                      <p className="text-sm text-indigo-600 font-medium">Click to upload images</p>
+                      <p className="text-xs text-slate-400 mt-1">Select multiple — JPEG, PNG, WebP · max 10 MB each</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-4 gap-2">
+                    {galleryForm.imagePreviews.map((src, idx) => (
+                      <div key={idx} className="relative group/prev aspect-square rounded-xl overflow-hidden border border-slate-200 bg-slate-100">
+                        <img src={src} alt="" className="w-full h-full object-cover" />
+                        {idx === 0 && (
+                          <span className="absolute bottom-1 left-1 text-[9px] bg-black/60 text-white px-1.5 py-0.5 rounded font-bold">cover</span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleGalleryRemoveImage(idx)}
+                          className="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white rounded-full text-xs font-bold items-center justify-center hidden group-hover/prev:flex shadow"
+                        >×</button>
+                      </div>
+                    ))}
+                    {/* Add more tile */}
+                    <div
+                      onClick={() => galleryFileRef.current?.click()}
+                      className="aspect-square rounded-xl border-2 border-dashed border-slate-300 hover:border-indigo-400 cursor-pointer flex flex-col items-center justify-center gap-1 text-slate-400 hover:text-indigo-500 transition"
+                    >
+                      <ImagePlus className="w-5 h-5" />
+                      <span className="text-[10px] font-semibold">Add more</span>
+                    </div>
+                  </div>
+                )}
+                {galleryForm.imagePreviews.length > 0 && (
+                  <p className="text-[11px] text-slate-400">{galleryForm.imagePreviews.length} image{galleryForm.imagePreviews.length !== 1 ? 's' : ''} selected · hover to remove</p>
+                )}
+              </div>
+            </div>
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={handleGallerySubmit}
+                disabled={createGalleryMut.isPending}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition disabled:opacity-60"
+              >
+                <ImagePlus className="w-4 h-4" /> {createGalleryMut.isPending ? 'Uploading…' : 'Add to Gallery'}
+              </button>
+            </div>
+          </div>
+
+          {/* Gallery grid */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5">
+            <h2 className="text-base font-bold text-slate-800 mb-4 flex items-center gap-2"><Images className="w-5 h-5 text-indigo-500" /> Gallery Items ({galleryItems?.length ?? 0})</h2>
+            {/* hidden input for adding extra images */}
+            <input
+              ref={extraImageFileRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={e => {
+                const file = e.target.files?.[0];
+                if (!file || !extraImageTargetId) return;
+                const fd = new FormData();
+                fd.append('image', file);
+                addExtraImageMut.mutate({ id: extraImageTargetId, fd });
+                e.target.value = '';
+                setExtraImageTargetId(null);
+              }}
+            />
+            {galleryLoading ? (
+              <p className="text-slate-400 text-sm text-center py-10">Loading gallery…</p>
+            ) : !galleryItems?.length ? (
+              <div className="text-center py-14">
+                <Images className="w-12 h-12 text-slate-200 mx-auto mb-3" />
+                <p className="text-slate-400">No gallery items yet. Add one above.</p>
+              </div>
+            ) : (
+              <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(6, minmax(0, 1fr))' }}>
+                {galleryItems.map((item: GalleryItem) => {
+                  const apiBase = import.meta.env.VITE_API_URL?.replace('/api', '') || '';
+                  const allImages = [item.imageUrl, ...(item.extraImageUrls || [])];
+                  return (
+                    <div key={item.id} className={`relative rounded-2xl overflow-hidden border shadow-sm group flex flex-col ${item.isActive ? 'border-slate-200' : 'border-slate-200 opacity-60'}`}>
+                      {/* Cover image */}
+                      <div className="aspect-square bg-slate-100 overflow-hidden relative">
+                        <img
+                          src={`${apiBase}${item.imageUrl}`}
+                          alt={item.title}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          onError={e => { (e.target as HTMLImageElement).src = 'https://placehold.co/400x400?text=Image'; }}
+                        />
+                        {allImages.length > 1 && (
+                          <span className="absolute bottom-1.5 right-1.5 bg-black/60 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">+{allImages.length - 1}</span>
+                        )}
+                      </div>
+                      {/* Extra image thumbnails row */}
+                      {(item.extraImageUrls || []).length > 0 && (
+                        <div className="flex gap-1 px-2 pt-1.5 overflow-x-auto pb-1">
+                          {(item.extraImageUrls || []).map((url, idx) => (
+                            <div key={idx} className="relative flex-shrink-0 group/thumb">
+                              <img
+                                src={`${apiBase}${url}`}
+                                alt=""
+                                className="w-9 h-9 object-cover rounded-lg border border-slate-200"
+                                onError={e => { (e.target as HTMLImageElement).src = 'https://placehold.co/80x80?text=X'; }}
+                              />
+                              <button
+                                onClick={() => removeExtraImageMut.mutate({ id: item.id, index: idx })}
+                                className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full text-[9px] items-center justify-center hidden group-hover/thumb:flex"
+                              >×</button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="p-2.5 flex-1">
+                        <p className="text-sm font-bold text-slate-900 truncate leading-tight">{item.title}</p>
+                        {item.description && <p className="text-xs text-slate-500 mt-0.5 line-clamp-2 leading-snug">{item.description}</p>}
+                        <div className="flex items-center gap-1 mt-1.5">
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${item.isActive ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
+                            {item.isActive ? 'Visible' : 'Hidden'}
+                          </span>
+                          <span className="text-[10px] text-slate-400">#{item.displayOrder}</span>
+                        </div>
+                      </div>
+                      {/* Actions */}
+                      <div className="absolute top-1.5 right-1.5 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => { setExtraImageTargetId(item.id); extraImageFileRef.current?.click(); }}
+                          className="p-1 rounded-lg bg-white/90 shadow text-emerald-600 hover:bg-emerald-50 transition"
+                          title="Add more images"
+                        ><ImagePlus className="w-3 h-3" /></button>
+                        <button
+                          onClick={() => { setEditingGallery(item); setEditGalleryForm({ title: item.title, description: item.description || '', displayOrder: item.displayOrder, isActive: item.isActive }); }}
+                          className="p-1 rounded-lg bg-white/90 shadow text-indigo-600 hover:bg-indigo-50 transition"
+                          title="Edit"
+                        ><Pencil className="w-3 h-3" /></button>
+                        <button
+                          onClick={() => updateGalleryMut.mutate({ id: item.id, data: { title: item.title, description: item.description, displayOrder: item.displayOrder, isActive: !item.isActive } })}
+                          className="p-1 rounded-lg bg-white/90 shadow text-slate-600 hover:bg-slate-100 transition"
+                          title={item.isActive ? 'Hide' : 'Show'}
+                        >{item.isActive ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}</button>
+                        <button
+                          onClick={() => { if (confirm('Delete this gallery item?')) deleteGalleryMut.mutate(item.id); }}
+                          className="p-1 rounded-lg bg-white/90 shadow text-red-500 hover:bg-red-50 transition"
+                          title="Delete"
+                        ><Trash2 className="w-3 h-3" /></button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Edit gallery item modal */}
+      {editingGallery && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ pointerEvents: 'auto' }}>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={() => setEditingGallery(null)} />
+          <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-200 p-6" style={{ animation: 'slideDown 0.2s ease-out both' }}>
+            <h3 className="text-base font-bold text-slate-900 mb-4">Edit Gallery Item</h3>
+            <div className="flex flex-col gap-3">
+              <div>
+                <label className="text-xs font-semibold text-slate-600 mb-1 block">Title *</label>
+                <input type="text" value={editGalleryForm.title} onChange={e => setEditGalleryForm(f => ({ ...f, title: e.target.value }))} className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-indigo-400" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-600 mb-1 block">Description</label>
+                <textarea value={editGalleryForm.description} onChange={e => setEditGalleryForm(f => ({ ...f, description: e.target.value }))} rows={3} className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-indigo-400 resize-none" />
+              </div>
+              <div className="flex items-center gap-4">
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 mb-1 block">Display Order</label>
+                  <input type="number" value={editGalleryForm.displayOrder} onChange={e => setEditGalleryForm(f => ({ ...f, displayOrder: parseInt(e.target.value) || 0 }))} className="w-24 px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-indigo-400" />
+                </div>
+                <div className="flex items-center gap-2 pt-5">
+                  <input type="checkbox" id="gallery-active" checked={editGalleryForm.isActive} onChange={e => setEditGalleryForm(f => ({ ...f, isActive: e.target.checked }))} className="w-4 h-4 rounded accent-indigo-600" />
+                  <label htmlFor="gallery-active" className="text-sm font-medium text-slate-700">Visible to customers</label>
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 mt-5">
+              <button onClick={() => setEditingGallery(null)} className="px-4 py-2 rounded-xl border border-slate-200 text-sm font-medium text-slate-700 hover:bg-slate-50 transition">Cancel</button>
+              <button
+                onClick={() => updateGalleryMut.mutate({ id: editingGallery.id, data: editGalleryForm })}
+                disabled={updateGalleryMut.isPending}
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition disabled:opacity-60"
+              >{updateGalleryMut.isPending ? 'Saving…' : 'Save Changes'}</button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ── PRODUCTS TAB ─────────────────────────────────────────────────── */}
+      {mainTab === 'products' && <>
 
       {/* ── Toolbar ─────────────────────────────────────────────────────── */}
       <div className="sticky top-0 z-30">
@@ -1272,13 +1650,13 @@ export default function AdminProducts() {
               )}
             </div>
 
-            {/* Desktop table — full width, no checkbox/actions by default */}
+            {/* Desktop table — grouped by category, same style as customer catalog */}
             <div className="hidden lg:block overflow-x-auto">
-              <table className="w-full text-[12px] border-collapse border border-slate-200">
+              <table className="w-full text-sm border-collapse">
                 <thead>
-                  <tr className="bg-slate-50/80 border-b border-slate-200">
+                  <tr className="bg-slate-800 text-white">
                     {selectionMode && (
-                      <th className="px-3 py-3.5 w-10 border-r border-slate-200 text-center">
+                      <th className="px-3 py-3.5 w-10 border-r border-slate-700 text-center">
                         <input type="checkbox"
                           checked={sortedItems.length > 0 && selectedIds.size === sortedItems.length}
                           onChange={() => {
@@ -1288,113 +1666,117 @@ export default function AdminProducts() {
                         />
                       </th>
                     )}
-                    <th onClick={() => handleSort('sku')} className="text-left px-5 py-3.5 font-bold text-slate-700 text-xs uppercase tracking-wider cursor-pointer hover:text-indigo-600 select-none whitespace-nowrap border-r border-slate-200">
-                      Item Code<SortIcon field="sku" />
-                    </th>
-                    <th onClick={() => handleSort('name')} className="text-left px-5 py-3.5 font-bold text-slate-700 text-xs uppercase tracking-wider cursor-pointer hover:text-indigo-600 select-none whitespace-nowrap border-r border-slate-200">
-                      Sales Description<SortIcon field="name" />
-                    </th>
-                    <th onClick={() => handleSort('uom')} className="text-right px-5 py-3.5 font-bold text-slate-700 text-xs uppercase tracking-wider cursor-pointer hover:text-indigo-600 select-none whitespace-nowrap border-r border-slate-200">
-                      UOM<SortIcon field="uom" />
-                    </th>
-                    <th onClick={() => handleSort('sellingPrice')} className="text-right px-5 py-3.5 font-bold text-slate-700 text-xs uppercase tracking-wider cursor-pointer hover:text-indigo-600 select-none whitespace-nowrap border-r border-slate-200">
-                      Price<SortIcon field="sellingPrice" />
-                    </th>
-                    <th onClick={() => handleSort('taxCode')} className="text-center px-5 py-3.5 font-bold text-slate-700 text-xs uppercase tracking-wider cursor-pointer hover:text-indigo-600 select-none whitespace-nowrap border-r border-slate-200">
-                      Sales Tax<SortIcon field="taxCode" />
-                    </th>
-                    <th onClick={() => handleSort('totalAmount')} className="text-right px-5 py-3.5 font-bold text-slate-700 text-xs uppercase tracking-wider cursor-pointer hover:text-indigo-600 select-none whitespace-nowrap border-r border-slate-200">
-                      All Inc Price<SortIcon field="totalAmount" />
-                    </th>
-                    <th onClick={() => handleSort('mrp')} className="text-right px-5 py-3.5 font-bold text-slate-700 text-xs uppercase tracking-wider cursor-pointer hover:text-indigo-600 select-none whitespace-nowrap">
-                      MRP<SortIcon field="mrp" />
-                    </th>
+                    <th className="text-left px-4 py-3.5 font-semibold text-xs uppercase tracking-wider border-r border-slate-600 min-w-[180px] whitespace-nowrap">Group Name</th>
+                    <th onClick={() => handleSort('sku')} className="text-left px-4 py-3.5 font-semibold text-xs uppercase tracking-wider cursor-pointer hover:bg-slate-700 select-none whitespace-nowrap border-r border-slate-600">Item Code<SortIcon field="sku" /></th>
+                    <th onClick={() => handleSort('name')} className="text-left px-4 py-3.5 font-semibold text-xs uppercase tracking-wider cursor-pointer hover:bg-slate-700 select-none border-r border-slate-600 min-w-[240px]">Sales Description<SortIcon field="name" /></th>
+                    <th onClick={() => handleSort('uom')} className="text-center px-4 py-3.5 font-semibold text-xs uppercase tracking-wider cursor-pointer hover:bg-slate-700 select-none whitespace-nowrap border-r border-slate-600 w-32">UOM<SortIcon field="uom" /></th>
+                    <th onClick={() => handleSort('sellingPrice')} className="text-right px-4 py-3.5 font-semibold text-xs uppercase tracking-wider cursor-pointer hover:bg-slate-700 select-none whitespace-nowrap border-r border-slate-600">Price<SortIcon field="sellingPrice" /></th>
+                    <th onClick={() => handleSort('taxCode')} className="text-center px-2 py-3.5 font-semibold text-xs uppercase tracking-wider cursor-pointer hover:bg-slate-700 select-none whitespace-nowrap border-r border-slate-600 w-14">Tax<SortIcon field="taxCode" /></th>
+                    <th onClick={() => handleSort('totalAmount')} className="text-right px-4 py-3.5 font-semibold text-xs uppercase tracking-wider cursor-pointer hover:bg-slate-700 select-none whitespace-nowrap border-r border-slate-600">All Inc Price<SortIcon field="totalAmount" /></th>
+                    <th onClick={() => handleSort('mrp')} className="text-right px-4 py-3.5 font-semibold text-xs uppercase tracking-wider cursor-pointer hover:bg-slate-700 select-none whitespace-nowrap">MRP<SortIcon field="mrp" /></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {/* Inline new-product row — cells always editable */}
+                  {/* Inline new-product row */}
                   {newProduct && (
                     <tr key="new" className="bg-amber-50">
                       {selectionMode && <td className="border border-slate-200" />}
-                      <td className="px-5 py-3 font-mono text-xs border border-slate-200">
+                      <td className="px-4 py-3 text-xs text-slate-400 italic border border-slate-200">—</td>
+                      <td className="px-4 py-3 font-mono text-xs border border-slate-200">
                         <input placeholder="SKU…" className="w-full font-mono text-xs border-b border-indigo-400 bg-transparent outline-none placeholder-slate-300" value={newProduct.sku || ''} onChange={e => setNewProduct(p => ({ ...p, sku: e.target.value }))} />
                       </td>
-                      <td className="px-5 py-3 border border-slate-200">
+                      <td className="px-4 py-3 border border-slate-200">
                         <input placeholder="Description…" className="w-full border-b border-indigo-400 bg-transparent outline-none placeholder-slate-300 text-sm" value={newProduct.name || ''} onChange={e => setNewProduct(p => ({ ...p, name: e.target.value }))} />
                       </td>
-                      <td className="px-5 py-3 text-xs border border-slate-200">
+                      <td className="px-4 py-3 text-xs border border-slate-200">
                         <input placeholder="UOM…" className="w-full text-xs border-b border-indigo-400 bg-transparent outline-none placeholder-slate-300" value={(newProduct as any).uom || ''} onChange={e => setNewProduct(p => ({ ...p, uom: e.target.value } as any))} />
                       </td>
-                      <td className="px-5 py-3 text-right border border-slate-200">
+                      <td className="px-4 py-3 text-right border border-slate-200">
                         <input type="number" step="0.01" placeholder="0.00" className="w-full text-right border-b border-indigo-400 bg-transparent outline-none placeholder-slate-300" value={newProduct.sellingPrice ?? ''} onChange={e => setNewProduct(p => ({ ...p, sellingPrice: parseFloat(e.target.value) || 0 }))} />
                       </td>
-                      <td className="px-5 py-3 text-center border border-slate-200">
+                      <td className="px-4 py-3 text-center border border-slate-200">
                         <input placeholder="V18…" className="w-14 text-center border-b border-indigo-400 bg-transparent outline-none placeholder-slate-300 mx-auto block" value={newProduct.taxCode || ''} onChange={e => setNewProduct(p => ({ ...p, taxCode: e.target.value }))} />
                       </td>
-                      <td className="px-5 py-3 text-right border border-slate-200">
+                      <td className="px-4 py-3 text-right border border-slate-200">
                         <input type="number" step="0.01" placeholder="0.00" className="w-full text-right border-b border-indigo-400 bg-transparent outline-none placeholder-slate-300" value={newProduct.totalAmount ?? ''} onChange={e => setNewProduct(p => ({ ...p, totalAmount: parseFloat(e.target.value) || undefined } as any))} />
                       </td>
-                      <td className="px-5 py-3 text-right border border-slate-200">
+                      <td className="px-4 py-3 text-right border border-slate-200">
                         <input type="number" step="0.01" placeholder="0.00" className="w-full text-right border-b border-indigo-400 bg-transparent outline-none placeholder-slate-300" value={newProduct.mrp ?? ''} onChange={e => setNewProduct(p => ({ ...p, mrp: parseFloat(e.target.value) || undefined } as any))} />
                       </td>
                     </tr>
                   )}
-                  {sortedItems.map((product: Product) => {
-                    const isEditing = inlineEditProduct?.id === product.id;
-                    if (isEditing && inlineEditProduct) {
+                  {Array.from(groupedItems.entries()).flatMap(([groupName, products]) => [
+                    <tr key={`hdr-${groupName}`} className="bg-slate-100 border-y border-slate-300">
+                      <td colSpan={selectionMode ? 9 : 8} className="px-4 py-2 font-bold text-slate-800 text-[12px]">{groupName}</td>
+                    </tr>,
+                    ...products.map((product: Product) => {
+                      const isEditing = inlineEditProduct?.id === product.id;
+                      if (isEditing && inlineEditProduct) {
+                        return (
+                          <tr key={product.id} className="bg-indigo-50/60">
+                            {selectionMode && <td className="px-4 py-2 border border-slate-200" />}
+                            <td className="px-3 py-2 text-xs text-slate-500 italic border border-indigo-300">{groupName}</td>
+                            <td className="px-3 py-2 border border-indigo-300">
+                              <input className="w-full font-mono text-xs border-b border-indigo-400 bg-transparent outline-none" value={(inlineEditProduct as any).sku || ''} onChange={e => setInlineEditProduct(p => ({ ...p, sku: e.target.value }))} />
+                            </td>
+                            <td className="px-3 py-2 border border-indigo-300">
+                              <input className="w-full text-xs border-b border-indigo-400 bg-transparent outline-none" value={inlineEditProduct.name || ''} onChange={e => setInlineEditProduct(p => ({ ...p, name: e.target.value }))} />
+                            </td>
+                            <td className="px-3 py-2 border border-indigo-300">
+                              <input className="w-full text-xs border-b border-indigo-400 bg-transparent outline-none" value={(inlineEditProduct as any).uom || ''} onChange={e => setInlineEditProduct(p => ({ ...p, uom: e.target.value } as any))} />
+                            </td>
+                            <td className="px-3 py-2 border border-indigo-300">
+                              <input type="number" step="0.01" className="w-full text-right text-xs border-b border-indigo-400 bg-transparent outline-none" value={inlineEditProduct.sellingPrice ?? ''} onChange={e => setInlineEditProduct(p => ({ ...p, sellingPrice: parseFloat(e.target.value) || 0 }))} />
+                            </td>
+                            <td className="px-3 py-2 border border-indigo-300 text-center">
+                              <input className="w-14 text-center text-xs border-b border-indigo-400 bg-transparent outline-none mx-auto block" value={inlineEditProduct.taxCode || ''} onChange={e => setInlineEditProduct(p => ({ ...p, taxCode: e.target.value }))} />
+                            </td>
+                            <td className="px-3 py-2 border border-indigo-300">
+                              <input type="number" step="0.01" className="w-full text-right text-xs border-b border-indigo-400 bg-transparent outline-none" value={inlineEditProduct.totalAmount ?? ''} onChange={e => setInlineEditProduct(p => ({ ...p, totalAmount: parseFloat(e.target.value) || undefined } as any))} />
+                            </td>
+                            <td className="px-3 py-2 border border-indigo-300">
+                              <input type="number" step="0.01" className="w-full text-right text-xs border-b border-indigo-400 bg-transparent outline-none" value={inlineEditProduct.mrp ?? ''} onChange={e => setInlineEditProduct(p => ({ ...p, mrp: parseFloat(e.target.value) || undefined } as any))} />
+                            </td>
+                          </tr>
+                        );
+                      }
                       return (
-                        <tr key={product.id} className="bg-indigo-50/60">
-                          {selectionMode && <td className="px-4 py-2 border border-slate-200" />}
-                          <td className="px-3 py-2 border border-indigo-300">
-                            <input className="w-full font-mono text-xs border-b border-indigo-400 bg-transparent outline-none" value={(inlineEditProduct as any).sku || ''} onChange={e => setInlineEditProduct(p => ({ ...p, sku: e.target.value }))} />
+                        <tr
+                          key={product.id}
+                          className={`transition-all cursor-pointer select-none border-b border-slate-100 ${selectionMode && selectedIds.has(product.id) ? 'bg-indigo-50/80' : 'hover:bg-slate-50/60'}`}
+                          onDoubleClick={() => handleRowDoubleClick(product.id)}
+                          onClick={() => { if (selectionMode) { setSelectedIds(prev => { const s = new Set(prev); if (s.has(product.id)) s.delete(product.id); else s.add(product.id); return s; }); } }}
+                        >
+                          {selectionMode && (
+                            <td className="px-4 py-3 border border-slate-200">
+                              <input type="checkbox" readOnly checked={selectedIds.has(product.id)} className="pointer-events-none" />
+                            </td>
+                          )}
+                          <td className="px-4 py-3 text-slate-500 border-r border-slate-100 whitespace-nowrap">{groupName}</td>
+                          <td className="px-4 py-3 font-mono text-xs text-slate-600 whitespace-nowrap border-r border-slate-100">{product.sku}</td>
+                          <td className="px-4 py-3 border-r border-slate-100">
+                            <div className="flex items-center gap-2">
+                              {(product.imageUrls?.length ?? 0) > 0 && (
+                                <img src={`${import.meta.env.VITE_API_URL?.replace('/api', '') || ''}${product.imageUrls![0]}`} alt="" className="w-8 h-8 rounded object-cover flex-shrink-0 border border-slate-200" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                              )}
+                              <span className="text-slate-800">{product.name}</span>
+                              {(product.imageUrls?.length ?? 0) > 0 && <span className="flex-shrink-0 inline-flex items-center gap-0.5 text-[9px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded-full font-bold"><ImagePlus className="w-2.5 h-2.5" />{product.imageUrls!.length}</span>}
+                            </div>
                           </td>
-                          <td className="px-3 py-2 border border-indigo-300">
-                            <input className="w-full text-xs border-b border-indigo-400 bg-transparent outline-none" value={inlineEditProduct.name || ''} onChange={e => setInlineEditProduct(p => ({ ...p, name: e.target.value }))} />
+                          <td className="px-4 py-3 text-center text-sky-600 font-medium border-r border-slate-100 w-32">{(product as any).uom || 'No UOM'}</td>
+                          <td className="px-4 py-3 text-right text-slate-700 border-r border-slate-100 whitespace-nowrap">{formatNumber(product.sellingPrice)}</td>
+                          <td className="px-2 py-3 text-center border-r border-slate-100 w-14 whitespace-nowrap">
+                            {product.taxCode
+                              ? <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-bold ${product.taxCode.startsWith('V') ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>{product.taxCode}</span>
+                              : <span className="text-slate-300">—</span>}
                           </td>
-                          <td className="px-3 py-2 border border-indigo-300">
-                            <input className="w-full text-xs border-b border-indigo-400 bg-transparent outline-none" value={(inlineEditProduct as any).uom || ''} onChange={e => setInlineEditProduct(p => ({ ...p, uom: e.target.value } as any))} />
-                          </td>
-                          <td className="px-3 py-2 border border-indigo-300">
-                            <input type="number" step="0.01" className="w-full text-right text-xs border-b border-indigo-400 bg-transparent outline-none" value={inlineEditProduct.sellingPrice ?? ''} onChange={e => setInlineEditProduct(p => ({ ...p, sellingPrice: parseFloat(e.target.value) || 0 }))} />
-                          </td>
-                          <td className="px-3 py-2 border border-indigo-300 text-center">
-                            <input className="w-14 text-center text-xs border-b border-indigo-400 bg-transparent outline-none mx-auto block" value={inlineEditProduct.taxCode || ''} onChange={e => setInlineEditProduct(p => ({ ...p, taxCode: e.target.value }))} />
-                          </td>
-                          <td className="px-3 py-2 border border-indigo-300">
-                            <input type="number" step="0.01" className="w-full text-right text-xs border-b border-indigo-400 bg-transparent outline-none" value={inlineEditProduct.totalAmount ?? ''} onChange={e => setInlineEditProduct(p => ({ ...p, totalAmount: parseFloat(e.target.value) || undefined } as any))} />
-                          </td>
-                          <td className="px-3 py-2 border border-indigo-300">
-                            <input type="number" step="0.01" className="w-full text-right text-xs border-b border-indigo-400 bg-transparent outline-none" value={inlineEditProduct.mrp ?? ''} onChange={e => setInlineEditProduct(p => ({ ...p, mrp: parseFloat(e.target.value) || undefined } as any))} />
-                          </td>
+                          <td className="px-4 py-3 text-right font-semibold text-slate-900 border-r border-slate-100 whitespace-nowrap">{product.totalAmount != null ? formatNumber(product.totalAmount) : <span className="text-slate-300">—</span>}</td>
+                          <td className="px-4 py-3 text-right text-orange-600 font-semibold whitespace-nowrap">{product.mrp != null ? formatNumber(product.mrp) : <span className="text-slate-300">—</span>}</td>
                         </tr>
                       );
-                    }
-                    return (
-                      <tr
-                        key={product.id}
-                        className={`transition-all cursor-pointer select-none ${selectionMode && selectedIds.has(product.id) ? 'bg-indigo-50/80' : 'hover:bg-slate-50/60'}`}
-                        onDoubleClick={() => handleRowDoubleClick(product.id)}
-                        onClick={() => { if (selectionMode) { setSelectedIds(prev => { const s = new Set(prev); if (s.has(product.id)) s.delete(product.id); else s.add(product.id); return s; }); } }}
-                      >
-                        {selectionMode && (
-                          <td className="px-4 py-3.5 border border-slate-200">
-                            <input type="checkbox" readOnly checked={selectedIds.has(product.id)} className="pointer-events-none" />
-                          </td>
-                        )}
-                        <td className="px-5 py-3.5 text-xs font-semibold text-slate-600 border border-slate-200">{product.sku}</td>
-                        <td className="px-5 py-3.5 text-xs font-semibold text-slate-600 border border-slate-200"><p className="truncate max-w-xs">{product.name}</p></td>
-                        <td className="px-5 py-3.5 text-right text-xs font-semibold text-slate-600 border border-slate-200">{(product as any).uom || <span className="text-slate-300">—</span>}</td>
-                        <td className="px-5 py-3.5 text-right text-xs font-semibold text-slate-600 border border-slate-200">{formatNumber(product.sellingPrice)}</td>
-                        <td className="px-5 py-3.5 text-center text-xs font-semibold text-slate-600 border border-slate-200">
-                          {product.taxCode
-                            ? <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-bold ${product.taxCode.startsWith('V') ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>{product.taxCode}</span>
-                            : <span className="text-slate-300">—</span>}
-                        </td>
-                        <td className="px-5 py-3.5 text-right text-xs font-semibold text-slate-600 border border-slate-200">{product.totalAmount != null ? formatNumber(product.totalAmount) : <span className="text-slate-300">—</span>}</td>
-                        <td className="px-5 py-3.5 text-right text-xs font-semibold text-slate-600 border border-slate-200">{product.mrp != null ? formatNumber(product.mrp) : <span className="text-slate-300">—</span>}</td>
-                      </tr>
-                    );
-                  })}
+                    }),
+                    <tr key={`spacer-${groupName}`} className="bg-white"><td colSpan={selectionMode ? 9 : 8} className="py-1" /></tr>,
+                  ])}
                 </tbody>
               </table>
               {!selectionMode && sortedItems.length > 0 && (
@@ -1406,6 +1788,8 @@ export default function AdminProducts() {
             </div>
           </>)}
         </div>
+
+      </> /* end mainTab === 'products' */}
 
       {isBusy && createPortal(
         <div className="fixed inset-0 z-[9999] flex flex-col items-center" style={{ pointerEvents: 'auto' }}>
@@ -1646,7 +2030,81 @@ function ProductFormModal({ product, onClose, onSubmit, isPending }: { product: 
   const inputCls = 'w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500/20 outline-none';
 
   const queryClient = useQueryClient();
+  const imgFileRef = useRef<HTMLInputElement>(null);
+  const [localImages, setLocalImages] = useState<string[]>(product?.imageUrls || []);
+  const apiBase = import.meta.env.VITE_API_URL?.replace('/api', '') || '';
 
+  const addImgMut = useMutation({
+    mutationFn: (fd: FormData) => productsApi.addImage(product!.id, fd),
+    onSuccess: (res) => {
+      const updated = res.data.data?.imageUrls || [];
+      setLocalImages(updated);
+      queryClient.invalidateQueries({ queryKey: ['admin-products'] });
+      toast.success('Image added');
+    },
+    onError: () => toast.error('Failed to add image'),
+  });
+
+  const removeImgMut = useMutation({
+    mutationFn: (index: number) => productsApi.removeImage(product!.id, index),
+    onSuccess: (res) => {
+      const updated = res.data.data?.imageUrls || [];
+      setLocalImages(updated);
+      queryClient.invalidateQueries({ queryKey: ['admin-products'] });
+      toast.success('Image removed');
+    },
+    onError: () => toast.error('Failed to remove image'),
+  });
+
+  const imageSection = product && (
+    <div className="space-y-2">
+      <label className="block text-sm font-medium text-slate-700">Product Images</label>
+      <input
+        ref={imgFileRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        onChange={e => {
+          const files = Array.from(e.target.files || []);
+          files.forEach(file => {
+            const fd = new FormData();
+            fd.append('image', file);
+            addImgMut.mutate(fd);
+          });
+          e.target.value = '';
+        }}
+      />
+      <div className="flex flex-wrap gap-2">
+        {localImages.map((url, idx) => (
+          <div key={idx} className="relative group/img w-20 h-20 flex-shrink-0">
+            <img
+              src={`${apiBase}${url}`}
+              alt=""
+              className="w-full h-full object-cover rounded-lg border border-slate-200"
+              onError={e => { (e.target as HTMLImageElement).src = 'https://placehold.co/80x80?text=?'; }}
+            />
+            <button
+              type="button"
+              onClick={() => removeImgMut.mutate(idx)}
+              className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full text-xs font-bold items-center justify-center hidden group-hover/img:flex shadow"
+            >×</button>
+            {idx === 0 && <span className="absolute bottom-0.5 left-0.5 text-[9px] bg-black/60 text-white px-1 rounded">cover</span>}
+          </div>
+        ))}
+        <button
+          type="button"
+          onClick={() => imgFileRef.current?.click()}
+          disabled={addImgMut.isPending}
+          className="w-20 h-20 flex flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-slate-300 text-slate-400 hover:border-indigo-400 hover:text-indigo-500 transition text-xs"
+        >
+          <ImagePlus className="w-5 h-5" />
+          {addImgMut.isPending ? '…' : 'Add'}
+        </button>
+      </div>
+      <p className="text-[11px] text-slate-400">First image is used as cover. Click × to remove.</p>
+    </div>
+  );
 
   const isDesktop = () => typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches;
 
@@ -1678,6 +2136,7 @@ function ProductFormModal({ product, onClose, onSubmit, isPending }: { product: 
               <div><label className="block text-sm font-medium text-slate-700 mb-1">Tax Amount</label><input type="number" step="0.01" value={form.taxAmount} onChange={e => set('taxAmount', e.target.value)} className={inputCls} /></div>
               <div><label className="block text-sm font-medium text-slate-700 mb-1">Total Amount</label><input type="number" step="0.01" value={form.totalAmount} onChange={e => set('totalAmount', e.target.value)} className={inputCls} /></div>
             </div>
+            {imageSection}
             <div className="flex gap-3 pt-2"><button type="button" onClick={onClose} className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-medium transition">Cancel</button><button type="submit" disabled={isPending} className="flex-1 py-2.5 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg text-sm font-medium transition disabled:opacity-50">{isPending ? 'Saving...' : product ? 'Update' : 'Create'}</button></div>
           </form>
         </div>
@@ -1711,7 +2170,7 @@ function ProductFormModal({ product, onClose, onSubmit, isPending }: { product: 
               <div><label className="block text-sm font-medium text-slate-700 mb-1">Tax Amount</label><input type="number" step="0.01" value={form.taxAmount} onChange={e => set('taxAmount', e.target.value)} className={inputCls} /></div>
               <div><label className="block text-sm font-medium text-slate-700 mb-1">Total Amount</label><input type="number" step="0.01" value={form.totalAmount} onChange={e => set('totalAmount', e.target.value)} className={inputCls} /></div>
             </div>
-
+            {imageSection}
             <div className="mt-2 grid grid-cols-2 gap-2">
               <button type="button" onClick={onClose} className="w-full py-2.5 bg-slate-100 rounded-lg text-sm font-medium">Cancel</button>
               <button type="submit" disabled={isPending} className="w-full py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-medium disabled:opacity-50">{isPending ? 'Saving...' : product ? 'Update' : 'Create'}</button>

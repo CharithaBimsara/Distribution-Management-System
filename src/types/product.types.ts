@@ -16,6 +16,7 @@ export interface Product {
   taxAmount?: number;
   totalAmount?: number;
   uom?: string;
+  imageUrls?: string[];
   createdAt: string;
 }
 
