@@ -13,6 +13,10 @@ import {
 import toast from 'react-hot-toast';
 
 const apiBase = import.meta.env.VITE_API_URL?.replace('/api', '') || '';
+// Normalize both old absolute URLs (https://charitha.runasp.net/...) and new relative paths (/uploads/...)
+// through the Vercel proxy so there's no mixed-content and no broken domain concatenation
+const resolveUploadUrl = (url: string) =>
+  url.startsWith('/') ? `${apiBase}${url}` : url.replace(/^https?:\/\/[^/]+/, apiBase);
 
 // ── Shared small components ───────────────────────────────────────────────────
 function InfoRow({ label, value }: { label: string; value?: string | null }) {
@@ -40,7 +44,7 @@ function Section({ title, icon, children }: { title: string; icon: React.ReactNo
 function DocLink({ url, label, isVat = false }: { url: string; label: string; isVat?: boolean }) {
   return (
     <a
-      href={`${apiBase}${url}`}
+      href={resolveUploadUrl(url)}
       target="_blank"
       rel="noopener noreferrer"
       className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-all hover:shadow-sm ${

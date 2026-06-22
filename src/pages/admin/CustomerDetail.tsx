@@ -5,6 +5,9 @@ import { customersApi } from '../../services/api/customersApi';
 import { regionsApi } from '../../services/api/regionsApi';
 
 const apiBase = import.meta.env.VITE_API_URL?.replace('/api', '') || '';
+// Normalize both old absolute URLs (https://charitha.runasp.net/...) and new relative paths (/uploads/...)
+const resolveUploadUrl = (url: string) =>
+  url.startsWith('/') ? `${apiBase}${url}` : url.replace(/^https?:\/\/[^/]+/, apiBase);
 import { adminGetAllCoordinators } from '../../services/api/coordinatorApi';
 import { authApi } from '../../services/api/authApi';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -836,19 +839,19 @@ export default function AdminCustomerDetail() {
                     <p className="text-xs text-slate-400 uppercase tracking-wider mb-2">Submitted Documents</p>
                     <div className="flex flex-wrap gap-2">
                       {summary.registrationRequest.businessRegDocPath && (
-                        <a href={`${apiBase}${summary.registrationRequest.businessRegDocPath}`} target="_blank" rel="noopener noreferrer"
+                        <a href={resolveUploadUrl(summary.registrationRequest.businessRegDocPath)} target="_blank" rel="noopener noreferrer"
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-medium border border-indigo-200 hover:bg-indigo-100 transition">
                           <FileTextIcon className="w-3.5 h-3.5" /> Business Reg Doc
                         </a>
                       )}
                       {summary.registrationRequest.businessAddressDocPath && (
-                        <a href={`${apiBase}${summary.registrationRequest.businessAddressDocPath}`} target="_blank" rel="noopener noreferrer"
+                        <a href={resolveUploadUrl(summary.registrationRequest.businessAddressDocPath)} target="_blank" rel="noopener noreferrer"
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-medium border border-indigo-200 hover:bg-indigo-100 transition">
                           <FileTextIcon className="w-3.5 h-3.5" /> Business Address Doc
                         </a>
                       )}
                       {summary.registrationRequest.vatDocPath && (
-                        <a href={`${apiBase}${summary.registrationRequest.vatDocPath}`} target="_blank" rel="noopener noreferrer"
+                        <a href={resolveUploadUrl(summary.registrationRequest.vatDocPath)} target="_blank" rel="noopener noreferrer"
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-medium border border-indigo-200 hover:bg-indigo-100 transition">
                           <FileTextIcon className="w-3.5 h-3.5" /> VAT Doc
                         </a>
