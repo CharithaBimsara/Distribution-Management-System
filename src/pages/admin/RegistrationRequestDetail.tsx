@@ -12,6 +12,8 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
+const apiBase = import.meta.env.VITE_API_URL?.replace('/api', '') || '';
+
 // ── Shared small components ───────────────────────────────────────────────────
 function InfoRow({ label, value }: { label: string; value?: string | null }) {
   if (!value) return null;
@@ -36,53 +38,21 @@ function Section({ title, icon, children }: { title: string; icon: React.ReactNo
 }
 
 function DocLink({ url, label, isVat = false }: { url: string; label: string; isVat?: boolean }) {
-  const [loading, setLoading] = useState(false);
-
-  const handleOpen = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    if (loading) return;
-    setLoading(true);
-    try {
-      const token = localStorage.getItem('accessToken');
-      const res = await fetch(url, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (!res.ok) {
-        const isNotFound = res.status === 404;
-        alert(isNotFound
-          ? 'Document not found. It may have been lost during a previous server deployment.'
-          : `Failed to open document (${res.status}).`);
-        return;
-      }
-      const blob = await res.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      window.open(blobUrl, '_blank', 'noopener,noreferrer');
-      // Revoke after a short delay to free memory
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
-    } catch {
-      alert('Failed to open document. Please check your connection.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
-    <button
-      onClick={handleOpen}
-      disabled={loading}
-      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all hover:shadow-sm disabled:opacity-60 disabled:cursor-wait ${
+    <a
+      href={`${apiBase}${url}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-all hover:shadow-sm ${
         isVat
           ? 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100'
           : 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100'
       }`}
     >
       <FileText className="w-4 h-4 flex-shrink-0" />
-      <span className="text-sm font-medium flex-1 text-left">{label}</span>
-      {loading
-        ? <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin flex-shrink-0" />
-        : <ExternalLink className="w-3.5 h-3.5 flex-shrink-0 opacity-60" />
-      }
-    </button>
+      <span className="text-sm font-medium flex-1">{label}</span>
+      <ExternalLink className="w-3.5 h-3.5 flex-shrink-0 opacity-60" />
+    </a>
   );
 }
 
