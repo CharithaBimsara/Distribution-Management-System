@@ -1,8 +1,7 @@
 ﻿import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
 import { customerRegistrationApi } from '../../services/api/customerRegistrationApi';
-import { MapPin, Phone, Building2, UserCircle, Mail, AlertTriangle, FileUp, Check, ChevronLeft, ChevronRight, Building } from 'lucide-react';
+import { Phone, Building2, UserCircle, Mail, AlertTriangle, FileUp, Check, ChevronLeft, ChevronRight, Building } from 'lucide-react';
 
 // Brand Primary Color from the logo
 const brandPrimary = '#C15B3E';
@@ -34,34 +33,6 @@ function Field({
         required={required}
         className={`${inputCls} ${error ? 'border-red-300 focus:border-red-400 focus:ring-red-100' : ''}`}
       />
-      {error && <p className="text-xs text-red-600 mt-1.5 font-medium flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> {error}</p>}
-    </div>
-  );
-}
-
-function SelectField({
-  label, name, value, onChange, children, required = false, disabled = false, error,
-}: {
-  label: string; name: string; value: string;
-  onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
-  required?: boolean;
-  disabled?: boolean;
-  error?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div>
-      <label className={labelCls}>
-        {label}
-        {required && <span className="text-red-500 ml-1.5">*</span>}
-      </label>
-      <select
-        name={name} value={value} onChange={onChange}
-        disabled={disabled}
-        className={`${inputCls} appearance-none ${error ? 'border-red-300 focus:border-red-400 focus:ring-red-100' : ''}`}
-      >
-        {children}
-      </select>
       {error && <p className="text-xs text-red-600 mt-1.5 font-medium flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> {error}</p>}
     </div>
   );
@@ -162,8 +133,8 @@ interface FormState {
   customerName: string; registeredAddress: string; incorporateDate: string;
   businessRegistrationNumber: string;
   businessName: string; businessLocation: string; telephone: string; email: string; bankBranch: string;
-  regionId: string; subRegionId: string;
   province: string; town: string;
+  preferredUsername: string; preferredPassword: string;
   proprietorName: string; proprietorTp: string; proprietorEmail: string;
   managerName: string; managerTp: string; managerEmail: string;
   chefName: string; chefTp: string; chefEmail: string;
@@ -199,8 +170,8 @@ export default function CustomerRegistration() {
     customerName: '', registeredAddress: '', incorporateDate: '',
     businessRegistrationNumber: '',
     businessName: '', businessLocation: '', telephone: '', email: '', bankBranch: '',
-    regionId: '', subRegionId: '',
     province: '', town: '',
+    preferredUsername: '', preferredPassword: '',
     proprietorName: '', proprietorTp: '', proprietorEmail: '',
     managerName: '', managerTp: '', managerEmail: '',
     chefName: '', chefTp: '', chefEmail: '',
@@ -208,29 +179,6 @@ export default function CustomerRegistration() {
     accountantName: '', accountantTp: '', accountantEmail: '',
   });
   const [files, setFiles] = useState<FilesState>({});
-
-  const {
-    data: regions,
-    isLoading: regionsLoading,
-    isError: regionsError,
-    refetch: refetchRegions,
-  } = useQuery({
-    queryKey: ['public-registration-regions'],
-    queryFn: () => customerRegistrationApi.getPublicRegions().then(r => r.data.data || []),
-    retry: 1,
-  });
-
-  const {
-    data: subRegions,
-    isLoading: subRegionsLoading,
-    isError: subRegionsError,
-    refetch: refetchSubRegions,
-  } = useQuery({
-    queryKey: ['public-registration-sub-regions', form.regionId],
-    queryFn: () => customerRegistrationApi.getPublicSubRegions(form.regionId).then(r => r.data.data || []),
-    enabled: !!form.regionId,
-    retry: 1,
-  });
 
   const upd = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -241,12 +189,7 @@ export default function CustomerRegistration() {
       delete next[name];
       return next;
     });
-    setForm((f) => {
-      if (name === 'regionId') {
-        return { ...f, regionId: value, subRegionId: '' };
-      }
-      return { ...f, [name]: value };
-    });
+    setForm((f) => ({ ...f, [name]: value }));
   };
 
   const setFile = (name: string, file: File | null) =>
@@ -295,7 +238,6 @@ export default function CustomerRegistration() {
       if (form.email.trim() && !EMAIL_REGEX.test(form.email.trim())) {
         errors.email = 'Please enter a valid email address.';
       }
-      if (!form.regionId) errors.regionId = 'Please select a region.';
       return {
         fieldErrors: errors,
         formError: Object.keys(errors).length > 0 ? 'Please correct the highlighted fields.' : '',
@@ -508,20 +450,23 @@ export default function CustomerRegistration() {
                 </div>
                 <Field label="Operating Email Address (Optional)" name="email" value={form.email} onChange={upd} type="email" error={fieldErrors.email} placeholder="For receiving invoices & updates (optional)" />
                 <Field label="Operating Bank & Branch" name="bankBranch" value={form.bankBranch} onChange={upd} placeholder="Bank name and branch for payments" />
-                
-                <SelectField label="Region" name="regionId" value={form.regionId} onChange={upd} required error={fieldErrors.regionId}>
-                  <option value="">{regionsLoading ? 'Loading regions...' : 'Select your operating Region'}</option>
-                  {(regions || []).map((r: any) => (
-                    <option key={r.id} value={r.id} className="text-slate-900 bg-white">{r.name}</option>
-                  ))}
-                </SelectField>
-                <SelectField label="Sub Region" name="subRegionId" value={form.subRegionId} onChange={upd} disabled={!form.regionId}>
-                  <option value="">{subRegionsLoading ? 'Loading sub regions...' : 'Select Sub Region (optional)'}</option>
-                  {(subRegions || []).map((s: any) => (
-                    <option key={s.id} value={s.id} className="text-slate-900 bg-white">{s.name}</option>
-                  ))}
-                </SelectField>
                 <Field label="Town" name="town" value={form.town} onChange={upd} placeholder="Enter nearest major town" />
+              </div>
+
+              {/* ── Preferred Account Credentials ── */}
+              <div className="pt-2">
+                <div className="flex items-center gap-2 mb-4 pb-2 border-b border-slate-100">
+                  <UserCircle className="w-4 h-4 text-slate-400" strokeWidth={1.5} />
+                  <h3 className="text-sm font-bold text-slate-700">Preferred Login Credentials</h3>
+                  <span className="text-xs text-slate-400 font-normal">(optional — for admin reference)</span>
+                </div>
+                <p className="text-xs text-slate-500 mb-4 leading-relaxed">
+                  Enter your preferred username and password for your account. The admin will review and may use these or set different ones when approving your registration.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-5">
+                  <Field label="Preferred Username" name="preferredUsername" value={form.preferredUsername} onChange={upd} placeholder="e.g. charitha@123" />
+                  <Field label="Preferred Password" name="preferredPassword" value={form.preferredPassword} onChange={upd} type="password" placeholder="Your preferred password" />
+                </div>
               </div>
             </div>
           )}
@@ -603,8 +548,6 @@ export default function CustomerRegistration() {
                     ['Business Registration Number', form.businessRegistrationNumber],
                     ['Business/Shop Name', form.businessName], ['Telephone/Hotline', form.telephone], ['Business Location Address', form.businessLocation],
                     ['operating Email', form.email], ['Bank & Branch', form.bankBranch],
-                    ['Region', regions?.find((r:any)=>r.id===form.regionId)?.name],
-                    ['Sub Region', subRegions?.find((s:any)=>s.id===form.subRegionId)?.name],
                     ['Town', form.town],
                   ].filter(([, v]) => v).map(([k, v]) => (
                     <div key={k} className="flex flex-col sm:flex-row sm:justify-between items-start gap-1 sm:gap-4 py-2.5 border-b border-slate-50 last:border-none">
@@ -652,6 +595,31 @@ export default function CustomerRegistration() {
                     </div>
                   )}
                 </div>
+
+                {/* Preferred credentials review */}
+                {(form.preferredUsername || form.preferredPassword) && (
+                  <div className={`${cardCls} p-5 border-amber-200 bg-amber-50/40`}>
+                    <div className="flex items-center gap-2 mb-4 pb-3 border-b border-amber-100">
+                      <UserCircle className="w-4 h-4 text-amber-600" />
+                      <h3 className="text-xs font-bold text-amber-700 uppercase tracking-wider">Preferred Login Credentials</h3>
+                    </div>
+                    <p className="text-xs text-amber-600 mb-3">These are shared with the admin for reference when setting up your account.</p>
+                    <div className="space-y-2">
+                      {form.preferredUsername && (
+                        <div className="flex flex-col sm:flex-row sm:justify-between items-start gap-1 sm:gap-4 py-2.5 border-b border-amber-100 last:border-none">
+                          <span className="text-xs text-amber-600 font-medium">Preferred Username</span>
+                          <span className="text-sm text-slate-900 font-semibold sm:text-right">{form.preferredUsername}</span>
+                        </div>
+                      )}
+                      {form.preferredPassword && (
+                        <div className="flex flex-col sm:flex-row sm:justify-between items-start gap-1 sm:gap-4 py-2.5 last:border-none">
+                          <span className="text-xs text-amber-600 font-medium">Preferred Password</span>
+                          <span className="text-sm text-slate-900 font-semibold sm:text-right font-mono tracking-wide">{'•'.repeat(form.preferredPassword.length)}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 <div
                   onClick={() => {

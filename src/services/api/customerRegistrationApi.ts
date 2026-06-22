@@ -47,6 +47,8 @@ export interface RegistrationRequest {
   assignedRepName?: string;
   reviewedAt?: string;
   createdAt: string;
+  preferredUsername?: string;
+  preferredPassword?: string;
 }
 
 export interface CoordinatorOption {
@@ -80,6 +82,7 @@ export const customerRegistrationApi = {
   /** Admin: approve or reject a request */
   adminReview: (id: string, data: {
     action: 'Approve' | 'Reject';
+    username?: string;
     password?: string;
     rejectionReason?: string;
     reviewNotes?: string;

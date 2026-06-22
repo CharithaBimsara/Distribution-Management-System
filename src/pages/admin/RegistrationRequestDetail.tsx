@@ -36,21 +36,53 @@ function Section({ title, icon, children }: { title: string; icon: React.ReactNo
 }
 
 function DocLink({ url, label, isVat = false }: { url: string; label: string; isVat?: boolean }) {
+  const [loading, setLoading] = useState(false);
+
+  const handleOpen = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (loading) return;
+    setLoading(true);
+    try {
+      const token = localStorage.getItem('accessToken');
+      const res = await fetch(url, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        const isNotFound = res.status === 404;
+        alert(isNotFound
+          ? 'Document not found. It may have been lost during a previous server deployment.'
+          : `Failed to open document (${res.status}).`);
+        return;
+      }
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      window.open(blobUrl, '_blank', 'noopener,noreferrer');
+      // Revoke after a short delay to free memory
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+    } catch {
+      alert('Failed to open document. Please check your connection.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <a
-      href={url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-all hover:shadow-sm ${
+    <button
+      onClick={handleOpen}
+      disabled={loading}
+      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all hover:shadow-sm disabled:opacity-60 disabled:cursor-wait ${
         isVat
           ? 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100'
           : 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100'
       }`}
     >
       <FileText className="w-4 h-4 flex-shrink-0" />
-      <span className="text-sm font-medium flex-1">{label}</span>
-      <ExternalLink className="w-3.5 h-3.5 flex-shrink-0 opacity-60" />
-    </a>
+      <span className="text-sm font-medium flex-1 text-left">{label}</span>
+      {loading
+        ? <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin flex-shrink-0" />
+        : <ExternalLink className="w-3.5 h-3.5 flex-shrink-0 opacity-60" />
+      }
+    </button>
   );
 }
 
@@ -61,6 +93,7 @@ export default function RegistrationRequestDetail() {
   const queryClient = useQueryClient();
 
   const [reviewAction, setReviewAction] = useState<'Approve' | 'Reject' | null>(null);
+  const [reviewUsername, setReviewUsername] = useState('');
   const [reviewPassword, setReviewPassword] = useState('');
   const [reviewNotes, setReviewNotes] = useState('');
   const [reviewRejectionReason, setReviewRejectionReason] = useState('');
@@ -79,6 +112,9 @@ export default function RegistrationRequestDetail() {
       setSelectedRegionId(request.regionId || '');
       setSelectedSubRegionId(request.subRegionId || '');
       setSelectedCoordinatorId(request.assignedCoordinatorId || '');
+      // Pre-fill credentials from customer's preferences
+      setReviewUsername(request.preferredUsername || request.businessRegistrationNumber || '');
+      setReviewPassword(request.preferredPassword || '');
     }
   }, [request]);
 
@@ -130,6 +166,7 @@ export default function RegistrationRequestDetail() {
     if (!reviewAction) return;
     reviewMutation.mutate({
       action: reviewAction,
+      username: reviewAction === 'Approve' ? reviewUsername || undefined : undefined,
       password: reviewAction === 'Approve' ? reviewPassword : undefined,
       rejectionReason: reviewAction === 'Reject' ? reviewRejectionReason : undefined,
       reviewNotes: reviewNotes || undefined,
@@ -237,6 +274,30 @@ export default function RegistrationRequestDetail() {
             <InfoRow label="Email" value={r.email} />
             <InfoRow label="Bank & Branch" value={r.bankBranch} />
             <InfoRow label="Incorporate Date" value={r.incorporateDate ? formatDate(r.incorporateDate) : undefined} />
+            {/* Preferred credentials — shown for admin reference */}
+            {(r.preferredUsername || r.preferredPassword) && (
+              <div className="mt-3 pt-3 border-t border-slate-100">
+                <p className="text-xs font-bold text-amber-600 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+                  <span className="inline-block w-2 h-2 rounded-full bg-amber-400" />
+                  Customer's Preferred Login Credentials
+                </p>
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2">
+                  {r.preferredUsername && (
+                    <div className="flex justify-between items-center gap-4">
+                      <span className="text-xs text-amber-600 font-medium">Preferred Username</span>
+                      <span className="text-sm text-slate-900 font-semibold font-mono">{r.preferredUsername}</span>
+                    </div>
+                  )}
+                  {r.preferredPassword && (
+                    <div className="flex justify-between items-center gap-4">
+                      <span className="text-xs text-amber-600 font-medium">Preferred Password</span>
+                      <span className="text-sm text-slate-900 font-semibold font-mono">{r.preferredPassword}</span>
+                    </div>
+                  )}
+                  <p className="text-[10px] text-amber-500 pt-1">These are the customer's suggestions. You can use them or set different credentials when approving.</p>
+                </div>
+              </div>
+            )}
           </Section>
 
           {/* Contact Persons */}
@@ -369,15 +430,45 @@ export default function RegistrationRequestDetail() {
                   <div className="space-y-3">
                     <div>
                       <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
+                        Account Username <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={reviewUsername}
+                        onChange={e => setReviewUsername(e.target.value)}
+                        placeholder="Set account username"
+                        className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white outline-none focus:ring-2 focus:ring-indigo-500/15 focus:border-indigo-300 transition font-mono"
+                      />
+                      {r.preferredUsername && reviewUsername !== r.preferredUsername && (
+                        <button
+                          type="button"
+                          onClick={() => setReviewUsername(r.preferredUsername!)}
+                          className="mt-1 text-[11px] text-amber-600 hover:underline"
+                        >
+                          ← Use customer's preferred: <strong>{r.preferredUsername}</strong>
+                        </button>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
                         Account Password <span className="text-red-500">*</span>
                       </label>
                       <input
-                        type="password"
+                        type="text"
                         value={reviewPassword}
                         onChange={e => setReviewPassword(e.target.value)}
                         placeholder="Set permanent password"
-                        className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white outline-none focus:ring-2 focus:ring-indigo-500/15 focus:border-indigo-300 transition"
+                        className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white outline-none focus:ring-2 focus:ring-indigo-500/15 focus:border-indigo-300 transition font-mono"
                       />
+                      {r.preferredPassword && reviewPassword !== r.preferredPassword && (
+                        <button
+                          type="button"
+                          onClick={() => setReviewPassword(r.preferredPassword!)}
+                          className="mt-1 text-[11px] text-amber-600 hover:underline"
+                        >
+                          ← Use customer's preferred password
+                        </button>
+                      )}
                     </div>
 
                     {/* Region */}
@@ -474,7 +565,7 @@ export default function RegistrationRequestDetail() {
                   onClick={handleSubmit}
                   disabled={
                     !reviewAction
-                    || (reviewAction === 'Approve' && !reviewPassword.trim())
+                    || (reviewAction === 'Approve' && (!reviewUsername.trim() || !reviewPassword.trim()))
                     || (reviewAction === 'Reject' && !reviewRejectionReason.trim())
                     || reviewMutation.isPending
                   }

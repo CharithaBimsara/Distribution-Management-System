@@ -833,24 +833,27 @@ export default function AdminCustomerDetail() {
                   <div className="mt-3 pt-3 border-t border-slate-100">
                     <p className="text-xs text-slate-400 uppercase tracking-wider mb-2">Submitted Documents</p>
                     <div className="flex flex-wrap gap-2">
-                      {summary.registrationRequest.businessRegDocPath && (
-                        <a href={summary.registrationRequest.businessRegDocPath} target="_blank" rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-medium border border-indigo-200 hover:bg-indigo-100 transition">
-                          <FileTextIcon className="w-3.5 h-3.5" /> Business Reg Doc
-                        </a>
-                      )}
-                      {summary.registrationRequest.businessAddressDocPath && (
-                        <a href={summary.registrationRequest.businessAddressDocPath} target="_blank" rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-medium border border-indigo-200 hover:bg-indigo-100 transition">
-                          <FileTextIcon className="w-3.5 h-3.5" /> Business Address Doc
-                        </a>
-                      )}
-                      {summary.registrationRequest.vatDocPath && (
-                        <a href={summary.registrationRequest.vatDocPath} target="_blank" rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-medium border border-indigo-200 hover:bg-indigo-100 transition">
-                          <FileTextIcon className="w-3.5 h-3.5" /> VAT Doc
-                        </a>
-                      )}
+                      {[
+                        { url: summary.registrationRequest.businessRegDocPath, label: 'Business Reg Doc' },
+                        { url: summary.registrationRequest.businessAddressDocPath, label: 'Business Address Doc' },
+                        { url: summary.registrationRequest.vatDocPath, label: 'VAT Doc' },
+                      ].filter(d => d.url).map(({ url, label }) => (
+                        <button
+                          key={label}
+                          type="button"
+                          onClick={async () => {
+                            const token = localStorage.getItem('accessToken');
+                            const res = await fetch(url!, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+                            if (!res.ok) { alert(res.status === 404 ? 'Document not found (may have been lost in a previous deployment).' : `Failed to open (${res.status}).`); return; }
+                            const blobUrl = URL.createObjectURL(await res.blob());
+                            window.open(blobUrl, '_blank', 'noopener,noreferrer');
+                            setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-medium border border-indigo-200 hover:bg-indigo-100 transition"
+                        >
+                          <FileTextIcon className="w-3.5 h-3.5" /> {label}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 )}
@@ -885,14 +888,20 @@ export default function AdminCustomerDetail() {
                     <div key={key} className="rounded-xl border-2 border-dashed border-slate-200 hover:border-indigo-300 p-3 transition-colors">
                       <p className="text-xs font-semibold text-slate-600 mb-1.5">{label}</p>
                       {currentPath && (
-                        <a
-                          href={currentPath}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const token = localStorage.getItem('accessToken');
+                            const res = await fetch(currentPath, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+                            if (!res.ok) { alert(res.status === 404 ? 'Document not found.' : `Error ${res.status}.`); return; }
+                            const blobUrl = URL.createObjectURL(await res.blob());
+                            window.open(blobUrl, '_blank', 'noopener,noreferrer');
+                            setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+                          }}
                           className="inline-flex items-center gap-1 text-[10px] text-indigo-600 hover:underline mb-1.5"
                         >
                           <FileTextIcon className="w-3 h-3" /> View current
-                        </a>
+                        </button>
                       )}
                       {!currentPath && (
                         <p className="text-[10px] text-slate-400 mb-1.5">No document uploaded yet</p>
