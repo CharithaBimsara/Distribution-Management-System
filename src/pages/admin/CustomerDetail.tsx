@@ -8,6 +8,158 @@ const apiBase = import.meta.env.VITE_API_URL?.replace('/api', '') || '';
 // Normalize both old absolute URLs (https://charitha.runasp.net/...) and new relative paths (/uploads/...)
 const resolveUploadUrl = (url: string) =>
   url.startsWith('/') ? `${apiBase}${url}` : url.replace(/^https?:\/\/[^/]+/, apiBase);
+
+// ─── Customer ZIP Export ──────────────────────────────────────────────────────
+async function handleCustomerExport(summary: any) {
+  if (!summary) return;
+
+  // jsPDF is already bundled; JSZip loaded from CDN (no npm install needed)
+  const { jsPDF } = await import('jspdf');
+  const JSZip: any = await new Promise((resolve, reject) => {
+    if ((window as any).JSZip) { resolve((window as any).JSZip); return; }
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
+    s.onload = () => resolve((window as any).JSZip);
+    s.onerror = () => reject(new Error('JSZip load failed'));
+    document.head.appendChild(s);
+  });
+
+  const { customer, registrationRequest, totalPurchases, totalOrders } = summary;
+  const doc = new jsPDF();
+  let y = 20;
+
+  const checkPage = () => { if (y > 270) { doc.addPage(); y = 20; } };
+  const sectionTitle = (t: string) => {
+    checkPage();
+    doc.setFontSize(12); doc.setTextColor(79, 70, 229); doc.setFont('helvetica', 'bold');
+    doc.text(t, 14, y); y += 2;
+    doc.setDrawColor(226, 232, 240); doc.line(14, y, 196, y); y += 7;
+  };
+  const field = (label: string, value: string | null | undefined) => {
+    if (!value) return; checkPage();
+    doc.setFontSize(9); doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 116, 139); doc.text(label, 14, y);
+    doc.setTextColor(30, 41, 59);
+    const lines = doc.splitTextToSize(String(value), 112);
+    doc.text(lines, 88, y); y += Math.max(lines.length * 5, 5) + 1;
+  };
+
+  // ── Title ──────────────────────────────────────────────────────────────────
+  doc.setFontSize(18); doc.setTextColor(79, 70, 229); doc.setFont('helvetica', 'bold');
+  doc.text('Customer Profile', 105, y, { align: 'center' }); y += 8;
+  doc.setFontSize(9); doc.setTextColor(100, 116, 139); doc.setFont('helvetica', 'normal');
+  doc.text(`Generated: ${new Date().toLocaleString()}`, 105, y, { align: 'center' }); y += 10;
+  doc.setDrawColor(226, 232, 240); doc.line(14, y, 196, y); y += 10;
+
+  // ── General Information ────────────────────────────────────────────────────
+  sectionTitle('General Information');
+  field('Shop Name', customer?.shopName);
+  field('Customer Type', registrationRequest?.customerType ?? 'NonTax');
+  field('Business Reg #', customer?.businessRegistrationNumber);
+  field('Phone', customer?.phoneNumber);
+  field('Email', customer?.email);
+  field('Address', [customer?.street, customer?.city, customer?.state].filter(Boolean).join(', '));
+  field('Status', customer?.isActive ? 'Active' : 'Inactive');
+  field('Approval Status', customer?.approvalStatus);
+  field('Joined', customer?.createdAt ? new Date(customer.createdAt).toLocaleDateString() : '');
+  y += 4;
+
+  // ── Assignment ─────────────────────────────────────────────────────────────
+  sectionTitle('Assignment');
+  field('Region', customer?.regionName);
+  field('Sub-Region', customer?.subRegionName);
+  field('Coordinator', customer?.assignedCoordinatorName);
+  y += 4;
+
+  // ── Credentials ───────────────────────────────────────────────────────────
+  sectionTitle('Credentials');
+  field('Username', customer?.username);
+  field('Password', customer?.temporaryPassword);
+  y += 4;
+
+  // ── Order Statistics ──────────────────────────────────────────────────────
+  sectionTitle('Order Statistics');
+  field('Total Orders', String(totalOrders ?? 0));
+  field('Total Purchases (LKR)', Number(totalPurchases ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+  y += 4;
+
+  // ── Registration & Professional Details ───────────────────────────────────
+  if (registrationRequest) {
+    sectionTitle('Registration & Professional Details');
+    field('Customer Name', registrationRequest.customerName);
+    field('Registered Address', registrationRequest.registeredAddress);
+    if (registrationRequest.incorporateDate)
+      field('Incorporate Date', new Date(registrationRequest.incorporateDate).toLocaleDateString());
+    field('Business Name', registrationRequest.businessName);
+    field('Business Location', registrationRequest.businessLocation);
+    field('Bank Branch', registrationRequest.bankBranch);
+    field('Telephone', registrationRequest.telephone);
+    field('Email', registrationRequest.email);
+    y += 4;
+
+    if (registrationRequest.proprietorName || registrationRequest.managerName) {
+      sectionTitle('Key Contacts');
+      if (registrationRequest.proprietorName) field('Proprietor', `${registrationRequest.proprietorName}${registrationRequest.proprietorTp ? '  ·  ' + registrationRequest.proprietorTp : ''}`);
+      if (registrationRequest.managerName) field('Manager', `${registrationRequest.managerName}${registrationRequest.managerTp ? '  ·  ' + registrationRequest.managerTp : ''}`);
+      if (registrationRequest.chefName) field('Chef', `${registrationRequest.chefName}${registrationRequest.chefTp ? '  ·  ' + registrationRequest.chefTp : ''}`);
+      if (registrationRequest.purchasingName) field('Purchasing', `${registrationRequest.purchasingName}${registrationRequest.purchasingTp ? '  ·  ' + registrationRequest.purchasingTp : ''}`);
+      if (registrationRequest.accountantName) field('Accountant', `${registrationRequest.accountantName}${registrationRequest.accountantTp ? '  ·  ' + registrationRequest.accountantTp : ''}`);
+      y += 4;
+    }
+
+    const docNames = [
+      registrationRequest.businessRegDocPath && 'Business Registration Document',
+      registrationRequest.businessAddressDocPath && 'Business Address Document',
+      registrationRequest.vatDocPath && 'VAT Registration Document',
+    ].filter(Boolean) as string[];
+    if (docNames.length > 0) {
+      sectionTitle('Attached Documents');
+      docNames.forEach(d => {
+        checkPage();
+        doc.setFontSize(9); doc.setTextColor(30, 41, 59);
+        doc.text(`\u2022 ${d}  (see documents/ folder in ZIP)`, 20, y); y += 6;
+      });
+    }
+  }
+
+  const pdfBlob = doc.output('blob');
+
+  // ── Build ZIP ──────────────────────────────────────────────────────────────
+  const zip = new JSZip();
+  const safeName = (customer?.shopName ?? 'customer').replace(/[^a-z0-9_\-]/gi, '_');
+  zip.file(`${safeName}-details.pdf`, pdfBlob);
+
+  if (registrationRequest) {
+    const base = (import.meta as any).env?.VITE_API_URL?.replace('/api', '') ?? '';
+    const resolveDoc = (u: string) => u.startsWith('/') ? `${base}${u}` : u.replace(/^https?:\/\/[^/]+/, base);
+    const docsFolder = zip.folder('documents')!;
+    await Promise.all(
+      [
+        { path: registrationRequest.businessRegDocPath, name: 'business-reg' },
+        { path: registrationRequest.businessAddressDocPath, name: 'business-address' },
+        { path: registrationRequest.vatDocPath, name: 'vat-doc' },
+      ]
+        .filter(d => d.path)
+        .map(async ({ path, name }) => {
+          try {
+            const res = await fetch(resolveDoc(path as string));
+            if (!res.ok) return;
+            const blob = await res.blob();
+            const ext = (path as string).split('.').pop() ?? 'bin';
+            docsFolder.file(`${name}.${ext}`, blob);
+          } catch { /* skip missing docs */ }
+        })
+    );
+  }
+
+  const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(zipBlob);
+  a.download = `${safeName}-export.zip`;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+}
 import { adminGetAllCoordinators } from '../../services/api/coordinatorApi';
 import { authApi } from '../../services/api/authApi';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -560,6 +712,22 @@ export default function AdminCustomerDetail() {
         {!isCoordinatorView ? (
           <>
             <button
+              onClick={async (e) => {
+                const btn = e.currentTarget;
+                btn.disabled = true;
+                const orig = btn.innerHTML;
+                btn.innerHTML = '<svg class="w-4 h-4 animate-spin inline-block" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>&nbsp;Exporting…';
+                try { await handleCustomerExport(summary); }
+                catch { alert('Export failed. Please try again.'); }
+                finally { btn.innerHTML = orig; btn.disabled = false; }
+              }}
+              className="hidden lg:inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition disabled:opacity-60"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+              Export ZIP
+            </button>
+
+            <button
               onClick={() => navigate(`/admin/customers/${id}/special-prices`)}
               className="hidden lg:inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition"
             >
@@ -856,6 +1024,8 @@ export default function AdminCustomerDetail() {
                           <FileTextIcon className="w-3.5 h-3.5" /> VAT Doc
                         </a>
                       )}
+                     
+                      
                     </div>
                   </div>
                 )}
@@ -1205,6 +1375,20 @@ export default function AdminCustomerDetail() {
                 >
                   <DollarSign className="w-4 h-4 inline mr-2" />
                   Special Prices
+                </button>
+
+                <button
+                  onClick={async (e) => {
+                    const btn = e.currentTarget;
+                    btn.disabled = true;
+                    try { await handleCustomerExport(summary); }
+                    catch { alert('Export failed. Please try again.'); }
+                    finally { btn.disabled = false; }
+                  }}
+                  className="lg:hidden w-full mt-2 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold disabled:opacity-60"
+                >
+                  <svg className="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                  Export ZIP
                 </button>
               </>
             ) : (
