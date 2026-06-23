@@ -72,6 +72,11 @@ export const productsApi = {
   repCatalog: (params?: Record<string, unknown>) =>
     api.get<ApiResponse<PagedResult<Product>>>('/rep/products/catalog', { params }),
 
+  repCatalogAll: () =>
+    fetchAllPagedProducts((page, pageSize) =>
+      api.get<ApiResponse<PagedResult<Product>>>('/rep/products/catalog', { params: { page, pageSize } })
+    ),
+
   // Customer catalog
   customerCatalog: (params?: Record<string, unknown>) =>
     api.get<ApiResponse<PagedResult<Product>>>('/customer/products', { params }),

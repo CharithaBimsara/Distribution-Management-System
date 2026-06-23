@@ -908,8 +908,14 @@ export default function AdminQuotations() {
                               )}
 
                               {/* Totals */}
-                              <div className="flex justify-end ">
-                                <div className="w-full max-w-md space-y-1.5 text-sm bg-white border border-slate-200 rounded-xl p-3 shadow-sm">
+                              <div className="flex items-start gap-4 flex-wrap">
+                                {q.notes && (
+                                  <div className="flex-1 min-w-[180px] max-w-sm bg-violet-50 border border-violet-200 rounded-xl p-3.5">
+                                    <p className="text-[10px] font-bold text-violet-600 uppercase tracking-wider mb-1.5">Special Notes</p>
+                                    <p className="text-sm text-slate-700 whitespace-pre-wrap break-words leading-relaxed">{q.notes}</p>
+                                  </div>
+                                )}
+                                <div className="w-full max-w-md space-y-1.5 text-sm bg-white border border-slate-200 rounded-xl p-3 shadow-sm ml-auto">
                                   <div className="flex items-center justify-between gap-8 font-medium text-slate-500"><span>Gross Amount</span><span className="whitespace-nowrap tabular-nums">{fmtAmt(calcSubtotal)}</span></div>
                                   <div className="flex items-center justify-between gap-8 font-medium text-orange-500 pb-3 border-b border-slate-100"><span>Discount Amount</span><span className="whitespace-nowrap tabular-nums">-{fmtAmt(calcTotalDiscount)}</span></div>
                                   {isTax !== false && (

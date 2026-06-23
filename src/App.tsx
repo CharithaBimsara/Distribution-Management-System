@@ -73,6 +73,8 @@ import RepQuotations from './pages/rep/Quotations';
 import RepCreateQuotation from './pages/rep/RepCreateQuotation';
 import RepProfile from './pages/rep/RepProfile';
 import RepProfileEdit from './pages/rep/RepProfileEdit';
+import RepProducts from './pages/rep/RepProducts';
+import RepSelectQuotationProducts from './pages/rep/RepSelectQuotationProducts';
 
 // Coordinator pages
 import CoordinatorDashboard from './pages/coordinator/Dashboard';
@@ -197,6 +199,8 @@ export default function App() {
           <Route path="support/new" element={<RepCreateSupport />} />
           <Route path="quotations" element={<RepQuotations />} />
           <Route path="quotations/new" element={<RepCreateQuotation />} />
+          <Route path="quotations/new/products" element={<RepSelectQuotationProducts />} />
+          <Route path="products" element={<RepProducts />} />
           <Route path="profile" element={<RepProfile />} />
           <Route path="profile/edit" element={<RepProfileEdit />} />
         </Route>

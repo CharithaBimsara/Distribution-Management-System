@@ -217,6 +217,12 @@ export default function CoordinatorQuotations() {
 
                             {isPendingStatus(q.status) ? (
                               <>
+                                {q.notes && (
+                                  <div className="mb-4 bg-violet-50 border border-violet-200 rounded-xl p-3.5">
+                                    <p className="text-[10px] font-bold text-violet-600 uppercase tracking-wider mb-1.5">Special Notes</p>
+                                    <p className="text-sm text-slate-700 whitespace-pre-wrap break-words">{q.notes}</p>
+                                  </div>
+                                )}
                                 <div className="mb-4">
                                   <label className="block text-xs font-semibold text-slate-600 mb-1">Notes (optional)</label>
                                   <textarea value={approveNotes} onChange={e => setApproveNotes(e.target.value)} rows={2} placeholder="Add notes..." className={inputCls + ' resize-none'} />
@@ -239,13 +245,21 @@ export default function CoordinatorQuotations() {
                                 </div>
                               </>
                             ) : (
-                              <div className="flex justify-end">
+                              <div className="flex flex-col gap-3">
+                                {q.notes && (
+                                  <div className="bg-violet-50 border border-violet-200 rounded-xl p-3.5">
+                                    <p className="text-[10px] font-bold text-violet-600 uppercase tracking-wider mb-1.5">Special Notes</p>
+                                    <p className="text-sm text-slate-700 whitespace-pre-wrap break-words">{q.notes}</p>
+                                  </div>
+                                )}
+                                <div className="flex justify-end">
                                 <button
                                   onClick={() => downloadQuotationPdf(q, getIsTax(q))}
                                   className="px-4 py-2.5 border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-50 transition flex items-center justify-center gap-2"
                                 >
                                   <Download className="w-4 h-4" /> Download PDF
                                 </button>
+                                </div>
                               </div>
                             )}
                           </div>

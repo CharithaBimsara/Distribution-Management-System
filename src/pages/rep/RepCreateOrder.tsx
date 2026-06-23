@@ -7,7 +7,7 @@ import { productsApi } from '../../services/api/productsApi';
 import { formatCurrency } from '../../utils/formatters';
 import { taxCodeToRate } from '../../utils/calculations';
 import { orderDraftUtils } from '../../utils/orderDraft';
-import { ArrowLeft, User, Package, ShoppingCart, Trash2, CheckCircle, MapPin, ChevronRight, Download, Eye, Plus } from 'lucide-react';
+import { ArrowLeft, User, Package, ShoppingCart, Trash2, CheckCircle, MessageSquare, ChevronRight, Download, Eye, Plus } from 'lucide-react';
 import { downloadPurchaseOrderPdf } from '../../utils/purchaseOrderPdf';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
@@ -374,32 +374,23 @@ export default function RepCreateOrder() {
             </div>
           </div>
 
-          {/* Delivery Info */}
+          {/* Order Notes */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm">
             <div className="px-5 py-4 border-b border-slate-100">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-amber-50 flex items-center justify-center">
-                  <MapPin className="w-4 h-4 text-amber-600" />
+                <div className="w-9 h-9 rounded-lg bg-violet-50 flex items-center justify-center">
+                  <MessageSquare className="w-4 h-4 text-violet-600" />
                 </div>
                 <div>
-                  <h2 className="text-sm font-bold text-slate-900">Delivery Information</h2>
-                  <p className="text-xs text-slate-400">Optional</p>
+                  <h2 className="text-sm font-bold text-slate-900">Order Notes</h2>
+                  <p className="text-xs text-slate-400">Optional — visible to admin &amp; coordinator</p>
                 </div>
               </div>
             </div>
-            <div className="p-5 grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Address</label>
-                <input value={deliveryAddress} onChange={e => setDeliveryAddress(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 placeholder-slate-400 transition"
-                  placeholder="Enter delivery address..." />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Instructions</label>
-                <input value={deliveryNotes} onChange={e => setDeliveryNotes(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 placeholder-slate-400 transition"
-                  placeholder="Special instructions..." />
-              </div>
+            <div className="p-5">
+              <textarea value={deliveryNotes} onChange={e => setDeliveryNotes(e.target.value)} rows={3}
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400 placeholder-slate-400 transition resize-none"
+                placeholder="Add any comments or special instructions for this order..." />
             </div>
           </div>
 
@@ -576,27 +567,24 @@ export default function RepCreateOrder() {
           </div>
         </div>
 
-        {/* Delivery */}
+        {/* Order Notes */}
         {draft.customerId && draft.items.length > 0 && (
           <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-100">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center">
-                  <MapPin className="w-4 h-4 text-amber-600" />
+                <div className="w-8 h-8 rounded-lg bg-violet-50 flex items-center justify-center">
+                  <MessageSquare className="w-4 h-4 text-violet-600" />
                 </div>
                 <div>
-                  <span className="text-sm font-bold text-slate-900">Delivery</span>
+                  <span className="text-sm font-bold text-slate-900">Order Notes</span>
                   <span className="text-xs text-slate-400 ml-2">Optional</span>
                 </div>
               </div>
             </div>
-            <div className="p-4 space-y-3">
-              <input value={deliveryAddress} onChange={e => setDeliveryAddress(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400"
-                placeholder="Delivery address..." />
-              <textarea value={deliveryNotes} onChange={e => setDeliveryNotes(e.target.value)} rows={2}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm placeholder-slate-400 resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400"
-                placeholder="Special instructions..." />
+            <div className="p-4">
+              <textarea value={deliveryNotes} onChange={e => setDeliveryNotes(e.target.value)} rows={3}
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm placeholder-slate-400 resize-none focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400"
+                placeholder="Add any comments or special instructions for this order..." />
             </div>
           </div>
         )}

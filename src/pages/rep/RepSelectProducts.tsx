@@ -103,6 +103,7 @@ export default function RepSelectProducts() {
   }, [draft.items]);
 
   const handleAddToCart = (product: Product) => {
+    const allIncPrice = product.totalAmount || (product.sellingPrice || 0) + (product.taxAmount || 0);
     const item: OrderDraftItem = {
       productId: product.id,
       quantity: 1,
@@ -113,8 +114,10 @@ export default function RepSelectProducts() {
       discountPercent: product.discountPercent,
       taxCode: product.taxCode,
       taxAmount: product.taxAmount,
-      allIncPrice: product.totalAmount || undefined,
-      lineTotal: calculateLine({ rate: product.sellingPrice || 0, qty: 1, discountPercent: product.discountPercent, taxAmount: product.taxAmount }).total,
+      allIncPrice: allIncPrice || undefined,
+      lineTotal: isNonTaxCustomer
+        ? allIncPrice
+        : calculateLine({ rate: product.sellingPrice || 0, qty: 1, discountPercent: product.discountPercent, taxAmount: product.taxAmount }).total,
     };
     orderDraftUtils.addItem(item);
     setDraft(orderDraftUtils.get());
@@ -168,6 +171,8 @@ export default function RepSelectProducts() {
   };
 
   const cartCount = orderDraftUtils.getItemCount();
+  // Mobile cart total: computed from draft items (quickRows is desktop-only)
+  const cartTotal = draft.items.reduce((sum, item) => sum + (item.lineTotal ?? 0), 0);
   const quickTotalGross = quickRows.reduce((sum, r) => {
     if (!r.product) return sum;
     const pricing = getCalcInput(r.product);
@@ -223,7 +228,7 @@ export default function RepSelectProducts() {
             </div>
             <div className="flex-1 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5 text-center">
               <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider">Total</p>
-              <p className="text-lg font-bold text-emerald-700">{formatCurrency(quickTotal)}</p>
+              <p className="text-lg font-bold text-emerald-700">{formatCurrency(cartTotal)}</p>
             </div>
           </div>
         )}
@@ -372,40 +377,63 @@ export default function RepSelectProducts() {
                   </div>
                 ) : (
                   /* Mobile: Product Cards */
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
                     {data.items.map((product: Product) => {
                       const qty = getCartQty(product.id);
-                      const displayPrice = (product.sellingPrice || 0) + (isNonTaxCustomer ? (product.taxAmount || 0) : 0);
+                      const basePrice = product.sellingPrice || 0;
+                      const taxAmt = product.taxAmount || 0;
+                      const allIncPrice = product.totalAmount || (basePrice + taxAmt);
+                      const displayPrice = isNonTaxCustomer ? allIncPrice : basePrice;
+                      const hasDiscount = (product.discountPercent || 0) > 0;
                       return (
-                        <div key={product.id} className={`bg-white rounded-2xl border overflow-hidden transition-all active:scale-[0.98] ${qty > 0 ? 'border-emerald-200 ring-1 ring-emerald-100' : 'border-slate-200'}`}>
-                          <div className="p-4">
-                            <div className="flex items-start justify-between gap-2 mb-3">
+                        <div key={product.id} className={`bg-white rounded-2xl border overflow-hidden transition-all active:scale-[0.98] ${qty > 0 ? 'border-emerald-300 ring-2 ring-emerald-100 shadow-sm shadow-emerald-50' : 'border-slate-200'}`}>
+                          <div className="p-3.5">
+                            {/* Product info */}
+                            <div className="flex items-start gap-2 mb-3">
                               <div className="flex-1 min-w-0">
-                                <h3 className="text-sm font-bold text-slate-900 line-clamp-2 leading-snug">{product.name}</h3>
-                                <p className="text-[11px] text-slate-400 font-mono mt-1">{product.sku}</p>
+                                <h3 className="text-sm font-bold text-slate-900 leading-snug break-words">{product.name}</h3>
+                                <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                  <span className="text-[11px] text-slate-400 font-mono">{product.sku}</span>
+                                  {product.taxCode && (
+                                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">{product.taxCode}</span>
+                                  )}
+                                  {hasDiscount && (
+                                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">{product.discountPercent}% off</span>
+                                  )}
+                                </div>
                               </div>
-                              {product.brand && (
-                                <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-1 rounded-md shrink-0">{product.brand}</span>
+                              {qty > 0 && (
+                                <div className="shrink-0 w-7 h-7 rounded-full bg-emerald-500 flex items-center justify-center">
+                                  <span className="text-[11px] font-bold text-white">{qty}</span>
+                                </div>
                               )}
                             </div>
-                            <p className="text-xl font-bold text-emerald-600 mb-4">{formatCurrency(displayPrice)}</p>
 
+                            {/* Price */}
+                            <div className="mb-3">
+                              <span className="text-xl font-bold text-emerald-600">{formatCurrency(displayPrice)}</span>
+                              {!isNonTaxCustomer && taxAmt > 0 && (
+                                <span className="text-xs text-slate-400 ml-1.5">+{formatCurrency(taxAmt)} tax</span>
+                              )}
+                            </div>
+
+                            {/* Add/Qty controls */}
                             {qty === 0 ? (
                               <button onClick={() => handleAddToCart(product)}
-                                className="w-full py-3 bg-emerald-600 text-white font-semibold rounded-xl hover:bg-emerald-700 transition flex items-center justify-center gap-2 active:scale-[0.97]">
+                                className="w-full py-3 bg-emerald-600 text-white font-semibold rounded-xl hover:bg-emerald-700 active:bg-emerald-800 transition flex items-center justify-center gap-2 active:scale-[0.97] text-sm">
                                 <Plus className="w-4 h-4" /> Add to Cart
                               </button>
                             ) : (
                               <div className="flex items-center gap-2">
                                 <button onClick={() => handleDecrement(product.id)}
-                                  className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 rounded-xl transition flex items-center justify-center active:scale-95">
+                                  className="w-12 h-12 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 rounded-xl transition flex items-center justify-center active:scale-95 shrink-0">
                                   <Minus className="w-5 h-5 text-slate-700" />
                                 </button>
-                                <div className="px-4 py-3 bg-emerald-50 border-2 border-emerald-500 rounded-xl font-bold text-emerald-700 min-w-[3.5rem] text-center text-lg">
+                                <div className="flex-1 h-12 bg-emerald-50 border-2 border-emerald-500 rounded-xl font-bold text-emerald-700 flex items-center justify-center text-xl">
                                   {qty}
                                 </div>
                                 <button onClick={() => handleIncrement(product)}
-                                  className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 rounded-xl transition flex items-center justify-center active:scale-95">
+                                  className="w-12 h-12 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 rounded-xl transition flex items-center justify-center active:scale-95 shrink-0">
                                   <Plus className="w-5 h-5 text-white" />
                                 </button>
                               </div>
@@ -462,7 +490,7 @@ export default function RepSelectProducts() {
               </div>
               <div className="flex-1 text-left min-w-0">
                 <p className="text-[10px] font-semibold text-emerald-100 uppercase tracking-wider">{cartCount} Item{cartCount !== 1 ? 's' : ''}</p>
-                <p className="text-base font-bold">{formatCurrency(quickTotal)}</p>
+                <p className="text-base font-bold">{formatCurrency(cartTotal)}</p>
               </div>
               <span className="px-5 py-2.5 bg-white text-emerald-700 rounded-xl text-sm font-bold shrink-0">Continue</span>
             </button>
