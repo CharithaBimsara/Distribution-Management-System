@@ -7,6 +7,7 @@ import { systemConfigApi } from '../../services/api/systemConfigApi';
 import { galleryApi } from '../../services/api/galleryApi';
 import type { GalleryItem } from '../../services/api/galleryApi';
 import * as XLSX from 'xlsx';
+import { exportPriceListPdf } from '../../utils/priceListPdf';
 import { formatCurrency, formatNumber } from '../../utils/formatters';
 import { Plus, Search, Trash2, X, Layers, Package, Check, SlidersHorizontal, FileSpreadsheet, FileText, Upload, Info, ArrowUpDown, ChevronDown, Zap, Images, ImagePlus, Pencil, Eye, EyeOff } from 'lucide-react';
 import type { Product, Category, CreateProductRequest } from '../../types/product.types';
@@ -704,96 +705,7 @@ export default function AdminProducts() {
         URL.revokeObjectURL(url);
 
       } else {
-        const { jsPDF } = await import('jspdf');
-        const autoTable   = (await import('jspdf-autotable')).default;
-
-        const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-        const pageW = doc.internal.pageSize.getWidth();
-        const pageH = doc.internal.pageSize.getHeight();
-        const marginX = 14;
-
-        // ── Header block — black & white ────────────────────────────────
-        // White background (default), bottom border line
-        doc.setDrawColor(0, 0, 0);
-        doc.setLineWidth(0.4);
-        doc.line(0, 38, pageW, 38);
-
-        // Company name
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(18);
-        doc.setTextColor(0, 0, 0);
-        doc.text(companyName, marginX, 11);
-
-        // Address lines
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(9);
-        doc.setTextColor(0, 0, 0);
-        doc.text(`Registered Office: ${registeredOffice}   |   Warehouse Central: ${warehouseCentral}`, marginX, 19);
-        doc.text(`Warehouse West: ${warehouseWest}`, marginX, 25);
-        doc.text(contactVat, marginX, 31);
-
-        // Document title on right
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(13);
-        doc.setTextColor(0, 0, 0);
-        doc.text('PRODUCT PRICE LIST', pageW - marginX, 11, { align: 'right' });
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(9);
-        doc.setTextColor(0, 0, 0);
-        doc.text(`Generated: ${exportDate}    Total: ${items.length} products`, pageW - marginX, 33, { align: 'right' });
-
-        // ── Table ────────────────────────────────────────────────────────
-        const head = [['GroupName', 'Item', 'Sales Description', 'UOM', 'Price', 'SalesTax', 'All Inc Price', 'MRP']];
-
-        const body: (string | number)[][] = [];
-        for (const [group, products] of sortedGrouped) {
-          // Section header row — white bg, bold black text
-          body.push([{ content: group, colSpan: 8, styles: { fontStyle: 'bold', fillColor: [255, 255, 255], textColor: [0, 0, 0], fontSize: 10 } } as any]);
-          for (const p of products) {
-            body.push([
-              group,
-              p.sku,
-              p.name,
-              p.uom ?? '',
-              p.sellingPrice ? p.sellingPrice.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '',
-              p.taxCode || '',
-              p.totalAmount != null ? p.totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '',
-              p.mrp != null ? p.mrp.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '',
-            ]);
-          }
-        }
-
-        autoTable(doc, {
-          head,
-          body,
-          startY: 42,
-          margin: { left: marginX, right: marginX },
-          tableWidth: 'auto',
-          styles: { fontSize: 9, cellPadding: 2.8, lineColor: [0, 0, 0], lineWidth: 0.2, textColor: [0, 0, 0], fillColor: [255, 255, 255] },
-          headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], fontStyle: 'bold', fontSize: 10, halign: 'center', lineColor: [0, 0, 0], lineWidth: 0.3 },
-          alternateRowStyles: { fillColor: [255, 255, 255] },
-          columnStyles: {
-            0: { cellWidth: 'auto' },
-            1: { cellWidth: 28, halign: 'center' },
-            2: { cellWidth: 'auto' },
-            3: { cellWidth: 34, halign: 'center' },
-            4: { cellWidth: 28, halign: 'right' },
-            5: { cellWidth: 16, halign: 'center' },
-            6: { cellWidth: 32, halign: 'right' },
-            7: { cellWidth: 28, halign: 'right' },
-          },
-          didDrawPage: (hookData: any) => {
-            // Footer on every page
-            const pageNum = hookData.pageNumber;
-            const totalPages = (doc as any).internal.getNumberOfPages();
-            doc.setFontSize(8);
-            doc.setTextColor(0, 0, 0);
-            doc.text(`${companyName}  |  Product Price List  |  ${exportDate}`, marginX, pageH - 6);
-            doc.text(`Page ${pageNum} of ${totalPages}`, pageW - marginX, pageH - 6, { align: 'right' });
-          },
-        });
-
-        doc.save(`${companyName.replace(/\s+/g, '_')}_Price_List_${exportDate.replace(/\s/g, '_')}.pdf`);
+        await exportPriceListPdf(sortedGrouped);
       }
     } catch (err) {
       console.error('export failed', err);

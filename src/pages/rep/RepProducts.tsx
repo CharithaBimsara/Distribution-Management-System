@@ -6,14 +6,9 @@ import { formatCurrency } from '../../utils/formatters';
 import { Package, Search, FileDown } from 'lucide-react';
 import type { Category, Product } from '../../types/product.types';
 import toast from 'react-hot-toast';
+import { exportPriceListPdf } from '../../utils/priceListPdf';
 
 const API_BASE = import.meta.env.VITE_API_URL?.replace('/api', '') || '';
-
-const COMPANY_NAME = 'Janasiri Distribution';
-const REGISTERED_OFFICE = 'No. 205, Wattarantenna Passage, Kandy.';
-const WAREHOUSE_CENTRAL = 'No. 02, Mawilmada Road, Kandy.';
-const WAREHOUSE_WEST = 'No. 41A, Gnanathilaka Road, Mount Lavinia.';
-const CONTACT_VAT = '+94 81 495 0206  |  TP / Hotline  |  VAT: 114608394-7000';
 
 export default function RepProducts() {
   const [search, setSearch] = useState('');
@@ -78,87 +73,7 @@ export default function RepProducts() {
     if (exporting) return;
     setExporting(true);
     try {
-      const { jsPDF } = await import('jspdf');
-      const autoTable = (await import('jspdf-autotable')).default;
-
-      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-      const pageW = doc.internal.pageSize.getWidth();
-      const pageH = doc.internal.pageSize.getHeight();
-      const marginX = 14;
-      const exportDate = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-
-      // Header
-      doc.setDrawColor(0, 0, 0);
-      doc.setLineWidth(0.4);
-      doc.line(0, 38, pageW, 38);
-
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(18);
-      doc.setTextColor(0, 0, 0);
-      doc.text(COMPANY_NAME, marginX, 11);
-
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(9);
-      doc.text(`Registered Office: ${REGISTERED_OFFICE}   |   Warehouse Central: ${WAREHOUSE_CENTRAL}`, marginX, 19);
-      doc.text(`Warehouse West: ${WAREHOUSE_WEST}`, marginX, 25);
-      doc.text(CONTACT_VAT, marginX, 31);
-
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(13);
-      doc.text('PRODUCT PRICE LIST', pageW - marginX, 11, { align: 'right' });
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(9);
-      doc.text(`Generated: ${exportDate}    Total: ${allProducts.length} products`, pageW - marginX, 33, { align: 'right' });
-
-      const head = [['GroupName', 'Item', 'Sales Description', 'UOM', 'Price', 'SalesTax', 'All Inc Price', 'MRP']];
-      const body: (string | number)[][] = [];
-
-      for (const [group, products] of grouped) {
-        body.push([{ content: group, colSpan: 8, styles: { fontStyle: 'bold', fillColor: [255, 255, 255], textColor: [0, 0, 0], fontSize: 10 } }] as any);
-        for (const p of products) {
-          body.push([
-            group,
-            p.sku || '',
-            p.name,
-            p.uom ?? '',
-            p.sellingPrice ? p.sellingPrice.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '',
-            p.taxCode || '',
-            p.totalAmount != null ? p.totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '',
-            p.mrp != null ? p.mrp.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '',
-          ]);
-        }
-      }
-
-      autoTable(doc, {
-        head,
-        body,
-        startY: 42,
-        margin: { left: marginX, right: marginX },
-        tableWidth: 'auto',
-        styles: { fontSize: 9, cellPadding: 2.8, lineColor: [0, 0, 0], lineWidth: 0.2, textColor: [0, 0, 0], fillColor: [255, 255, 255] },
-        headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], fontStyle: 'bold', fontSize: 10, halign: 'center', lineColor: [0, 0, 0], lineWidth: 0.3 },
-        alternateRowStyles: { fillColor: [255, 255, 255] },
-        columnStyles: {
-          0: { cellWidth: 'auto' },
-          1: { cellWidth: 28, halign: 'center' },
-          2: { cellWidth: 'auto' },
-          3: { cellWidth: 34, halign: 'center' },
-          4: { cellWidth: 28, halign: 'right' },
-          5: { cellWidth: 16, halign: 'center' },
-          6: { cellWidth: 32, halign: 'right' },
-          7: { cellWidth: 28, halign: 'right' },
-        },
-        didDrawPage: (hookData: any) => {
-          const pageNum = hookData.pageNumber;
-          const totalPages = (doc as any).internal.getNumberOfPages();
-          doc.setFontSize(8);
-          doc.setTextColor(0, 0, 0);
-          doc.text(`${COMPANY_NAME}  |  Product Price List  |  ${exportDate}`, marginX, pageH - 6);
-          doc.text(`Page ${pageNum} of ${totalPages}`, pageW - marginX, pageH - 6, { align: 'right' });
-        },
-      });
-
-      doc.save(`${COMPANY_NAME.replace(/\s+/g, '_')}_Price_List_${exportDate.replace(/\s/g, '_')}.pdf`);
+      await exportPriceListPdf(grouped);
     } catch (err) {
       console.error('PDF export failed', err);
       toast.error('Export failed');
