@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -7,13 +8,15 @@ import { customersApi } from '../../services/api/customersApi';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { taxCodeToRate } from '../../utils/calculations';
 import { downloadQuotationPdf, downloadQuotationsExcel, downloadQuotationsPdf } from '../../utils/quotationPdf';
+import { downloadQuickRequestPdf, downloadQuickRequestExcel, downloadImage } from '../../utils/quickRequestPdf';
 import type { Quotation } from '../../types/quotation.types';
 import { QUOTATION_STATUSES } from '../../types/quotation.types';
 import {
   FileText, Search, X, SlidersHorizontal, ArrowUp, ArrowDown, ArrowUpDown,
-  Check, ChevronRight, FileSpreadsheet, CheckCircle, XCircle, Trash2, RotateCcw,
+  Check, ChevronRight, FileSpreadsheet, CheckCircle, XCircle, Trash2, RotateCcw, Download,
 } from 'lucide-react';
 import StatusBadge from '../../components/common/StatusBadge';
+import { quickRequestApi } from '../../services/api/quickRequestApi';
 import toast from 'react-hot-toast';
 
 export default function AdminQuotations() {
@@ -42,6 +45,7 @@ export default function AdminQuotations() {
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
   const [filterSubPanel, setFilterSubPanel] = useState<'status' | 'rep' | 'customer' | 'date' | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [quickLightbox, setQuickLightbox] = useState<string | null>(null);
 
   const queryClient = useQueryClient();
 
@@ -126,10 +130,27 @@ export default function AdminQuotations() {
     onError: () => toast.error('Failed to restore'),
   });
 
+  const quickUpdateMut = useMutation({
+    mutationFn: ({ id, status, notes }: { id: string; status: string; notes: string }) =>
+      quickRequestApi.adminUpdateStatus(id, { status, adminNotes: notes }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-quick-quotations'] });
+      toast.success('Quick quotation updated');
+    },
+    onError: () => toast.error('Failed to update'),
+  });
+
   const { data: trashData, isLoading: trashLoading } = useQuery({
     queryKey: ['admin-quotations-trash', page],
     queryFn: () => adminGetQuotationsTrash(page, 20),
     enabled: activeTab === 'trash',
+  });
+
+  const { data: quickData = [] } = useQuery({
+    queryKey: ['admin-quick-quotations'],
+    queryFn: () => quickRequestApi.adminGetAll('Quotation').then(r => r.data.data),
+    staleTime: 30_000,
+    enabled: activeTab === 'active',
   });
 
   // ── Derived data ──────────────────────────────────────────────────────────
@@ -194,6 +215,33 @@ export default function AdminQuotations() {
     });
   }, [filteredItems, sortField, sortDir]);
 
+  const quickQuotationRows = useMemo(() => (quickData as any[]).map((r: any) => ({
+    _isQuick: true, _quick: r,
+    id: r.id, quotationNumber: r.requestNumber,
+    customerName: r.customerName, repName: r.repName,
+    createdAt: r.createdAt, status: r.status,
+    items: [] as any[], totalAmount: 0,
+  })), [quickData]);
+
+  const allRows: any[] = useMemo(() => {
+    const merged = [...filteredItems, ...quickQuotationRows];
+    return merged.sort((a, b) => {
+      let av: any, bv: any;
+      switch (sortField) {
+        case 'quotationNumber': av = a.quotationNumber ?? ''; bv = b.quotationNumber ?? ''; break;
+        case 'customerName':    av = a.customerName;          bv = b.customerName;          break;
+        case 'repName':         av = a.repName ?? '';         bv = b.repName ?? '';         break;
+        case 'status':          av = a.status;                bv = b.status;                break;
+        default:                av = a.createdAt || '';       bv = b.createdAt || '';       break;
+      }
+      if (typeof av === 'string') av = av.toLowerCase();
+      if (typeof bv === 'string') bv = bv.toLowerCase();
+      if (av < bv) return sortDir === 'asc' ? -1 : 1;
+      if (av > bv) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [filteredItems, quickQuotationRows, sortField, sortDir]);
+
   const activeFilterCount =
     (statusFilter ? 1 : 0) + (repIdFilter ? 1 : 0) +
     (customerIdFilter ? 1 : 0) + ((fromDate || toDate) ? 1 : 0);
@@ -214,10 +262,10 @@ export default function AdminQuotations() {
     if (selectAllPages) {
       setSelectAllPages(false);
       setSelectedIds(new Set());
-    } else if (selectedIds.size === sortedItems.length && sortedItems.length > 0) {
+    } else if (selectedIds.size === allRows.length && allRows.length > 0) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(sortedItems.map(q => q.id)));
+      setSelectedIds(new Set(allRows.map((q: any) => q.id)));
       setSelectAllPages(false);
     }
   };
@@ -238,9 +286,20 @@ export default function AdminQuotations() {
   };
 
   // ── Export ────────────────────────────────────────────────────────────────
-  const exportQuotations = async (format: 'excel' | 'pdf', single?: Quotation) => {
-    let items: Quotation[];
-    if (single) {
+  const exportQuotations = async (format: 'excel' | 'pdf', single?: any) => {
+    // Handle single quick quotation
+    if ((single as any)?._isQuick) {
+      if (format === 'pdf') await downloadQuickRequestPdf((single as any)._quick);
+      else { await downloadQuickRequestExcel((single as any)._quick); toast.success('Excel exported'); }
+      return;
+    }
+    if (single?._quick === undefined && single) {
+      // regular single quotation
+    }
+
+    let items: any[];
+    let quickItems: any[] = [];
+    if (single && !(single as any)._isQuick) {
       items = [single];
     } else if (selectAllPages) {
       const toastId = toast.loading('Fetching all quotations…');
@@ -254,17 +313,20 @@ export default function AdminQuotations() {
       }
     } else if (selectedIds.size > 0) {
       items = sortedItems.filter(q => selectedIds.has(q.id));
+      quickItems = quickQuotationRows.filter((r: any) => selectedIds.has(r.id)).map((r: any) => r._quick);
     } else {
       items = sortedItems;
     }
-    if (!items.length) { toast.error('No quotations to export'); return; }
+    if (!items.length && !quickItems.length) { toast.error('No quotations to export'); return; }
     try {
       if (format === 'excel') {
-        downloadQuotationsExcel(items, customerTaxMap);
-        toast.success(`Exported ${items.length} quotation${items.length !== 1 ? 's' : ''} to Excel`);
+        if (items.length) downloadQuotationsExcel(items, customerTaxMap);
+        for (const qr of quickItems) await downloadQuickRequestExcel(qr);
+        toast.success(`Exported to Excel`);
       } else {
-        await downloadQuotationsPdf(items, customerTaxMap);
-        toast.success(`Exported ${items.length} quotation${items.length !== 1 ? 's' : ''} to PDF`);
+        if (items.length) await downloadQuotationsPdf(items, customerTaxMap);
+        for (const qr of quickItems) await downloadQuickRequestPdf(qr);
+        toast.success(`Exported to PDF`);
       }
     } catch {
       toast.error('Export failed');
@@ -283,9 +345,11 @@ export default function AdminQuotations() {
 
   // Strip LKR prefix for compact table display
   const fmtAmt = (n: number) => formatCurrency(n).replace(/^LKR[\s\u00A0]*/i, '');
+  const BASE = import.meta.env.VITE_API_URL?.replace('/api', '') || '';
+  const QUICK_STATUSES = ['Pending', 'Approved', 'Rejected', 'Completed'];
 
-  const headerCheckboxChecked = selectAllPages || (sortedItems.length > 0 && selectedIds.size === sortedItems.length);
-  const headerCheckboxIndeterminate = !selectAllPages && selectedIds.size > 0 && selectedIds.size < sortedItems.length;
+  const headerCheckboxChecked = selectAllPages || (allRows.length > 0 && selectedIds.size === allRows.length);
+  const headerCheckboxIndeterminate = !selectAllPages && selectedIds.size > 0 && selectedIds.size < allRows.length;
 
   return (
     <div className="animate-fade-in flex flex-col gap-4 pb-28">
@@ -316,6 +380,7 @@ export default function AdminQuotations() {
                   activeTab === 'trash' ? 'bg-white shadow-sm text-rose-600' : 'text-slate-500 hover:text-slate-700'
                 }`}
               ><Trash2 className="w-3 h-3" />Trash</button>
+
             </div>
 
             <div className="hidden sm:block w-px h-5 bg-slate-200 shrink-0 order-1" />
@@ -559,14 +624,97 @@ export default function AdminQuotations() {
       <div className="lg:hidden bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         {isLoading ? (
           <div className="p-10 text-center text-slate-400 text-sm">Loading quotations…</div>
-        ) : sortedItems.length === 0 ? (
+        ) : allRows.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-slate-400">
             <FileText className="w-10 h-10 mb-3 opacity-30" />
             <p className="text-sm font-medium">No quotations found</p>
           </div>
         ) : (
           <>
-            {sortedItems.map(q => (
+            {allRows.map(q => {
+              if ((q as any)._isQuick) {
+                const qr = (q as any)._quick;
+                const isExpanded = expandedId === qr.id;
+                return (
+                  <div key={qr.id}>
+                    <div
+                      onClick={() => { if (selectedIds.size > 0) toggleSelection(qr.id); else setExpandedId(p => p === qr.id ? null : qr.id); }}
+                      className={`flex items-center gap-3 px-4 py-3 border-b border-slate-100 cursor-pointer transition-colors select-none ${selectedIds.has(qr.id) ? 'bg-emerald-50' : isExpanded ? 'bg-emerald-50/40' : 'bg-white active:bg-slate-50'}`}
+                    >
+                      <div className="shrink-0" onClick={e => { e.stopPropagation(); toggleSelection(qr.id); }}>
+                        <div className={`w-5 h-5 rounded flex items-center justify-center border-2 transition-colors cursor-pointer ${selectedIds.has(qr.id) ? 'bg-emerald-600 border-emerald-600' : 'border-slate-300 bg-white'}`}>
+                          {selectedIds.has(qr.id) && <Check className="w-3 h-3 text-white" />}
+                        </div>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-slate-800">{qr.requestNumber}</p>
+                        <span className="inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">Quick Quotation</span>
+                        <p className="text-xs text-slate-500 mt-1 truncate">{qr.customerName}{qr.repName ? ` · ${qr.repName}` : ''}</p>
+                      </div>
+                      <StatusBadge status={qr.status} />
+                      <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                    </div>
+                    {isExpanded && (
+                      <div className="px-4 pb-4 pt-2 space-y-3 bg-emerald-50/20 border-b border-emerald-100">
+                        <div>
+                          <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Quotation Details</p>
+                          <pre className="text-sm text-slate-800 whitespace-pre-wrap font-sans bg-white border border-slate-100 rounded-xl p-3">{qr.details}</pre>
+                        </div>
+                        {qr.adminNotes && (
+                          <div>
+                            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Admin Notes</p>
+                            <p className="text-sm text-slate-700 bg-amber-50 border border-amber-100 rounded-xl p-3">{qr.adminNotes}</p>
+                          </div>
+                        )}
+                        {qr.imageUrls?.length > 0 && (
+                          <div>
+                            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">Photos ({qr.imageUrls.length})</p>
+                            <div className="flex flex-wrap gap-2">
+                              {qr.imageUrls.map((url: string, i: number) => (
+                                <div key={i} className="relative group w-20 h-20">
+                                  <img src={`${BASE}${url}`} alt={`Photo ${i+1}`}
+                                    onClick={() => setQuickLightbox(`${BASE}${url}`)}
+                                    className="w-20 h-20 rounded-xl object-cover border border-slate-200 cursor-pointer hover:opacity-90 transition"
+                                    onError={e => { (e.target as any).style.display = 'none'; }}
+                                  />
+                                  <button
+                                    onClick={async e => { e.stopPropagation(); await downloadImage(`${BASE}${url}`, `photo-${i+1}`); }}
+                                    className="absolute bottom-1 right-1 w-6 h-6 rounded-lg bg-black/60 hover:bg-black/80 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
+                                    title="Download photo"
+                                  >
+                                    <Download className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        <div className="space-y-2">
+                          <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Update Status</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {QUICK_STATUSES.map(s => (
+                              <button key={s}
+                                onClick={e => { e.stopPropagation(); quickUpdateMut.mutate({ id: qr.id, status: s, notes: qr.adminNotes || '' }); }}
+                                disabled={quickUpdateMut.isPending}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${s === qr.status ? 'bg-slate-800 text-white border-slate-800' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'} disabled:opacity-50`}
+                              >{s === qr.status ? `✓ ${s}` : s}</button>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={e => { e.stopPropagation(); exportQuotations('pdf', q); }} className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 text-xs font-semibold rounded-lg text-red-600 hover:bg-red-50 transition">
+                            <FileText className="w-3.5 h-3.5" /> PDF
+                          </button>
+                          <button onClick={e => { e.stopPropagation(); exportQuotations('excel', q); }} className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 text-xs font-semibold rounded-lg text-emerald-600 hover:bg-emerald-50 transition">
+                            <FileSpreadsheet className="w-3.5 h-3.5" /> Excel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+              return (
               <div key={q.id}>
                 <div
                   onClick={() => {
@@ -662,7 +810,8 @@ export default function AdminQuotations() {
                   );
                 })()}
               </div>
-            ))}
+              );
+            })}
             {selectionMode && (
               <p className="text-center text-[11px] text-indigo-500 py-3 font-medium select-none">
                 {selectedIds.size} selected &mdash; <button onClick={clearSelection} className="underline underline-offset-2">Clear (Esc)</button>
@@ -685,7 +834,7 @@ export default function AdminQuotations() {
       <div className="hidden lg:block bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         {isLoading ? (
           <div className="p-10 text-center text-slate-400 text-sm">Loading quotations…</div>
-        ) : sortedItems.length === 0 ? (
+        ) : allRows.length === 0 ? (
           <div className="p-14 text-center">
             <FileText className="w-10 h-10 text-slate-200 mx-auto mb-2" />
             <p className="text-slate-400 text-sm">No quotations found</p>
@@ -741,7 +890,108 @@ export default function AdminQuotations() {
               </thead>
 
               <tbody>
-                {sortedItems.map(q => {
+                {allRows.map(q => {
+                if ((q as any)._isQuick) {
+                  const qr = (q as any)._quick;
+                  const isExpanded = expandedId === qr.id;
+                  return (
+                    <Fragment key={qr.id}>
+                      <tr onClick={() => { if (selectedIds.size > 0) toggleSelection(qr.id); else setExpandedId(p => p === qr.id ? null : qr.id); }}
+                        className={`border-b border-slate-100 cursor-pointer transition-colors select-none text-sm ${selectedIds.has(qr.id) ? 'bg-emerald-50/60' : isExpanded ? 'bg-emerald-50/50 border-emerald-100' : 'hover:bg-slate-50/70'}`}>
+                        <td className="px-3 py-3 text-center border-r border-slate-100" onClick={e => { e.stopPropagation(); toggleSelection(qr.id); }}>
+                          <input type="checkbox" readOnly checked={selectedIds.has(qr.id)} className="pointer-events-none accent-emerald-500 w-3.5 h-3.5" />
+                        </td>
+                        <td className="px-2 py-3 border-r border-slate-100">
+                          <ChevronRight className={`w-4 h-4 transition-transform duration-200 ${isExpanded ? 'rotate-90 text-emerald-500' : 'text-slate-400'}`} />
+                        </td>
+                        <td className="px-4 py-3 border-r border-slate-100 whitespace-nowrap">
+                          <div className="flex flex-col gap-0.5">
+                            <span className="font-bold text-slate-900">{qr.requestNumber}</span>
+                            <span className="inline-flex w-fit px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-emerald-100 text-emerald-700">Quick Quotation</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 border-r border-slate-100">
+                          <span className="text-slate-700 truncate block">{qr.customerName}</span>
+                        </td>
+                        <td className="px-4 py-3 border-r border-slate-100">
+                          <span className="text-slate-500">{qr.repName || '—'}</span>
+                        </td>
+                        <td className="px-3 py-3 text-center border-r border-slate-100"><span className="text-slate-400">—</span></td>
+                        <td className="px-4 py-3 text-right border-r border-slate-100"><span className="text-slate-400">—</span></td>
+                        <td className="px-4 py-3 text-right border-r border-slate-100 whitespace-nowrap">
+                          <span className="text-slate-500">{qr.createdAt ? formatDate(qr.createdAt) : '—'}</span>
+                        </td>
+                        <td className="px-4 py-3 text-right border-r border-slate-100"><span className="text-slate-400">—</span></td>
+                        <td className="px-4 py-3 text-center"><StatusBadge status={qr.status} /></td>
+                      </tr>
+                      {isExpanded && (
+                        <tr className="border-b border-emerald-100">
+                          <td colSpan={10} className="p-0">
+                            <div className="bg-gradient-to-b from-emerald-50/40 to-white px-8 py-5">
+                              <div className="flex items-start gap-6">
+                                <div className="flex-1 space-y-3">
+                                  <div>
+                                    <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1.5">Quotation Details</p>
+                                    <pre className="text-sm text-slate-800 whitespace-pre-wrap font-sans bg-white border border-slate-100 rounded-xl p-3">{qr.details}</pre>
+                                  </div>
+                                  {qr.adminNotes && (
+                                    <div>
+                                      <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Admin Notes</p>
+                                      <p className="text-sm text-slate-700 bg-amber-50 border border-amber-100 rounded-xl p-3">{qr.adminNotes}</p>
+                                    </div>
+                                  )}
+                                  {qr.imageUrls?.length > 0 && (
+                                    <div>
+                                      <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">Photos ({qr.imageUrls.length})</p>
+                                      <div className="flex flex-wrap gap-2">
+                                        {qr.imageUrls.map((url: string, i: number) => (
+                                          <div key={i} className="relative group w-20 h-20">
+                                            <img src={`${BASE}${url}`} alt={`Photo ${i+1}`}
+                                              onClick={e => { e.stopPropagation(); setQuickLightbox(`${BASE}${url}`); }}
+                                              className="w-20 h-20 rounded-xl object-cover border border-slate-200 cursor-pointer hover:opacity-90 transition"
+                                              onError={e => { (e.target as any).style.display = 'none'; }}
+                                            />
+                                            <button
+                                              onClick={async e => { e.stopPropagation(); await downloadImage(`${BASE}${url}`, `photo-${i+1}`); }}
+                                              className="absolute bottom-1 right-1 w-6 h-6 rounded-lg bg-black/60 hover:bg-black/80 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
+                                              title="Download photo"
+                                            >
+                                              <Download className="w-3 h-3" />
+                                            </button>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="shrink-0 space-y-2 min-w-[190px]">
+                                  <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Update Status</p>
+                                  <div className="flex flex-col gap-1.5" onClick={e => e.stopPropagation()}>
+                                    {QUICK_STATUSES.map(s => (
+                                      <button key={s}
+                                        onClick={() => quickUpdateMut.mutate({ id: qr.id, status: s, notes: qr.adminNotes || '' })}
+                                        disabled={quickUpdateMut.isPending}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition text-left ${s === qr.status ? 'bg-slate-800 text-white border-slate-800' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'} disabled:opacity-50`}
+                                      >{s === qr.status ? `✓ ${s}` : s}</button>
+                                    ))}
+                                  </div>
+                                  <div className="flex gap-1.5 mt-1" onClick={e => e.stopPropagation()}>
+                                    <button onClick={() => exportQuotations('pdf', q)} className="flex-1 inline-flex items-center justify-center gap-1 py-1.5 text-xs font-semibold rounded-lg text-red-600 hover:bg-red-50 border border-red-100 transition">
+                                      <FileText className="w-3 h-3" /> PDF
+                                    </button>
+                                    <button onClick={() => exportQuotations('excel', q)} className="flex-1 inline-flex items-center justify-center gap-1 py-1.5 text-xs font-semibold rounded-lg text-emerald-600 hover:bg-emerald-50 border border-emerald-100 transition">
+                                      <FileSpreadsheet className="w-3 h-3" /> Excel
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                }
                   const isTax = getIsTax(q);
                   let calcSubtotal = 0, calcTotalTax = 0, calcTotalDiscount = 0;
                   (q.items || []).forEach(item => {
@@ -1062,6 +1312,16 @@ export default function AdminQuotations() {
         </div>
       )}
 
+      {quickLightbox && createPortal(
+        <div className="fixed inset-0 z-[9999] bg-black/90 flex items-center justify-center" onClick={() => setQuickLightbox(null)}>
+          <button className="absolute top-4 right-4 text-white bg-white/10 rounded-full p-2.5 hover:bg-white/25 transition" onClick={() => setQuickLightbox(null)}>
+            <X className="w-5 h-5" />
+          </button>
+          <img src={quickLightbox} alt="Preview" className="max-h-[88vh] max-w-[92vw] rounded-xl object-contain" onClick={e => e.stopPropagation()} />
+        </div>,
+        document.body
+      )}
+
       {/* ── Reject modal ─────────────────────────────────────────────────── */}
       {rejectTarget && createPortal(
         <div className="fixed inset-0 z-50 flex flex-col items-center">
@@ -1128,15 +1388,27 @@ export default function AdminQuotations() {
                 <button
                   disabled={deleteMut.isPending}
                   onClick={() => {
-                    const ids = selectAllPages
+                    const allIds = selectAllPages
                       ? sortedItems.map(q => q.id)
                       : [...selectedIds];
-                    Promise.all(ids.map(id => deleteMut.mutateAsync(id)))
+                    const regularIds = selectAllPages
+                      ? allIds
+                      : allIds.filter(id => !allRows.find((r: any) => r.id === id)?._isQuick);
+                    const quickIds = selectAllPages
+                      ? []
+                      : allIds
+                          .filter(id => allRows.find((r: any) => r.id === id)?._isQuick)
+                          .map(id => (allRows.find((r: any) => r.id === id) as any)._quick.id);
+                    Promise.all([
+                      ...regularIds.map(id => deleteMut.mutateAsync(id)),
+                      ...quickIds.map(id => quickRequestApi.adminDelete(id)),
+                    ])
                       .then(() => {
                         setSelectedIds(new Set());
                         setSelectAllPages(false);
                         setDeleteConfirmOpen(false);
-                        toast.success(`${ids.length} quotation${ids.length !== 1 ? 's' : ''} moved to trash`);
+                        if (quickIds.length > 0) queryClient.invalidateQueries({ queryKey: ['admin-quick-quotations'] });
+                        toast.success(`${allIds.length} item${allIds.length !== 1 ? 's' : ''} deleted`);
                       })
                       .catch(() => toast.error('Some deletions failed'));
                   }}

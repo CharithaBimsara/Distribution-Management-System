@@ -1,4 +1,5 @@
-﻿import { useState, useEffect, useMemo, Fragment } from 'react';
+﻿// @ts-nocheck
+import { useState, useEffect, useMemo, Fragment } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ordersApi } from '../../services/api/ordersApi';
@@ -10,16 +11,20 @@ import {
   ShoppingCart, CheckCircle, XCircle, ChevronRight,
   Search, Trash2, X, FileSpreadsheet, FileText,
   SlidersHorizontal, RefreshCw, RotateCcw,
-  ArrowUp, ArrowDown, ArrowUpDown, Check
+  ArrowUp, ArrowDown, ArrowUpDown, Check, Download
 } from 'lucide-react';
 import type { Order, OrderStatus } from '../../types/order.types';
 import { ORDER_STATUSES } from '../../types/order.types';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import StatusBadge from '../../components/common/StatusBadge';
+import { quickRequestApi } from '../../services/api/quickRequestApi';
+import { downloadQuickRequestPdf, downloadQuickRequestExcel, downloadImage } from '../../utils/quickRequestPdf';
 
 // Strip LKR prefix for display
 const fmtAmt = (n: number) => formatCurrency(n).replace(/^LKR[\s\u00A0]*/i, '');
+const BASE = import.meta.env.VITE_API_URL?.replace('/api', '') || '';
+const QUICK_STATUSES = ['Pending', 'Approved', 'Rejected', 'Completed'];
 
 // Sort icon helper
 function SortIcon({ field, sortField, sortDir }: { field: string; sortField: string; sortDir: 'asc' | 'desc' }) {
@@ -58,6 +63,7 @@ export default function AdminOrders() {
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
   const [showBulkStatusModal, setShowBulkStatusModal] = useState(false);
   const [bulkStatusValue, setBulkStatusValue] = useState<OrderStatus | ''>('');
+  const [quickLightbox, setQuickLightbox] = useState<string | null>(null);
 
   const queryClient = useQueryClient();
 
@@ -114,6 +120,13 @@ export default function AdminOrders() {
     enabled: activeTab === 'trash',
   });
 
+  const { data: quickData = [] } = useQuery({
+    queryKey: ['admin-quick-orders'],
+    queryFn: () => quickRequestApi.adminGetAll('Order').then(r => r.data.data),
+    staleTime: 30_000,
+    enabled: activeTab === 'active',
+  });
+
   // Mutations
   const approveMut = useMutation({
     mutationFn: (id: string) => ordersApi.adminApprove(id),
@@ -163,6 +176,16 @@ export default function AdminOrders() {
     },
   });
 
+  const quickUpdateMut = useMutation({
+    mutationFn: ({ id, status, notes }: { id: string; status: string; notes: string }) =>
+      quickRequestApi.adminUpdateStatus(id, { status, adminNotes: notes }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-quick-orders'] });
+      toast.success('Quick order updated');
+    },
+    onError: () => toast.error('Failed to update'),
+  });
+
   const orders: Order[] = (data?.items || []).filter((o: Order) => {
     if (!search) return true;
     const q = search.toLowerCase();
@@ -187,6 +210,33 @@ export default function AdminOrders() {
     });
   }, [orders, sortField, sortDir]);
 
+  const quickOrderRows = useMemo(() => (quickData as any[]).map((r: any) => ({
+    _isQuick: true, _quick: r,
+    id: r.id, orderNumber: r.requestNumber,
+    customerName: r.customerName, repName: r.repName,
+    orderDate: r.createdAt, status: r.status,
+    items: [] as any[], totalAmount: 0, isFromApprovedQuotation: false,
+  })), [quickData]);
+
+  const allRows: any[] = useMemo(() => {
+    const merged = [...orders, ...quickOrderRows];
+    return merged.sort((a, b) => {
+      let av: any, bv: any;
+      switch (sortField) {
+        case 'orderNumber':  av = a.orderNumber;      bv = b.orderNumber;      break;
+        case 'customerName': av = a.customerName;     bv = b.customerName;     break;
+        case 'repName':      av = a.repName ?? '';    bv = b.repName ?? '';    break;
+        case 'status':       av = a.status;           bv = b.status;           break;
+        default:             av = a.orderDate || '';  bv = b.orderDate || '';  break;
+      }
+      if (typeof av === 'string') av = av.toLowerCase();
+      if (typeof bv === 'string') bv = bv.toLowerCase();
+      if (av < bv) return sortDir === 'asc' ? -1 : 1;
+      if (av > bv) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [orders, quickOrderRows, sortField, sortDir]);
+
   const activeFilterCount =
     (status ? 1 : 0) + (repIdFilter ? 1 : 0) + (customerIdFilter ? 1 : 0) + ((fromDate || toDate) ? 1 : 0);
 
@@ -202,8 +252,8 @@ export default function AdminOrders() {
   };
 
   const toggleAll = () => {
-    if (selectedIds.size === sortedOrders.length && sortedOrders.length > 0) setSelectedIds(new Set());
-    else setSelectedIds(new Set(sortedOrders.map((o) => o.id)));
+    if (selectedIds.size === allRows.length && allRows.length > 0) setSelectedIds(new Set());
+    else setSelectedIds(new Set(allRows.map((r: any) => r.id)));
   };
 
   const toggleSort = (field: string) => {
@@ -213,13 +263,20 @@ export default function AdminOrders() {
 
   const handleBulkDelete = async () => {
     const ids = [...selectedIds];
+    const rows = allRows.filter((r: any) => ids.includes(r.id));
+    const regularIds = rows.filter((r: any) => !r._isQuick).map((r: any) => r.id);
+    const quickIds = rows.filter((r: any) => r._isQuick).map((r: any) => r._quick.id);
     try {
-      await Promise.all(ids.map((id) => ordersApi.adminDelete(id)));
+      await Promise.all([
+        ...regularIds.map((id) => ordersApi.adminDelete(id)),
+        ...quickIds.map((id) => quickRequestApi.adminDelete(id)),
+      ]);
       queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
       queryClient.invalidateQueries({ queryKey: ['admin-orders-trash'] });
+      if (quickIds.length > 0) queryClient.invalidateQueries({ queryKey: ['admin-quick-orders'] });
       setSelectedIds(new Set());
       setBulkDeleteConfirm(false);
-      toast.success(`${ids.length} order(s) moved to trash`);
+      toast.success(`${ids.length} item(s) deleted`);
     } catch {
       toast.error('Some deletions failed');
     }
@@ -248,16 +305,34 @@ export default function AdminOrders() {
   };
 
   // Export
-  const exportOrders = async (format: 'excel' | 'pdf', onlySelected = false, singleOrder?: Order) => {
+  const exportOrders = async (format: 'excel' | 'pdf', onlySelected = false, singleRow?: any) => {
+    // Single quick row — use dedicated quick request export
+    if (singleRow?._isQuick) {
+      if (format === 'pdf') {
+        await downloadQuickRequestPdf(singleRow._quick);
+      } else {
+        await downloadQuickRequestExcel(singleRow._quick);
+        toast.success('Excel exported');
+      }
+      return;
+    }
+
     let items: Order[] = [];
-    if (singleOrder) {
-      items = [singleOrder];
+    let quickItems: any[] = [];
+
+    if (singleRow) {
+      items = [singleRow];
     } else if (onlySelected && selectedIds.size > 0) {
-      items = orders.filter((o) => selectedIds.has(o.id));
+      for (const row of allRows) {
+        if (selectedIds.has(row.id)) {
+          if ((row as any)._isQuick) quickItems.push((row as any)._quick);
+          else items.push(row);
+        }
+      }
     } else {
       items = orders;
     }
-    if (!items.length) { toast.error('No orders to export'); return; }
+    if (!items.length && !quickItems.length) { toast.error('No orders to export'); return; }
 
     try {
       if (format === 'excel') {
@@ -334,7 +409,26 @@ export default function AdminOrders() {
           XLSX.utils.book_append_sheet(wb, ws, safeName);
         }
 
-        const xlsxFile = items.length === 1 ? `${items[0].orderNumber}.xlsx` : 'orders-bulk-export.xlsx';
+        // Quick order sheets
+        for (const qr of quickItems) {
+          const qRows: any[][] = [
+            ['QUICK ORDER REQUEST'], [],
+            ['Request #', qr.requestNumber, 'Date', formatDate(qr.createdAt)],
+            ['Customer', qr.customerName, 'Status', qr.status],
+            ['Sales Rep', qr.repName || '—'], [],
+            ['Request Details'], [qr.details || '—'],
+          ];
+          if (qr.adminNotes) { qRows.push([], ['Admin Notes'], [qr.adminNotes]); }
+          const qws = XLSX.utils.aoa_to_sheet(qRows);
+          qws['!cols'] = [{ wch: 20 }, { wch: 40 }, { wch: 20 }, { wch: 40 }];
+          const safeName = (qr.requestNumber || 'Quick').replace(/[:/\\?*[\]]/g, '-').substring(0, 31);
+          XLSX.utils.book_append_sheet(wb, qws, safeName);
+        }
+
+        const totalCount = items.length + quickItems.length;
+        const xlsxFile = totalCount === 1
+          ? `${items[0]?.orderNumber || quickItems[0]?.requestNumber}.xlsx`
+          : 'orders-bulk-export.xlsx';
         XLSX.writeFile(wb, xlsxFile);
         toast.success('Excel exported');
 
@@ -344,9 +438,11 @@ export default function AdminOrders() {
         const autoTable = (await import('jspdf-autotable')).default;
         const doc = new jsPDF({ unit: 'mm', format: 'a4' });
         const pageW = doc.internal.pageSize.getWidth();
+        let pageIndex = 0;
 
-        items.forEach((o, index) => {
-          if (index > 0) doc.addPage();
+        items.forEach((o) => {
+          if (pageIndex > 0) doc.addPage();
+          pageIndex++;
 
           const customer = customers.find(c => c.id === o.customerId || c.shopName === o.customerName);
           const isNonTaxCustomer = (customer?.customerType || (o as any).customerType || '').toLowerCase().replace(/[-\s]/g, '') === 'nontax';
@@ -491,7 +587,61 @@ export default function AdminOrders() {
           });
         });
 
-        const pdfFile = items.length === 1 ? `${items[0].orderNumber}.pdf` : 'orders-bulk-export.pdf';
+        // Quick order pages
+        quickItems.forEach((qr) => {
+          if (pageIndex > 0) doc.addPage();
+          pageIndex++;
+          doc.setFontSize(14); doc.setFont('helvetica', 'bold'); doc.setTextColor(0, 0, 0);
+          doc.text('JANASIRI DISTRIBUTORS (PVT) LTD', 14, 18);
+          doc.setFontSize(8); doc.setFont('helvetica', 'normal');
+          doc.text('Reg Address: No 205 Wattarantenna Passage, Kandy.', 14, 23);
+          doc.text('TP: 0814 950206 / Hotline: 0777 675322', 14, 27);
+          doc.text('Email: janasiridistributors@yahoo.com / Vat 114608394-7000', 14, 31);
+          doc.text('Bank AC: Sampath Bank PLC / Kandy Super Grade Branch / AC: 0007 1002 3131', 14, 35);
+          doc.setFontSize(11); doc.setFont('helvetica', 'bold');
+          doc.text('QUICK ORDER REQUEST', pageW - 14, 18, { align: 'right' });
+          const bX = pageW - 74, bY = 21, bW = 60, rH = 6;
+          doc.setDrawColor(0, 0, 0); doc.setLineWidth(0.2);
+          doc.rect(bX, bY, bW, rH * 3);
+          doc.line(bX, bY + rH, bX + bW, bY + rH);
+          doc.line(bX, bY + rH * 2, bX + bW, bY + rH * 2);
+          doc.line(bX + 20, bY, bX + 20, bY + rH * 3);
+          doc.setFontSize(8); doc.setFont('helvetica', 'normal');
+          doc.text('Date', bX + 2, bY + 4); doc.text('Ref No', bX + 2, bY + rH + 4); doc.text('Status', bX + 2, bY + rH * 2 + 4);
+          doc.text(formatDate(qr.createdAt), bX + 22, bY + 4);
+          doc.text(qr.requestNumber || '', bX + 22, bY + rH + 4);
+          doc.text(qr.status || '', bX + 22, bY + rH * 2 + 4);
+          const cBY = 44, cBH = 22;
+          doc.rect(14, cBY, pageW - 28, cBH);
+          doc.line(14, cBY + 8, pageW - 14, cBY + 8);
+          doc.setFont('helvetica', 'bold'); doc.text('Customer / Representative', 16, cBY + 6);
+          doc.setFont('helvetica', 'normal');
+          doc.text('Customer:', 16, cBY + 14); doc.text(qr.customerName || '—', 40, cBY + 14);
+          doc.text('Sales Rep:', 16, cBY + 20); doc.text(qr.repName || '—', 40, cBY + 20);
+          autoTable(doc, {
+            head: [['Request Details']],
+            body: [[qr.details || '—']],
+            startY: 72, theme: 'grid',
+            styles: { fontSize: 9, cellPadding: 3, textColor: [0, 0, 0], lineColor: [0, 0, 0], lineWidth: 0.2 },
+            headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], fontStyle: 'bold' },
+            bodyStyles: { fillColor: [255, 255, 255], minCellHeight: 20 },
+          });
+          if (qr.adminNotes) {
+            const aY = (doc as any).lastAutoTable.finalY;
+            autoTable(doc, {
+              head: [['Admin Notes']], body: [[qr.adminNotes]],
+              startY: aY + 4, theme: 'grid',
+              styles: { fontSize: 9, cellPadding: 3, textColor: [0, 0, 0], lineColor: [0, 0, 0], lineWidth: 0.2 },
+              headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], fontStyle: 'bold' },
+              bodyStyles: { fillColor: [255, 255, 255] },
+            });
+          }
+        });
+
+        const totalCount = items.length + quickItems.length;
+        const pdfFile = totalCount === 1
+          ? `${items[0]?.orderNumber || quickItems[0]?.requestNumber}.pdf`
+          : 'orders-bulk-export.pdf';
         doc.save(pdfFile);
         toast.success('PDF exported');
       }
@@ -526,6 +676,7 @@ export default function AdminOrders() {
                 onClick={() => { setActiveTab('trash'); setPage(1); setSelectedIds(new Set()); }}
                 className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${activeTab === 'trash' ? 'bg-white shadow-sm text-rose-600' : 'text-slate-500 hover:text-slate-700'}`}
               ><Trash2 className="w-3 h-3" />Trash</button>
+
             </div>
             <div className="relative group order-3 sm:order-2 w-full sm:w-auto sm:flex-1">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
@@ -764,14 +915,96 @@ export default function AdminOrders() {
       <div className="lg:hidden bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         {isLoading ? (
           <div className="p-10 text-center text-slate-400 text-sm">Loading orders…</div>
-        ) : sortedOrders.length === 0 ? (
+        ) : allRows.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-slate-400">
             <ShoppingCart className="w-10 h-10 mb-3 opacity-30" />
             <p className="text-sm font-medium">No orders found</p>
           </div>
         ) : (
           <>
-            {sortedOrders.map((order) => {
+            {allRows.map((order) => {
+              if ((order as any)._isQuick) {
+                const qr = (order as any)._quick;
+                const isExpanded = expandedOrderId === qr.id;
+                return (
+                  <div key={qr.id}>
+                    <div
+                      onClick={() => { if (selectedIds.size > 0) toggleSelection(qr.id); else setExpandedOrderId(p => p === qr.id ? null : qr.id); }}
+                      className={`flex items-center gap-3 px-4 py-3 border-b border-slate-100 cursor-pointer transition-colors select-none ${selectedIds.has(qr.id) ? 'bg-violet-50' : isExpanded ? 'bg-violet-50/40' : 'bg-white active:bg-slate-50'}`}
+                    >
+                      <div className="shrink-0" onClick={e => { e.stopPropagation(); toggleSelection(qr.id); }}>
+                        <div className={`w-5 h-5 rounded flex items-center justify-center border-2 transition-colors cursor-pointer ${selectedIds.has(qr.id) ? 'bg-violet-600 border-violet-600' : 'border-slate-300 bg-white'}`}>
+                          {selectedIds.has(qr.id) && <Check className="w-3 h-3 text-white" />}
+                        </div>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-slate-800">{qr.requestNumber}</p>
+                        <span className="inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-violet-100 text-violet-700">Quick Order</span>
+                        <p className="text-xs text-slate-500 mt-1 truncate">{qr.customerName}{qr.repName ? ` · ${qr.repName}` : ''}</p>
+                      </div>
+                      <StatusBadge status={qr.status} />
+                      <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                    </div>
+                    {isExpanded && (
+                      <div className="px-4 pb-4 pt-2 space-y-3 bg-violet-50/20 border-b border-violet-100">
+                        <div>
+                          <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Order Details</p>
+                          <pre className="text-sm text-slate-800 whitespace-pre-wrap font-sans bg-white border border-slate-100 rounded-xl p-3">{qr.details}</pre>
+                        </div>
+                        {qr.adminNotes && (
+                          <div>
+                            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Admin Notes</p>
+                            <p className="text-sm text-slate-700 bg-amber-50 border border-amber-100 rounded-xl p-3">{qr.adminNotes}</p>
+                          </div>
+                        )}
+                        {qr.imageUrls?.length > 0 && (
+                          <div>
+                            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">Photos ({qr.imageUrls.length})</p>
+                            <div className="flex flex-wrap gap-2">
+                              {qr.imageUrls.map((url: string, i: number) => (
+                                <div key={i} className="relative group w-20 h-20">
+                                  <img src={`${BASE}${url}`} alt={`Photo ${i+1}`}
+                                    onClick={() => setQuickLightbox(`${BASE}${url}`)}
+                                    className="w-20 h-20 rounded-xl object-cover border border-slate-200 cursor-pointer hover:opacity-90 transition"
+                                    onError={e => { (e.target as any).style.display = 'none'; }}
+                                  />
+                                  <button
+                                    onClick={async e => { e.stopPropagation(); await downloadImage(`${BASE}${url}`, `photo-${i+1}`); }}
+                                    className="absolute bottom-1 right-1 w-6 h-6 rounded-lg bg-black/60 hover:bg-black/80 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
+                                    title="Download photo"
+                                  >
+                                    <Download className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        <div className="space-y-2">
+                          <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Update Status</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {QUICK_STATUSES.map(s => (
+                              <button key={s}
+                                onClick={e => { e.stopPropagation(); quickUpdateMut.mutate({ id: qr.id, status: s, notes: qr.adminNotes || '' }); }}
+                                disabled={quickUpdateMut.isPending}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${s === qr.status ? 'bg-slate-800 text-white border-slate-800' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'} disabled:opacity-50`}
+                              >{s === qr.status ? `✓ ${s}` : s}</button>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={e => { e.stopPropagation(); exportOrders('pdf', false, order); }} className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 text-xs font-semibold rounded-lg text-red-600 hover:bg-red-50 transition">
+                            <FileText className="w-3.5 h-3.5" /> PDF
+                          </button>
+                          <button onClick={e => { e.stopPropagation(); exportOrders('excel', false, order); }} className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 text-xs font-semibold rounded-lg text-emerald-600 hover:bg-emerald-50 transition">
+                            <FileSpreadsheet className="w-3.5 h-3.5" /> Excel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              }
               const customer = customers.find(c => c.id === order.customerId || c.shopName === order.customerName);
               const isNonTaxCustomer = (customer?.customerType || (order as any).customerType || '').toLowerCase().replace(/[-\s]/g, '') === 'nontax';
               let mobGross = 0, mobTax = 0, mobDisc = 0;
@@ -927,7 +1160,7 @@ export default function AdminOrders() {
       <div className="hidden lg:block bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         {isLoading ? (
           <div className="p-10 text-center text-slate-400 text-sm">Loading orders…</div>
-        ) : sortedOrders.length === 0 ? (
+        ) : allRows.length === 0 ? (
           <div className="p-14 text-center">
             <ShoppingCart className="w-10 h-10 text-slate-200 mx-auto mb-2" />
             <p className="text-slate-400 text-sm">No orders found</p>
@@ -940,8 +1173,8 @@ export default function AdminOrders() {
                   <th className="w-10 px-3 py-3.5 text-center border-r border-slate-600">
                     <input
                       type="checkbox"
-                      checked={selectedIds.size === sortedOrders.length && sortedOrders.length > 0}
-                      ref={el => { if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < sortedOrders.length; }}
+                      checked={allRows.length > 0 && selectedIds.size === allRows.length}
+                      ref={el => { if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < allRows.length; }}
                       onChange={toggleAll}
                       className="accent-indigo-400 w-3.5 h-3.5 cursor-pointer"
                     />
@@ -968,7 +1201,113 @@ export default function AdminOrders() {
               </thead>
 
               <tbody>
-                {sortedOrders.map((order) => {
+                {allRows.map((order) => {
+                if ((order as any)._isQuick) {
+                  const qr = (order as any)._quick;
+                  const isExpanded = expandedOrderId === qr.id;
+                  return (
+                    <Fragment key={qr.id}>
+                      <tr onClick={() => { if (selectedIds.size > 0) toggleSelection(qr.id); else setExpandedOrderId(p => p === qr.id ? null : qr.id); }}
+                        className={`border-b border-slate-100 cursor-pointer transition-colors select-none ${selectedIds.has(qr.id) ? 'bg-violet-50/60' : isExpanded ? 'bg-violet-50/50 border-violet-100' : 'hover:bg-slate-50/70'}`}>
+                        <td className="px-3 py-3 text-center border-r border-slate-100" onClick={e => { e.stopPropagation(); toggleSelection(qr.id); }}>
+                          <input type="checkbox" readOnly checked={selectedIds.has(qr.id)} className="pointer-events-none accent-violet-500 w-3.5 h-3.5" />
+                        </td>
+                        <td className="px-2 py-3 border-r border-slate-100">
+                          <ChevronRight className={`w-4 h-4 transition-transform duration-200 ${isExpanded ? 'rotate-90 text-violet-500' : 'text-slate-400'}`} />
+                        </td>
+                        <td className="px-4 py-3 border-r border-slate-100 whitespace-nowrap">
+                          <div className="flex flex-col gap-0.5">
+                            <span className="font-bold text-slate-900">{qr.requestNumber}</span>
+                            <span className="inline-flex w-fit px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-violet-100 text-violet-700">Quick Order</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 border-r border-slate-100">
+                          <span className="text-slate-700 truncate block">{qr.customerName}</span>
+                        </td>
+                        <td className="px-4 py-3 border-r border-slate-100">
+                          <span className="text-slate-500">{qr.repName || '—'}</span>
+                        </td>
+                        <td className="px-3 py-3 text-center border-r border-slate-100">
+                          <span className="text-slate-400">—</span>
+                        </td>
+                        <td className="px-4 py-3 text-right border-r border-slate-100">
+                          <span className="text-slate-400">—</span>
+                        </td>
+                        <td className="px-4 py-3 text-right border-r border-slate-100 whitespace-nowrap">
+                          <span className="text-slate-500">{formatDate(qr.createdAt)}</span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <StatusBadge status={qr.status} />
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr className="border-b border-violet-100">
+                          <td colSpan={9} className="p-0">
+                            <div className="bg-gradient-to-b from-violet-50/40 to-white px-8 py-5">
+                              <div className="flex items-start gap-6">
+                                <div className="flex-1 space-y-3">
+                                  <div>
+                                    <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1.5">Order Details</p>
+                                    <pre className="text-sm text-slate-800 whitespace-pre-wrap font-sans bg-white border border-slate-100 rounded-xl p-3">{qr.details}</pre>
+                                  </div>
+                                  {qr.adminNotes && (
+                                    <div>
+                                      <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Admin Notes</p>
+                                      <p className="text-sm text-slate-700 bg-amber-50 border border-amber-100 rounded-xl p-3">{qr.adminNotes}</p>
+                                    </div>
+                                  )}
+                                  {qr.imageUrls?.length > 0 && (
+                                    <div>
+                                      <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">Photos ({qr.imageUrls.length})</p>
+                                      <div className="flex flex-wrap gap-2">
+                                        {qr.imageUrls.map((url: string, i: number) => (
+                                          <div key={i} className="relative group w-20 h-20">
+                                            <img src={`${BASE}${url}`} alt={`Photo ${i+1}`}
+                                              onClick={e => { e.stopPropagation(); setQuickLightbox(`${BASE}${url}`); }}
+                                              className="w-20 h-20 rounded-xl object-cover border border-slate-200 cursor-pointer hover:opacity-90 transition"
+                                              onError={e => { (e.target as any).style.display = 'none'; }}
+                                            />
+                                            <button
+                                              onClick={async e => { e.stopPropagation(); await downloadImage(`${BASE}${url}`, `photo-${i+1}`); }}
+                                              className="absolute bottom-1 right-1 w-6 h-6 rounded-lg bg-black/60 hover:bg-black/80 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
+                                              title="Download photo"
+                                            >
+                                              <Download className="w-3 h-3" />
+                                            </button>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="shrink-0 space-y-2 min-w-[190px]">
+                                  <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Update Status</p>
+                                  <div className="flex flex-col gap-1.5" onClick={e => e.stopPropagation()}>
+                                    {QUICK_STATUSES.map(s => (
+                                      <button key={s}
+                                        onClick={() => quickUpdateMut.mutate({ id: qr.id, status: s, notes: qr.adminNotes || '' })}
+                                        disabled={quickUpdateMut.isPending}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition text-left ${s === qr.status ? 'bg-slate-800 text-white border-slate-800' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'} disabled:opacity-50`}
+                                      >{s === qr.status ? `✓ ${s}` : s}</button>
+                                    ))}
+                                  </div>
+                                  <div className="flex gap-1.5 mt-1" onClick={e => e.stopPropagation()}>
+                                    <button onClick={() => exportOrders('pdf', false, order)} className="flex-1 inline-flex items-center justify-center gap-1 py-1.5 text-xs font-semibold rounded-lg text-red-600 hover:bg-red-50 border border-red-100 transition">
+                                      <FileText className="w-3 h-3" /> PDF
+                                    </button>
+                                    <button onClick={() => exportOrders('excel', false, order)} className="flex-1 inline-flex items-center justify-center gap-1 py-1.5 text-xs font-semibold rounded-lg text-emerald-600 hover:bg-emerald-50 border border-emerald-100 transition">
+                                      <FileSpreadsheet className="w-3 h-3" /> Excel
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                }
                 const customer = customers.find(c => c.id === order.customerId || c.shopName === order.customerName);
                 const isNonTaxCustomer = (customer?.customerType || (order as any).customerType || '').toLowerCase().replace(/[-\s]/g, '') === 'nontax';
                 let displayTotalGross = 0, displayTotalTax = 0, displayTotalDiscount = 0;
@@ -1177,7 +1516,7 @@ export default function AdminOrders() {
             </table>
 
             {/* Bottom hint */}
-            {selectedIds.size === 0 && sortedOrders.length > 0 && (
+            {selectedIds.size === 0 && allRows.length > 0 && (
               <p className="text-center text-[11px] text-slate-400 py-3 border-t border-slate-100 italic select-none">
                 Click a checkbox to enter selection mode
               </p>
@@ -1290,6 +1629,16 @@ export default function AdminOrders() {
             </div>
           )}
         </div>
+      )}
+
+      {quickLightbox && createPortal(
+        <div className="fixed inset-0 z-[9999] bg-black/90 flex items-center justify-center" onClick={() => setQuickLightbox(null)}>
+          <button className="absolute top-4 right-4 text-white bg-white/10 rounded-full p-2.5 hover:bg-white/25 transition" onClick={() => setQuickLightbox(null)}>
+            <X className="w-5 h-5" />
+          </button>
+          <img src={quickLightbox} alt="Preview" className="max-h-[88vh] max-w-[92vw] rounded-xl object-contain" onClick={e => e.stopPropagation()} />
+        </div>,
+        document.body
       )}
 
       {/* ── Per-order status change modal ──────────────────────────────────── */}

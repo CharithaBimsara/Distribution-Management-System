@@ -35,6 +35,7 @@ import CreateRep from './pages/admin/CreateRep';
 import AdminOrderDetail from './pages/admin/OrderDetail';
 import AdminPayments from './pages/admin/Payments';
 import AdminReports from './pages/admin/Reports';
+import AdminOutstandingReports from './pages/admin/OutstandingReports';
 import AdminSupport from './pages/admin/Support';
 import AdminSupportDetail from './pages/admin/SupportDetail';
 import AdminNotifications from './pages/admin/Notifications';
@@ -75,6 +76,8 @@ import RepProfile from './pages/rep/RepProfile';
 import RepProfileEdit from './pages/rep/RepProfileEdit';
 import RepProducts from './pages/rep/RepProducts';
 import RepSelectQuotationProducts from './pages/rep/RepSelectQuotationProducts';
+import RepOutstandingReports from './pages/rep/RepOutstandingReports';
+import RepQuickRequest from './pages/rep/RepQuickRequest';
 
 // Coordinator pages
 import CoordinatorDashboard from './pages/coordinator/Dashboard';
@@ -163,6 +166,7 @@ export default function App() {
           <Route path="reps/:id" element={<AdminRepDetail />} />
           <Route path="payments" element={<AdminPayments />} />
           <Route path="reports" element={<AdminReports />} />
+          <Route path="outstanding-reports" element={<AdminOutstandingReports />} />
           <Route path="support" element={<AdminSupport />} />
           <Route path="support/:id" element={<AdminSupportDetail />} />
           <Route path="notifications" element={<AdminNotifications />} />
@@ -201,6 +205,8 @@ export default function App() {
           <Route path="quotations/new" element={<RepCreateQuotation />} />
           <Route path="quotations/new/products" element={<RepSelectQuotationProducts />} />
           <Route path="products" element={<RepProducts />} />
+          <Route path="outstanding-reports" element={<RepOutstandingReports />} />
+          <Route path="quick-requests" element={<RepQuickRequest />} />
           <Route path="profile" element={<RepProfile />} />
           <Route path="profile/edit" element={<RepProfileEdit />} />
         </Route>

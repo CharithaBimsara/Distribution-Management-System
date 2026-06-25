@@ -135,6 +135,8 @@ export function useSignalR() {
       // invalidation keys include userId so that cache updates for the current user
       queryClient.invalidateQueries({ queryKey: ['notifications', user?.id] });
       queryClient.invalidateQueries({ queryKey: ['unread-count', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['rep-quick-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['rep-quick-quotations'] });
       refreshQuotationQueries();
       refreshSupportQueries();
     });
@@ -149,6 +151,25 @@ export function useSignalR() {
       queryClient.invalidateQueries({ queryKey: ['unread-count', user?.id] });
       queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
       queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] });
+    });
+
+    conn.on('NewQuickRequest', (data: { id: string; requestNumber: string; type: string; customerName: string; repName?: string }) => {
+      const label = data.type === 'Order' ? 'Quick Order' : 'Quick Quotation';
+      let txt = `New ${label} #${data.requestNumber} for ${data.customerName}`;
+      if (data.repName) txt += ` by ${data.repName}`;
+      toast(txt, { icon: '⚡', duration: 5000 });
+      queryClient.invalidateQueries({ queryKey: ['notifications', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['unread-count', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['admin-quick-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-quick-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-quick-quotations'] });
+    });
+
+    // Fires after image upload — re-fetch so images appear without a manual refresh
+    conn.on('QuickRequestUpdated', (data: { id: string; type: string }) => {
+      queryClient.invalidateQueries({ queryKey: ['admin-quick-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-quick-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-quick-quotations'] });
     });
 
     conn.on('OrderStatusChanged', (data: { orderId: string; status: string }) => {

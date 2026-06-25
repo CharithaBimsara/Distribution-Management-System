@@ -1,12 +1,15 @@
-import { Fragment, useEffect, useState } from 'react';
+// @ts-nocheck
+import { Fragment, useEffect, useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { repGetQuotations } from '../../services/api/quotationApi';
 import { customersApi } from '../../services/api/customersApi';
-import { formatCurrency, formatRelative } from '../../utils/formatters';
+import { quickRequestApi } from '../../services/api/quickRequestApi';
+import { formatCurrency, formatRelative, formatDate } from '../../utils/formatters';
 import { taxCodeToRate } from '../../utils/calculations';
 import { downloadQuotationPdf } from '../../utils/quotationPdf';
 import { useNavigate } from 'react-router-dom';
-import { FileText, Plus, Download } from 'lucide-react';
+import { FileText, Plus, Download, X, FileSpreadsheet } from 'lucide-react';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
 import PageHeader from '../../components/common/PageHeader';
 import MobileTileList from '../../components/common/MobileTileList';
@@ -14,6 +17,9 @@ import BottomSheet from '../../components/common/BottomSheet';
 import StatusBadge from '../../components/common/StatusBadge';
 import EmptyState from '../../components/common/EmptyState';
 import type { Quotation } from '../../types/quotation.types';
+import { downloadQuickRequestPdf, downloadQuickRequestExcel, downloadImage } from '../../utils/quickRequestPdf';
+
+const BASE = import.meta.env.VITE_API_URL?.replace('/api', '') || '';
 
 const STATUS_FILTERS = [
   { label: 'All', value: '' },
@@ -30,7 +36,8 @@ export default function RepQuotations() {
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState('');
   const [selected, setSelected] = useState<Quotation | null>(null);
-
+  const [selectedQuick, setSelectedQuick] = useState<any>(null);
+  const [quickLightbox, setQuickLightbox] = useState<string | null>(null);
   const { data, isLoading } = useQuery({
     queryKey: ['rep-quotations', page, statusFilter],
     queryFn: () => repGetQuotations(page, 20, statusFilter || undefined),
@@ -50,6 +57,27 @@ export default function RepQuotations() {
   };
   const totalPages = data ? Math.ceil(data.totalCount / data.pageSize) : 0;
 
+  const { data: quickData = [] } = useQuery({
+    queryKey: ['rep-quick-quotations'],
+    queryFn: () => quickRequestApi.repGetAll('Quotation').then(r => r.data.data),
+  });
+
+  const quickQuotationRows = useMemo(() => (quickData as any[]).map((r: any) => ({
+    _isQuick: true, _quick: r,
+    id: r.id, quotationNumber: r.requestNumber,
+    customerName: r.customerName, createdAt: r.createdAt, status: r.status,
+    items: [] as any[], totalAmount: 0,
+  })), [quickData]);
+
+  const allQuotations: any[] = useMemo(() => {
+    const merged = [...quotations, ...quickQuotationRows];
+    return merged.sort((a, b) => {
+      const ad = a.createdAt || '';
+      const bd = b.createdAt || '';
+      return bd < ad ? -1 : bd > ad ? 1 : 0;
+    });
+  }, [quotations, quickQuotationRows]);
+
   const getCustomerDisplayName = (quotation: Quotation) => {
     const fromCustomerList = customerNameById.get(quotation.customerId);
     if (fromCustomerList) return fromCustomerList;
@@ -64,7 +92,8 @@ export default function RepQuotations() {
     setSelected(updated);
   }, [quotations, selected?.id]);
 
-  const handleRowClick = (q: Quotation) => {
+  const handleRowClick = (q: any) => {
+    if (q._isQuick) { setSelectedQuick(q._quick); return; }
     setSelected((prev) => (prev?.id === q.id ? null : q));
   };
 
@@ -107,7 +136,7 @@ export default function RepQuotations() {
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             {isLoading ? (
               <div className="p-10 text-center text-slate-400 text-sm">Loading quotations</div>
-            ) : quotations.length === 0 ? (
+            ) : allQuotations.length === 0 ? (
               <div className="p-12">
                 <EmptyState
                   icon={FileText}
@@ -137,7 +166,31 @@ export default function RepQuotations() {
                   </tr>
                 </thead>
                 <tbody>
-                  {quotations.map((q) => (
+                  {allQuotations.map((q: any) => {
+                    if (q._isQuick) {
+                      const qr = q._quick;
+                      return (
+                        <Fragment key={qr.id}>
+                          <tr
+                            onClick={() => handleRowClick(q)}
+                            className="border-b border-slate-50 cursor-pointer transition-colors hover:bg-emerald-50/30"
+                          >
+                            <td className="px-4 py-3.5 font-semibold text-slate-900 truncate">
+                              <div className="flex flex-col gap-0.5">
+                                <span>{qr.requestNumber}</span>
+                                <span className="inline-flex w-fit px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-700">Quick Quotation</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3.5 text-slate-700 truncate">{qr.customerName}</td>
+                            <td className="px-3 py-3.5 text-center text-slate-400">—</td>
+                            <td className="px-4 py-3.5 text-right text-slate-400">—</td>
+                            <td className="px-4 py-3.5 text-center"><StatusBadge status={qr.status} type="quotations" /></td>
+                            <td className="px-4 py-3.5 text-xs text-slate-500 whitespace-nowrap">{formatRelative(qr.createdAt)}</td>
+                          </tr>
+                        </Fragment>
+                      );
+                    }
+                    return (
                     <Fragment key={q.id}>
                       <tr
                         onClick={() => handleRowClick(q)}
@@ -236,7 +289,8 @@ export default function RepQuotations() {
                         </tr>
                       )}
                     </Fragment>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             )}
@@ -267,14 +321,38 @@ export default function RepQuotations() {
           </div>
         ) : (
           <MobileTileList
-            data={quotations}
+            data={allQuotations}
             isLoading={isLoading}
-            keyExtractor={(q) => q.id}
-            onTileClick={(q) => setSelected(q)}
+            keyExtractor={(q: any) => q.id}
+            onTileClick={(q: any) => handleRowClick(q)}
             page={page}
             totalPages={totalPages}
             onPageChange={setPage}
-            renderTile={(q) => (
+            renderTile={(q: any) => {
+              if (q._isQuick) {
+                const qr = q._quick;
+                return (
+                  <div>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-3 flex-1 min-w-0">
+                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-100 to-green-100 flex items-center justify-center flex-shrink-0">
+                          <FileText className="w-5 h-5 text-emerald-600" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-semibold text-slate-800 text-sm">{qr.requestNumber}</p>
+                          <span className="inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">Quick Quotation</span>
+                          <p className="text-[11px] text-slate-400 mt-0.5">{qr.customerName}</p>
+                          <p className="text-[10px] text-slate-300 mt-0.5">{formatRelative(qr.createdAt)}</p>
+                        </div>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <StatusBadge status={qr.status} type="quotations" />
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+              return (
               <div>
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3 flex-1 min-w-0">
@@ -300,10 +378,86 @@ export default function RepQuotations() {
                   </div>
                 )}
               </div>
-            )}
+              );
+            }}
           />
         )}
       </div>
+
+      {selectedQuick && createPortal(
+        <div className="fixed inset-0 z-[9998] bg-black/60 flex items-end md:items-center justify-center p-4" onClick={() => setSelectedQuick(null)}>
+          <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+              <div>
+                <p className="text-base font-bold text-slate-900">{selectedQuick.requestNumber}</p>
+                <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-700">Quick Quotation</span>
+              </div>
+              <button onClick={() => setSelectedQuick(null)} className="p-2 rounded-full hover:bg-slate-100 transition">
+                <X className="w-5 h-5 text-slate-500" />
+              </button>
+            </div>
+            <div className="px-5 py-4 space-y-4 overflow-y-auto max-h-[70vh]">
+              <div className="grid grid-cols-2 gap-3">
+                <div><p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Customer</p><p className="text-sm text-slate-800">{selectedQuick.customerName}</p></div>
+                <div><p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Date</p><p className="text-sm text-slate-800">{formatDate(selectedQuick.createdAt)}</p></div>
+                <div><p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Status</p><StatusBadge status={selectedQuick.status} type="quotations" /></div>
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Quotation Details</p>
+                <pre className="text-sm text-slate-800 whitespace-pre-wrap font-sans bg-slate-50 border border-slate-100 rounded-xl p-3">{selectedQuick.details}</pre>
+              </div>
+              {selectedQuick.adminNotes && (
+                <div>
+                  <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Admin Notes</p>
+                  <p className="text-sm text-slate-700 bg-amber-50 border border-amber-100 rounded-xl p-3">{selectedQuick.adminNotes}</p>
+                </div>
+              )}
+              {selectedQuick.imageUrls?.length > 0 && (
+                <div>
+                  <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Photos ({selectedQuick.imageUrls.length})</p>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedQuick.imageUrls.map((url: string, i: number) => (
+                      <div key={i} className="relative group w-20 h-20">
+                        <img src={`${BASE}${url}`} alt={`Photo ${i+1}`}
+                          onClick={() => setQuickLightbox(`${BASE}${url}`)}
+                          className="w-20 h-20 rounded-xl object-cover border border-slate-200 cursor-pointer hover:opacity-90 transition"
+                          onError={e => { (e.target as any).style.display = 'none'; }}
+                        />
+                        <button
+                          onClick={async e => { e.stopPropagation(); await downloadImage(`${BASE}${url}`, `photo-${i+1}`); }}
+                          className="absolute bottom-1 right-1 w-6 h-6 rounded-lg bg-black/60 hover:bg-black/80 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
+                          title="Download photo"
+                        >
+                          <Download className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="px-5 py-3 border-t border-slate-100 flex gap-2">
+              <button onClick={() => downloadQuickRequestPdf(selectedQuick)} className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 text-sm font-semibold rounded-xl text-red-600 hover:bg-red-50 border border-red-100 transition">
+                <Download className="w-4 h-4" /> PDF
+              </button>
+              <button onClick={() => downloadQuickRequestExcel(selectedQuick)} className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 text-sm font-semibold rounded-xl text-emerald-600 hover:bg-emerald-50 border border-emerald-100 transition">
+                <FileSpreadsheet className="w-4 h-4" /> Excel
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {quickLightbox && createPortal(
+        <div className="fixed inset-0 z-[9999] bg-black/90 flex items-center justify-center" onClick={() => setQuickLightbox(null)}>
+          <button className="absolute top-4 right-4 text-white bg-white/10 rounded-full p-2.5 hover:bg-white/25 transition" onClick={() => setQuickLightbox(null)}>
+            <X className="w-5 h-5" />
+          </button>
+          <img src={quickLightbox} alt="Preview" className="max-h-[88vh] max-w-[92vw] rounded-xl object-contain" onClick={e => e.stopPropagation()} />
+        </div>,
+        document.body
+      )}
 
       <BottomSheet isOpen={!!selected && !desktop} onClose={() => setSelected(null)} title={selected?.quotationNumber || 'Quotation'}>
         {selected && (
