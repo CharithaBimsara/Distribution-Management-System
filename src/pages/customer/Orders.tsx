@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { ordersApi } from '../../services/api/ordersApi';
 import { customersApi } from '../../services/api/customersApi';
-import { formatCurrency, formatDate } from '../../utils/formatters';
+import { formatCurrency, formatDate, formatDateTime } from '../../utils/formatters';
 import { taxCodeToRate } from '../../utils/calculations';
 import { downloadPurchaseOrderPdf } from '../../utils/purchaseOrderPdf';
 import { getShopName } from '../../utils/shopName';
@@ -274,7 +274,7 @@ export default function CustomerOrders() {
                   {(trashData?.items || []).map((o: any) => (
                     <tr key={o.id} className="hover:bg-slate-50/50">
                       <td className="px-4 py-3 font-medium text-slate-800">{o.orderNumber}</td>
-                      <td className="px-4 py-3 text-slate-500">{formatDate(o.orderDate || o.createdAt)}</td>
+                      <td className="px-4 py-3 text-slate-500">{formatDateTime(o.orderDate || o.createdAt)}</td>
                       <td className="px-4 py-3"><StatusBadge status={o.status} /></td>
                       <td className="px-4 py-3 text-right">
                         <button onClick={() => restoreMut.mutate(o.id)} className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg text-emerald-700 hover:bg-emerald-50 border border-emerald-200 transition">
@@ -338,7 +338,7 @@ export default function CustomerOrders() {
                           </div>
                         </td>
                         <td className="px-4 py-4 text-sm font-medium text-slate-600">{getShopName({ shopName: customerProfile?.shopName, customerName: order.customerName })}</td>
-                        <td className="px-4 py-4 text-sm font-medium text-slate-500">{formatDate(order.orderDate)}</td>
+                        <td className="px-4 py-4 text-sm font-medium text-slate-500">{formatDateTime(order.orderDate)}</td>
                         <td className="px-4 py-4 text-right text-sm font-bold text-slate-900">{formatCurrency(order.totalAmount)}</td>
                         <td className="px-4 py-4 text-center text-sm font-medium text-slate-500">{order.items?.length || 0}</td>
                         <td className="px-4 py-4 text-center"><StatusBadge status={order.status} /></td>
@@ -355,7 +355,7 @@ export default function CustomerOrders() {
                                   </div>
                                   <div>
                                     <h3 className="font-bold text-slate-900">{order.orderNumber} Details</h3>
-                                    <p className="text-xs font-medium text-slate-500">Placed on {formatDate(order.orderDate)}</p>
+                                    <p className="text-xs font-medium text-slate-500">Placed on {formatDateTime(order.orderDate)}</p>
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-2 flex-wrap">
@@ -531,7 +531,7 @@ export default function CustomerOrders() {
                 <div className="flex items-center justify-between mt-2">
                   <span className="text-xs font-medium text-slate-500 flex items-center gap-1.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-slate-300"></span>
-                    {formatDate(order.orderDate)} • {order.items?.length || 0} items
+                    {formatDateTime(order.orderDate)} • {order.items?.length || 0} items
                   </span>
                   <span className="text-sm font-bold text-slate-900">{formatCurrency(order.totalAmount)}</span>
                 </div>
@@ -607,7 +607,7 @@ export default function CustomerOrders() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-slate-50 border border-slate-100 rounded-xl p-4">
                   <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Date</p>
-                  <p className="text-sm font-bold text-slate-900 mt-1">{formatDate(selectedOrder.orderDate)}</p>
+                  <p className="text-sm font-bold text-slate-900 mt-1">{formatDateTime(selectedOrder.orderDate)}</p>
                 </div>
                 <div className="bg-slate-50 border border-slate-100 rounded-xl p-4">
                   <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Status</p>

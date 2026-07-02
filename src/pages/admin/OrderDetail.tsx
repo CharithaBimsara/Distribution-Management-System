@@ -2,7 +2,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ordersApi } from '../../services/api/ordersApi';
 import { customersApi } from '../../services/api/customersApi';
-import { formatCurrency, formatDate, statusColor } from '../../utils/formatters';
+import { formatCurrency, formatDate, formatDateTime, statusColor } from '../../utils/formatters';
 import {
   ArrowLeft, FileDown, Package, XCircle, CheckCircle, RefreshCw,
   User, MapPin, Calendar, Truck, Hash, ChevronDown, SlidersHorizontal,
@@ -332,7 +332,7 @@ export default function AdminOrderDetail() {
               <span className="font-bold text-slate-900 text-sm truncate">{order.orderNumber}</span>
               <span className={`text-[11px] px-2 py-0.5 rounded-full font-semibold shrink-0 ${statusColor(order.status)}`}>{order.status}</span>
             </div>
-            <p className="text-[11px] text-slate-400 leading-none mt-0.5">{formatDate(order.orderDate)}</p>
+            <p className="text-[11px] text-slate-400 leading-none mt-0.5">{formatDateTime(order.orderDate)}</p>
           </div>
           <button
             onClick={downloadReceipt}
@@ -378,7 +378,7 @@ export default function AdminOrderDetail() {
             </div>
             <div className="min-w-0">
               <p className="text-[11px] font-medium text-slate-400 uppercase tracking-wide">Dates</p>
-              <p className="text-xs text-slate-600 mt-0.5">Ordered: <span className="font-medium text-slate-800">{formatDate(order.orderDate)}</span></p>
+              <p className="text-xs text-slate-600 mt-0.5">Ordered: <span className="font-medium text-slate-800">{formatDateTime(order.orderDate)}</span></p>
               {order.requiredDeliveryDate && <p className="text-xs text-slate-600">Required: <span className="font-medium text-slate-800">{formatDate(order.requiredDeliveryDate)}</span></p>}
               {order.actualDeliveryDate && <p className="text-xs text-slate-600">Delivered: <span className="font-medium text-emerald-600">{formatDate(order.actualDeliveryDate)}</span></p>}
             </div>

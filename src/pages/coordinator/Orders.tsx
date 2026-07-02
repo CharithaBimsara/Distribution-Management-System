@@ -689,7 +689,7 @@ export default function CoordinatorOrders() {
                     <StatusBadge status={row.status} />
                   </div>
                   <div className="flex items-center gap-3 text-xs text-slate-400 mb-2">
-                    <span>{formatDate(row.orderDate)}</span>
+                    <span>{formatDateTime(row.orderDate)}</span>
                     <span>Rep: {row.repName || ''}</span>
                   </div>
                   <div className="flex justify-between items-center pt-2.5 border-t border-slate-50">

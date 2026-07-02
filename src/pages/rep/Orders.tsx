@@ -327,7 +327,7 @@ export default function RepOrders() {
                   <div className="grid grid-cols-2 gap-2 mt-3">
                     <div className="rounded-xl bg-slate-50 border border-slate-200 px-2.5 py-2">
                       <p className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold">Date</p>
-                      <p className="text-xs font-medium text-slate-700 mt-0.5">{formatDate(qr.createdAt)}</p>
+                      <p className="text-xs font-medium text-slate-700 mt-0.5">{formatDateTime(qr.createdAt)}</p>
                     </div>
                     <div className="rounded-xl bg-slate-50 border border-slate-200 px-2.5 py-2">
                       <p className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold">Photos</p>
@@ -367,7 +367,7 @@ export default function RepOrders() {
               <div className="grid grid-cols-2 gap-2 mt-3">
                 <div className="rounded-xl bg-slate-50 border border-slate-200 px-2.5 py-2">
                   <p className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold">Date</p>
-                  <p className="text-xs md:text-sm font-medium text-slate-700 mt-0.5">{formatDate(o.orderDate)}</p>
+                  <p className="text-xs md:text-sm font-medium text-slate-700 mt-0.5">{formatDateTime(o.orderDate)}</p>
                 </div>
                 <div className="rounded-xl bg-slate-50 border border-slate-200 px-2.5 py-2 text-right">
                   <p className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold">Amount</p>
@@ -410,7 +410,7 @@ export default function RepOrders() {
             <div className="px-5 py-4 space-y-4 overflow-y-auto max-h-[70vh]">
               <div className="grid grid-cols-2 gap-3">
                 <div><p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Customer</p><p className="text-sm text-slate-800">{selectedQuick.customerName}</p></div>
-                <div><p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Date</p><p className="text-sm text-slate-800">{formatDate(selectedQuick.createdAt)}</p></div>
+                <div><p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Date</p><p className="text-sm text-slate-800">{formatDateTime(selectedQuick.createdAt)}</p></div>
                 <div><p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Status</p><StatusBadge status={selectedQuick.status} type="orders" /></div>
               </div>
               <div>

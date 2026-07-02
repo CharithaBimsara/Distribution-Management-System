@@ -652,7 +652,7 @@ export default function RepQuotations() {
             <div className="px-5 py-4 space-y-4 overflow-y-auto max-h-[70vh]">
               <div className="grid grid-cols-2 gap-3">
                 <div><p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Customer</p><p className="text-sm text-slate-800">{selectedQuick.customerName}</p></div>
-                <div><p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Date</p><p className="text-sm text-slate-800">{formatDate(selectedQuick.createdAt)}</p></div>
+                <div><p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Date</p><p className="text-sm text-slate-800">{formatDateTime(selectedQuick.createdAt)}</p></div>
                 <div><p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Status</p><StatusBadge status={selectedQuick.status} type="quotations" /></div>
               </div>
               <div>

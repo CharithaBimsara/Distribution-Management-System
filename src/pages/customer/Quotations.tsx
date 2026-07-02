@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { customerGetQuotations, customerConvertQuotation, customerCancelQuotation } from '../../services/api/quotationApi';
 import { customersApi } from '../../services/api/customersApi';
-import { formatCurrency, formatDate, formatRelative } from '../../utils/formatters';
+import { formatCurrency, formatDate, formatDateTime, formatRelative } from '../../utils/formatters';
 import { taxCodeToRate } from '../../utils/calculations';
 import { downloadQuotationPdf } from '../../utils/quotationPdf';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
@@ -254,7 +254,7 @@ export default function CustomerQuotations() {
                         <td className="px-4 py-4">
                           <span className="font-bold text-slate-900 text-sm">{q.quotationNumber}</span>
                         </td>
-                        <td className="px-4 py-4 text-sm font-medium text-slate-500 whitespace-nowrap">{formatDate(q.createdAt)}</td>
+                        <td className="px-4 py-4 text-sm font-medium text-slate-500 whitespace-nowrap">{formatDateTime(q.createdAt)}</td>
                         <td className="px-4 py-4 text-right text-sm font-bold text-slate-900">{formatCurrency(q.totalAmount)}</td>
                         <td className="px-4 py-4 text-center text-sm font-medium text-slate-500">{q.items?.length || 0}</td>
                         <td className="px-4 py-4 text-center"><StatusBadge status={q.status} /></td>
@@ -271,7 +271,7 @@ export default function CustomerQuotations() {
                                   </div>
                                   <div>
                                     <h3 className="font-bold text-slate-900">{q.quotationNumber} Details</h3>
-                                    <p className="text-xs font-medium text-slate-500">Requested on {formatDate(q.createdAt)}</p>
+                                    <p className="text-xs font-medium text-slate-500">Requested on {formatDateTime(q.createdAt)}</p>
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-2 flex-wrap">
@@ -460,7 +460,7 @@ export default function CustomerQuotations() {
                 <div className="flex items-center justify-between mt-2">
                   <span className="text-xs font-medium text-slate-500 flex items-center gap-1.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-slate-300"></span>
-                    {formatDate(q.createdAt)} • {q.items?.length || 0} items
+                    {formatDateTime(q.createdAt)} • {q.items?.length || 0} items
                   </span>
                   <span className="text-sm font-bold text-slate-900">{formatCurrency(q.totalAmount)}</span>
                 </div>
@@ -539,7 +539,7 @@ export default function CustomerQuotations() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-slate-50 border border-slate-100 rounded-xl p-4">
                   <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Requested Date</p>
-                  <p className="text-sm font-bold text-slate-900 mt-1">{formatDate(selectedQuotation.createdAt)}</p>
+                  <p className="text-sm font-bold text-slate-900 mt-1">{formatDateTime(selectedQuotation.createdAt)}</p>
                 </div>
                 <div className="bg-slate-50 border border-slate-100 rounded-xl p-4">
                   <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Status</p>
