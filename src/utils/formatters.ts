@@ -1,4 +1,4 @@
-import { format, formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
 
 export const formatCurrency = (amount: number) =>
   new Intl.NumberFormat('en-LK', { style: 'currency', currency: 'LKR', minimumFractionDigits: 2 }).format(amount);
@@ -7,7 +7,7 @@ export const formatNumber = (amount: number) =>
   new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
 
 // Sri Lanka is UTC+5:30, no daylight saving
-const SL_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+const SL_TIME_ZONE = 'Asia/Colombo';
 
 function toUtcDate(d: string | Date) {
   if (typeof d === 'string') {
@@ -19,15 +19,30 @@ function toUtcDate(d: string | Date) {
   return new Date(d);
 }
 
-function toSLDate(d: string | Date): Date {
-  return new Date(toUtcDate(d).getTime() + SL_OFFSET_MS);
+function formatInSriLanka(date: string | Date, options: Intl.DateTimeFormatOptions): string {
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: SL_TIME_ZONE,
+    ...options,
+  }).format(toUtcDate(date));
 }
 
 export const formatDate = (date: string | Date) =>
-  format(toSLDate(date), 'MMM dd, yyyy');
+  formatInSriLanka(date, {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
 
 export const formatDateTime = (date: string | Date) =>
-  format(toSLDate(date), 'MMM dd, yyyy') + ' | ' + format(toSLDate(date), 'HH:mm');
+  `${formatInSriLanka(date, {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  })} | ${formatInSriLanka(date, {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })}`;
 
 export const formatRelative = (date: string | Date) =>
   formatDistanceToNow(toUtcDate(date), { addSuffix: true });
