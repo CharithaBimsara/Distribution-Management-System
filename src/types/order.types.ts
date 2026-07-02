@@ -9,9 +9,13 @@ export const ORDER_STATUSES = [
   'Cancelled',
   'OnHold',
   'Rejected',
-  'PartiallyDelivered'
+  'PartiallyDelivered',
+  'SalesOrderDone'
 ] as const;
 export type OrderStatus = typeof ORDER_STATUSES[number];
+
+// Only these 4 statuses shown in UI filter dropdowns / pills
+export const FILTER_ORDER_STATUSES = ['Pending', 'Approved', 'Rejected', 'Completed'] as const;
 
 export interface Order {
   id: string;

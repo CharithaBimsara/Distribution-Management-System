@@ -120,3 +120,57 @@ export const adminRestoreQuotation = async (id: string) => {
   const { data } = await api.post<ApiResponse<string>>(`/admin/quotations/${id}/restore`, {});
   return data.data;
 };
+
+// ===== Rep trash endpoints =====
+
+export const repDeleteQuotation = async (id: string) => {
+  const { data } = await api.delete<ApiResponse<string>>(`/rep/quotations/${id}`);
+  return data.data;
+};
+
+export const repGetQuotationsTrash = async (page = 1, pageSize = 20) => {
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+  const { data } = await api.get<ApiResponse<PagedResult<Quotation>>>(`/rep/quotations/trash?${params}`);
+  return data.data;
+};
+
+export const repRestoreQuotation = async (id: string) => {
+  const { data } = await api.post<ApiResponse<string>>(`/rep/quotations/${id}/restore`, {});
+  return data.data;
+};
+
+// ===== Coordinator trash endpoints =====
+
+export const coordinatorDeleteQuotation = async (id: string) => {
+  const { data } = await api.delete<ApiResponse<string>>(`/coordinator/quotations/${id}`);
+  return data.data;
+};
+
+export const coordinatorGetQuotationsTrash = async (page = 1, pageSize = 20) => {
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+  const { data } = await api.get<ApiResponse<PagedResult<Quotation>>>(`/coordinator/quotations/trash?${params}`);
+  return data.data;
+};
+
+export const coordinatorRestoreQuotation = async (id: string) => {
+  const { data } = await api.post<ApiResponse<string>>(`/coordinator/quotations/${id}/restore`, {});
+  return data.data;
+};
+
+// ===== Customer trash endpoints =====
+
+export const customerDeleteQuotation = async (id: string) => {
+  const { data } = await api.delete<ApiResponse<string>>(`/customer/quotations/${id}`);
+  return data.data;
+};
+
+export const customerGetQuotationsTrash = async (page = 1, pageSize = 20) => {
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+  const { data } = await api.get<ApiResponse<PagedResult<Quotation>>>(`/customer/quotations/trash?${params}`);
+  return data.data;
+};
+
+export const customerRestoreQuotation = async (id: string) => {
+  const { data } = await api.post<ApiResponse<string>>(`/customer/quotations/${id}/restore`, {});
+  return data.data;
+};

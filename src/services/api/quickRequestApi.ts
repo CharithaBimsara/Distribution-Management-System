@@ -57,6 +57,46 @@ export const quickRequestApi = {
   adminUpdateStatus: (id: string, dto: UpdateQuickRequestStatusDto) =>
     api.put<{ data: QuickRequestDto }>(`/admin/quick-requests/${id}/status`, dto),
 
-  adminDelete: (id: string) =>
+  adminSoftDelete: (id: string) =>
     api.delete<{ data: string }>(`/admin/quick-requests/${id}`),
+
+  adminGetTrash: (type?: string) =>
+    api.get<{ data: QuickRequestDto[] }>('/admin/quick-requests/trash', {
+      params: type ? { type } : undefined,
+    }),
+
+  adminRestore: (id: string) =>
+    api.post<{ data: string }>(`/admin/quick-requests/${id}/restore`),
+
+  // Rep trash
+  repDelete: (id: string) =>
+    api.delete<{ data: string }>(`/rep/quick-requests/${id}`),
+
+  repGetTrash: (type?: string) =>
+    api.get<{ data: QuickRequestDto[] }>('/rep/quick-requests/trash', {
+      params: type ? { type } : undefined,
+    }),
+
+  repRestore: (id: string) =>
+    api.post<{ data: string }>(`/rep/quick-requests/${id}/restore`),
+
+  // Coordinator
+  coordinatorGetAll: (type?: string, status?: string) =>
+    api.get<{ data: QuickRequestDto[] }>('/coordinator/quick-requests', {
+      params: { ...(type && { type }), ...(status && { status }) },
+    }),
+
+  coordinatorDelete: (id: string) =>
+    api.delete<{ data: string }>(`/coordinator/quick-requests/${id}`),
+
+  coordinatorUpdateStatus: (id: string, dto: UpdateQuickRequestStatusDto) =>
+    api.put<{ data: QuickRequestDto }>(`/coordinator/quick-requests/${id}/status`, dto),
+
+  coordinatorGetTrash: (type?: string) =>
+    api.get<{ data: QuickRequestDto[] }>('/coordinator/quick-requests/trash', {
+      params: type ? { type } : undefined,
+    }),
+
+  coordinatorRestore: (id: string) =>
+    api.post<{ data: string }>(`/coordinator/quick-requests/${id}/restore`),
 };

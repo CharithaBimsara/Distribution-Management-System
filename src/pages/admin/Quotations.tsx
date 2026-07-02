@@ -10,7 +10,7 @@ import { taxCodeToRate } from '../../utils/calculations';
 import { downloadQuotationPdf, downloadQuotationsExcel, downloadQuotationsPdf } from '../../utils/quotationPdf';
 import { downloadQuickRequestPdf, downloadQuickRequestExcel, downloadImage } from '../../utils/quickRequestPdf';
 import type { Quotation } from '../../types/quotation.types';
-import { QUOTATION_STATUSES } from '../../types/quotation.types';
+import { QUOTATION_STATUSES, FILTER_QUOTATION_STATUSES } from '../../types/quotation.types';
 import {
   FileText, Search, X, SlidersHorizontal, ArrowUp, ArrowDown, ArrowUpDown,
   Check, ChevronRight, FileSpreadsheet, CheckCircle, XCircle, Trash2, RotateCcw, Download,
@@ -108,8 +108,12 @@ export default function AdminQuotations() {
 
   const deleteMut = useMutation({
     mutationFn: (id: string) => adminSoftDeleteQuotation(id),
-    onSuccess: () => {
+    onSuccess: (_, id) => {
       toast.success('Moved to trash');
+      // Immediately remove from cache for instant UI update
+      queryClient.setQueriesData({ queryKey: ['admin-quotations'] }, (old: any) =>
+        old ? { ...old, items: old.items?.filter((q: any) => q.id !== id), totalCount: Math.max(0, (old.totalCount ?? 0) - 1) } : old
+      );
       setSelectedIds(new Set());
       setSelectAllPages(false);
       setDeleteConfirmOpen(false);
@@ -215,13 +219,25 @@ export default function AdminQuotations() {
     });
   }, [filteredItems, sortField, sortDir]);
 
-  const quickQuotationRows = useMemo(() => (quickData as any[]).map((r: any) => ({
-    _isQuick: true, _quick: r,
-    id: r.id, quotationNumber: r.requestNumber,
-    customerName: r.customerName, repName: r.repName,
-    createdAt: r.createdAt, status: r.status,
-    items: [] as any[], totalAmount: 0,
-  })), [quickData]);
+  const quickQuotationRows = useMemo(() => {
+    let rows = (quickData as any[]).map((r: any) => ({
+      _isQuick: true, _quick: r,
+      id: r.id, quotationNumber: r.requestNumber,
+      customerName: r.customerName, repName: r.repName,
+      createdAt: r.createdAt, status: r.status,
+      items: [] as any[], totalAmount: 0,
+    }));
+    if (statusFilter)       rows = rows.filter(r => r.status === statusFilter);
+    if (repIdFilter)        rows = rows.filter(r => r._quick.repId === repIdFilter);
+    if (customerIdFilter) {
+      const custName = customers.find(c => c.id === customerIdFilter)?.shopName?.toLowerCase();
+      if (custName) rows = rows.filter(r => (r.customerName || '').toLowerCase() === custName);
+    }
+    if (fromDate)  rows = rows.filter(r => r.createdAt && r.createdAt >= fromDate);
+    if (toDate)    rows = rows.filter(r => r.createdAt && r.createdAt.slice(0, 10) <= toDate);
+    if (search.trim()) { const sq = search.toLowerCase(); rows = rows.filter(r => (r.quotationNumber || '').toLowerCase().includes(sq) || (r.customerName || '').toLowerCase().includes(sq)); }
+    return rows;
+  }, [quickData, statusFilter, repIdFilter, customerIdFilter, customers, fromDate, toDate, search]);
 
   const allRows: any[] = useMemo(() => {
     const merged = [...filteredItems, ...quickQuotationRows];
@@ -520,7 +536,7 @@ export default function AdminQuotations() {
                   <div>
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2.5">Filter by Status</p>
                     <div className="flex flex-wrap gap-2">
-                      {QUOTATION_STATUSES.map(s => (
+                      {FILTER_QUOTATION_STATUSES.map(s => (
                         <button key={s}
                           onClick={() => { setStatusFilter(prev => prev === s ? '' : s); setPage(1); }}
                           className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
@@ -1401,13 +1417,18 @@ export default function AdminQuotations() {
                           .map(id => (allRows.find((r: any) => r.id === id) as any)._quick.id);
                     Promise.all([
                       ...regularIds.map(id => deleteMut.mutateAsync(id)),
-                      ...quickIds.map(id => quickRequestApi.adminDelete(id)),
+                      ...quickIds.map(id => quickRequestApi.adminSoftDelete(id)),
                     ])
                       .then(() => {
+                        if (quickIds.length > 0) {
+                          queryClient.setQueriesData({ queryKey: ['admin-quick-quotations'] }, (old: any) =>
+                            Array.isArray(old) ? old.filter((q: any) => !quickIds.includes(q.id)) : old
+                          );
+                          queryClient.invalidateQueries({ queryKey: ['admin-quick-quotations'] });
+                        }
                         setSelectedIds(new Set());
                         setSelectAllPages(false);
                         setDeleteConfirmOpen(false);
-                        if (quickIds.length > 0) queryClient.invalidateQueries({ queryKey: ['admin-quick-quotations'] });
                         toast.success(`${allIds.length} item${allIds.length !== 1 ? 's' : ''} deleted`);
                       })
                       .catch(() => toast.error('Some deletions failed'));

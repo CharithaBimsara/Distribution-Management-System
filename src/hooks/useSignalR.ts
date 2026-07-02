@@ -137,6 +137,7 @@ export function useSignalR() {
       queryClient.invalidateQueries({ queryKey: ['unread-count', user?.id] });
       queryClient.invalidateQueries({ queryKey: ['rep-quick-orders'] });
       queryClient.invalidateQueries({ queryKey: ['rep-quick-quotations'] });
+      refreshOrderQueries();
       refreshQuotationQueries();
       refreshSupportQueries();
     });
@@ -151,6 +152,8 @@ export function useSignalR() {
       queryClient.invalidateQueries({ queryKey: ['unread-count', user?.id] });
       queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
       queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['coordinator-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['coordinator-quick-orders'] });
     });
 
     conn.on('NewQuickRequest', (data: { id: string; requestNumber: string; type: string; customerName: string; repName?: string }) => {
@@ -163,6 +166,8 @@ export function useSignalR() {
       queryClient.invalidateQueries({ queryKey: ['admin-quick-requests'] });
       queryClient.invalidateQueries({ queryKey: ['admin-quick-orders'] });
       queryClient.invalidateQueries({ queryKey: ['admin-quick-quotations'] });
+      queryClient.invalidateQueries({ queryKey: ['coordinator-quick-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['coordinator-quick-quotations'] });
     });
 
     // Fires after image upload — re-fetch so images appear without a manual refresh
@@ -170,6 +175,8 @@ export function useSignalR() {
       queryClient.invalidateQueries({ queryKey: ['admin-quick-requests'] });
       queryClient.invalidateQueries({ queryKey: ['admin-quick-orders'] });
       queryClient.invalidateQueries({ queryKey: ['admin-quick-quotations'] });
+      queryClient.invalidateQueries({ queryKey: ['coordinator-quick-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['coordinator-quick-quotations'] });
     });
 
     conn.on('OrderStatusChanged', (data: { orderId: string; status: string }) => {

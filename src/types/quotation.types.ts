@@ -5,9 +5,13 @@ export const QUOTATION_STATUSES = [
   'Approved',
   'Rejected',
   'ConvertedToOrder',
-  'Expired'
+  'Expired',
+  'SalesQuotationDone'
 ] as const;
 export type QuotationStatus = typeof QUOTATION_STATUSES[number];
+
+// Only these 4 statuses shown in UI filter dropdowns / pills
+export const FILTER_QUOTATION_STATUSES = ['Pending', 'Approved', 'Rejected', 'Completed'] as const;
 
 export interface Quotation {
   id: string;

@@ -270,6 +270,23 @@ export default function AdminOutstandingReports() {
     return Array.from(groups.entries()).sort(([a], [b]) => a.localeCompare(b));
   }, [detail, search]);
 
+  // Grand Total computed from all isTotal rows across all groups
+  const grandTotal = useMemo(() => {
+    let current = 0, bucket1_15 = 0, bucket16_30 = 0, bucket31_45 = 0, above45 = 0, balance = 0;
+    for (const [, rows] of groupedEntries) {
+      const totalRow = rows.find(r => r.isTotal);
+      if (totalRow) {
+        current    += totalRow.current    || 0;
+        bucket1_15 += totalRow.bucket1_15 || 0;
+        bucket16_30+= totalRow.bucket16_30|| 0;
+        bucket31_45+= totalRow.bucket31_45|| 0;
+        above45    += totalRow.above45    || 0;
+        balance    += totalRow.balance    || 0;
+      }
+    }
+    return { current, bucket1_15, bucket16_30, bucket31_45, above45, balance };
+  }, [groupedEntries]);
+
   const toggleCustomer = (name: string) => {
     setExpandedCustomers(prev => {
       const next = new Set(prev);
@@ -682,6 +699,17 @@ export default function AdminOutstandingReports() {
                                         </Fragment>
                                       );
                                     })}
+                                    {/* Grand Total row — always visible */}
+                                    <tr className="sticky bottom-0 bg-amber-100 border-t-2 border-amber-400 font-bold text-[11px] shadow-[0_-2px_8px_-2px_rgba(0,0,0,0.08)]">
+                                      <td className="px-2 py-2.5" />
+                                      <td colSpan={4} className="px-3 py-2.5 text-slate-800 font-extrabold uppercase tracking-wide">Grand Total</td>
+                                      <td className="px-3 py-2.5 text-right border border-amber-300">{fmt(grandTotal.current)}</td>
+                                      <td className="px-3 py-2.5 text-right border border-amber-300">{fmt(grandTotal.bucket1_15)}</td>
+                                      <td className="px-3 py-2.5 text-right border border-amber-300">{fmt(grandTotal.bucket16_30)}</td>
+                                      <td className="px-3 py-2.5 text-right border border-amber-300">{fmt(grandTotal.bucket31_45)}</td>
+                                      <td className="px-3 py-2.5 text-right border border-amber-300 text-red-700">{fmt(grandTotal.above45)}</td>
+                                      <td className="px-3 py-2.5 text-right border border-amber-300">{fmt(grandTotal.balance)}</td>
+                                    </tr>
                                   </tbody>
                                 </table>
                               </div>

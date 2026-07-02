@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 
 export interface Column<T> {
   key: string;
@@ -7,6 +7,8 @@ export interface Column<T> {
   render: (row: T, index: number) => React.ReactNode;
   className?: string;
   align?: 'left' | 'center' | 'right';
+  sortable?: boolean;
+  sortKey?: string;  // defaults to key if not set
 }
 
 export interface DataTableProps<T> {
@@ -30,6 +32,9 @@ export interface DataTableProps<T> {
   onPageChange?: (page: number) => void;
   hoverable?: boolean;
   striped?: boolean;
+  sortField?: string;
+  sortDir?: 'asc' | 'desc';
+  onSort?: (field: string) => void;
 }
 
 function SkeletonRow({ cols }: { cols: number }) {
@@ -62,6 +67,9 @@ export default function DataTable<T>({
   onPageChange,
   hoverable = true,
   striped = false,
+  sortField,
+  sortDir,
+  onSort,
 }: DataTableProps<T>) {
   const getKey = (row: T) => {
     if (keyExtractor) return keyExtractor(row);
@@ -91,14 +99,26 @@ export default function DataTable<T>({
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-slate-50/80 border-b border-slate-200/60">
-              {columns.map((col) => (
-                <th
-                  key={col.key}
-                  className={`px-4 py-3 font-semibold text-slate-600 text-xs uppercase tracking-wider whitespace-nowrap ${alignClass(col.align)} ${col.className || ''}`}
-                >
-                  {col.header}
-                </th>
-              ))}
+              {columns.map((col) => {
+                const sk = col.sortKey || col.key;
+                const isSorted = sortField === sk;
+                return (
+                  <th
+                    key={col.key}
+                    onClick={col.sortable && onSort ? () => onSort(sk) : undefined}
+                    className={`px-4 py-3 font-semibold text-slate-600 text-xs uppercase tracking-wider whitespace-nowrap ${alignClass(col.align)} ${col.className || ''} ${col.sortable && onSort ? 'cursor-pointer hover:bg-slate-100 select-none transition-colors' : ''}`}
+                  >
+                    {col.sortable && onSort ? (
+                      <span className="inline-flex items-center gap-1">
+                        {col.header}
+                        {!isSorted && <ArrowUpDown className="w-3 h-3 opacity-30" />}
+                        {isSorted && sortDir === 'asc' && <ArrowUp className="w-3 h-3 text-indigo-600" />}
+                        {isSorted && sortDir === 'desc' && <ArrowDown className="w-3 h-3 text-indigo-600" />}
+                      </span>
+                    ) : col.header}
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>

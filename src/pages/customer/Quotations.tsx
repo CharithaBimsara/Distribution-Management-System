@@ -11,17 +11,16 @@ import MobileTileList from '../../components/common/MobileTileList';
 import StatusBadge from '../../components/common/StatusBadge';
 import EmptyState from '../../components/common/EmptyState';
 import BottomSheet from '../../components/common/BottomSheet';
-import { FileText, Plus, Loader2, ShoppingCart, ArrowRight, Download, Search, X, ChevronRight, ClipboardList, RefreshCcw } from 'lucide-react';
+import { FileText, Plus, Loader2, ShoppingCart, ArrowRight, Download, Search, X, ChevronRight, ClipboardList, RefreshCcw, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import toast from 'react-hot-toast';
 import type { Quotation, QuotationStatus } from '../../types/quotation.types';
 
 const STATUS_FILTERS: { label: string; value: string }[] = [
   { label: 'All', value: '' },
-  { label: 'Draft', value: 'Draft' },
-  { label: 'Submitted', value: 'Submitted' },
+  { label: 'Pending', value: 'Pending' },
   { label: 'Approved', value: 'Approved' },
   { label: 'Rejected', value: 'Rejected' },
-  { label: 'Converted', value: 'ConvertedToOrder' },
+  { label: 'Completed', value: 'Completed' },
 ];
 
 export default function CustomerQuotations() {
@@ -38,6 +37,13 @@ export default function CustomerQuotations() {
   
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [deliveryNotes, setDeliveryNotes] = useState('');
+  const [sortField, setSortField] = useState<string>('createdAt');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const toggleSort = (f: string) => { if (sortField === f) setSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setSortField(f); setSortDir('asc'); } };
+  const SortIcon = ({ field }: { field: string }) => {
+    if (sortField !== field) return <ArrowUpDown className="w-3 h-3 opacity-30" />;
+    return sortDir === 'asc' ? <ArrowUp className="w-3 h-3 text-orange-500" /> : <ArrowDown className="w-3 h-3 text-orange-500" />;
+  };
 
   const { data: customerProfile } = useQuery({
     queryKey: ['customer-profile-for-quotation-tax-mode'],
@@ -85,12 +91,26 @@ export default function CustomerQuotations() {
   const totalPages = data ? Math.ceil(data.totalCount / data.pageSize) : 0;
 
   const filteredQuotations = useMemo(() => {
-    return quotations.filter((q) => {
+    const filtered = quotations.filter((q) => {
       if (!search.trim()) return true;
       const term = search.toLowerCase();
       return q.quotationNumber.toLowerCase().includes(term);
     });
-  }, [quotations, search]);
+    return [...filtered].sort((a, b) => {
+      let av: any, bv: any;
+      switch (sortField) {
+        case 'quotationNumber': av = a.quotationNumber || ''; bv = b.quotationNumber || ''; break;
+        case 'totalAmount':     av = a.totalAmount || 0;    bv = b.totalAmount || 0;    break;
+        case 'status':          av = a.status || '';        bv = b.status || '';        break;
+        default:                av = a.createdAt || '';     bv = b.createdAt || '';     break;
+      }
+      if (typeof av === 'string') av = av.toLowerCase();
+      if (typeof bv === 'string') bv = bv.toLowerCase();
+      if (av < bv) return sortDir === 'asc' ? -1 : 1;
+      if (av > bv) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [quotations, search, sortField, sortDir]);
 
   useEffect(() => {
     if (!selectedQuotation) return;
@@ -212,11 +232,11 @@ export default function CustomerQuotations() {
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200">
                     <th className="px-4 py-4 w-8" />
-                    <th className="px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-widest">Quotation #</th>
-                    <th className="px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-widest">Date</th>
-                    <th className="px-4 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-widest">Total</th>
+                    <th onClick={() => toggleSort('quotationNumber')} className="px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-widest cursor-pointer hover:bg-slate-100 select-none transition-colors"><span className="inline-flex items-center gap-1">Quotation # <SortIcon field="quotationNumber" /></span></th>
+                    <th onClick={() => toggleSort('createdAt')} className="px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-widest cursor-pointer hover:bg-slate-100 select-none transition-colors"><span className="inline-flex items-center gap-1">Date <SortIcon field="createdAt" /></span></th>
+                    <th onClick={() => toggleSort('totalAmount')} className="px-4 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-widest cursor-pointer hover:bg-slate-100 select-none transition-colors"><span className="inline-flex items-center justify-end gap-1">Total <SortIcon field="totalAmount" /></span></th>
                     <th className="px-4 py-4 text-center text-xs font-bold text-slate-500 uppercase tracking-widest">Items</th>
-                    <th className="px-4 py-4 text-center text-xs font-bold text-slate-500 uppercase tracking-widest">Status</th>
+                    <th onClick={() => toggleSort('status')} className="px-4 py-4 text-center text-xs font-bold text-slate-500 uppercase tracking-widest cursor-pointer hover:bg-slate-100 select-none transition-colors"><span className="inline-flex items-center gap-1">Status <SortIcon field="status" /></span></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">

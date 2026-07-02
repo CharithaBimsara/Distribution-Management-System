@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useState } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { ordersApi } from '../../services/api/ordersApi';
 import { customersApi } from '../../services/api/customersApi';
@@ -12,18 +12,17 @@ import MobileTileList from '../../components/common/MobileTileList';
 import StatusBadge from '../../components/common/StatusBadge';
 import EmptyState from '../../components/common/EmptyState';
 import BottomSheet from '../../components/common/BottomSheet';
-import { ClipboardList, Package, Star, Loader2, Search, X, ChevronRight, ShoppingCart, FileText, RefreshCcw } from 'lucide-react';
+import { ClipboardList, Package, Star, Loader2, Search, X, ChevronRight, ShoppingCart, FileText, RefreshCcw, Trash2, RotateCcw, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import type { Order, OrderStatus } from '../../types/order.types';
 import toast from 'react-hot-toast';
+
 
 const STATUS_FILTERS: { label: string; value: OrderStatus | '' }[] = [
   { label: 'All', value: '' },
   { label: 'Pending', value: 'Pending' },
   { label: 'Approved', value: 'Approved' },
-  { label: 'Processing', value: 'Processing' },
-  { label: 'Dispatched', value: 'Dispatched' },
-  { label: 'Delivered', value: 'Delivered' },
-  { label: 'Cancelled', value: 'Cancelled' },
+  { label: 'Rejected', value: 'Rejected' },
+  { label: 'Completed', value: 'Completed' },
 ];
 
 export default function CustomerOrders() {
@@ -34,9 +33,18 @@ export default function CustomerOrders() {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [ratingVal, setRatingVal] = useState(0);
   const [ratingComment, setRatingComment] = useState('');
+  const [activeTab, setActiveTab] = useState<'active' | 'trash'>('active');
+  const [sortField, setSortField] = useState<string>('orderDate');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const toggleSort = (f: string) => { if (sortField === f) setSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setSortField(f); setSortDir('asc'); } };
+  const SortIcon = ({ field }: { field: string }) => {
+    if (sortField !== field) return <ArrowUpDown className="w-3 h-3 opacity-30" />;
+    return sortDir === 'asc' ? <ArrowUp className="w-3 h-3 text-orange-500" /> : <ArrowDown className="w-3 h-3 text-orange-500" />;
+  };
 
   const desktop = useIsDesktop();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['customer-orders', page, status],
@@ -79,6 +87,30 @@ export default function CustomerOrders() {
     onError: () => toast.error('Rating failed'),
   });
 
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => ordersApi.customerDelete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['customer-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['customer-orders-trash'] });
+      toast.success('Moved to trash');
+    },
+  });
+
+  const { data: trashData, isLoading: trashLoading } = useQuery({
+    queryKey: ['customer-orders-trash', page],
+    queryFn: () => ordersApi.customerGetTrash(page, 20).then(r => r.data.data),
+    enabled: activeTab === 'trash',
+  });
+
+  const restoreMut = useMutation({
+    mutationFn: (id: string) => ordersApi.customerRestore(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['customer-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['customer-orders-trash'] });
+      toast.success('Order restored');
+    },
+  });
+
   const { data: customerProfile } = useQuery({
     queryKey: ['customer-profile-for-order-tax-mode'],
     queryFn: () => customersApi.customerGetProfile().then((r): any => r.data.data),
@@ -90,14 +122,29 @@ export default function CustomerOrders() {
 
   const orders = data?.items || [];
   const filteredOrders = useMemo(
-    () =>
-      orders.filter((o) => {
+    () => {
+      const filtered = orders.filter((o) => {
         if (!search.trim()) return true;
         const q = search.toLowerCase();
         const shopName = getShopName({ shopName: customerProfile?.shopName, customerName: o.customerName }).toLowerCase();
         return o.orderNumber.toLowerCase().includes(q) || shopName.includes(q);
-      }),
-    [orders, search, customerProfile?.shopName]
+      });
+      return [...filtered].sort((a, b) => {
+        let av: any, bv: any;
+        switch (sortField) {
+          case 'orderNumber':  av = a.orderNumber || '';   bv = b.orderNumber || '';   break;
+          case 'totalAmount':  av = a.totalAmount || 0;   bv = b.totalAmount || 0;   break;
+          case 'status':       av = a.status || '';       bv = b.status || '';       break;
+          default:             av = a.orderDate || '';    bv = b.orderDate || '';    break;
+        }
+        if (typeof av === 'string') av = av.toLowerCase();
+        if (typeof bv === 'string') bv = bv.toLowerCase();
+        if (av < bv) return sortDir === 'asc' ? -1 : 1;
+        if (av > bv) return sortDir === 'asc' ? 1 : -1;
+        return 0;
+      });
+    },
+    [orders, search, customerProfile?.shopName, sortField, sortDir]
   );
 
   const totalPages = data?.totalPages || 0;
@@ -138,6 +185,17 @@ export default function CustomerOrders() {
             <ShoppingCart className="w-4 h-4" />
             <span className="hidden sm:inline">Create Order</span>
             <span className="sm:hidden">New</span>
+          </button>
+        </div>
+        {/* Active / Trash tabs */}
+        <div className="mt-3 inline-flex bg-slate-100 rounded-lg p-1 gap-1">
+          <button onClick={() => { setActiveTab('active'); setPage(1); }}
+            className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${activeTab === 'active' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}>
+            Active
+          </button>
+          <button onClick={() => { setActiveTab('trash'); setPage(1); }}
+            className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${activeTab === 'trash' ? 'bg-white shadow-sm text-rose-600' : 'text-slate-500 hover:text-slate-700'}`}>
+            <Trash2 className="w-3 h-3" />Trash
           </button>
         </div>
       </div>
@@ -193,7 +251,43 @@ export default function CustomerOrders() {
       </div>
 
       <div className="px-4 lg:px-0">
-        {desktop ? (
+        {activeTab === 'trash' ? (
+          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+            <div className="px-5 py-3 border-b border-slate-100">
+              <span className="text-sm font-semibold text-slate-700">Trash (auto-deleted after 7 days)</span>
+            </div>
+            {trashLoading ? (
+              <div className="p-8 text-center text-slate-400 text-sm">Loading...</div>
+            ) : (trashData?.items || []).length === 0 ? (
+              <div className="p-8 text-center text-slate-400 text-sm">Trash is empty</div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 border-b border-slate-100">
+                  <tr>
+                    <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500">Order #</th>
+                    <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500">Date</th>
+                    <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500">Status</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-semibold text-slate-500">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {(trashData?.items || []).map((o: any) => (
+                    <tr key={o.id} className="hover:bg-slate-50/50">
+                      <td className="px-4 py-3 font-medium text-slate-800">{o.orderNumber}</td>
+                      <td className="px-4 py-3 text-slate-500">{formatDate(o.orderDate || o.createdAt)}</td>
+                      <td className="px-4 py-3"><StatusBadge status={o.status} /></td>
+                      <td className="px-4 py-3 text-right">
+                        <button onClick={() => restoreMut.mutate(o.id)} className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg text-emerald-700 hover:bg-emerald-50 border border-emerald-200 transition">
+                          <RotateCcw className="w-3 h-3" /> Restore
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        ) : desktop ? (
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             {isLoading ? (
               <div className="p-12 text-center flex flex-col items-center justify-center">
@@ -213,12 +307,12 @@ export default function CustomerOrders() {
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200">
                     <th className="px-4 py-4 w-8" />
-                    <th className="px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-widest">Order #</th>
+                    <th onClick={() => toggleSort('orderNumber')} className="px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-widest cursor-pointer hover:bg-slate-100 select-none transition-colors"><span className="inline-flex items-center gap-1">Order # <SortIcon field="orderNumber" /></span></th>
                     <th className="px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-widest">Shop</th>
-                    <th className="px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-widest">Date</th>
-                    <th className="px-4 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-widest">Total</th>
+                    <th onClick={() => toggleSort('orderDate')} className="px-4 py-4 text-xs font-bold text-slate-500 uppercase tracking-widest cursor-pointer hover:bg-slate-100 select-none transition-colors"><span className="inline-flex items-center gap-1">Date <SortIcon field="orderDate" /></span></th>
+                    <th onClick={() => toggleSort('totalAmount')} className="px-4 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-widest cursor-pointer hover:bg-slate-100 select-none transition-colors"><span className="inline-flex items-center justify-end gap-1">Total <SortIcon field="totalAmount" /></span></th>
                     <th className="px-4 py-4 text-center text-xs font-bold text-slate-500 uppercase tracking-widest">Items</th>
-                    <th className="px-4 py-4 text-center text-xs font-bold text-slate-500 uppercase tracking-widest">Status</th>
+                    <th onClick={() => toggleSort('status')} className="px-4 py-4 text-center text-xs font-bold text-slate-500 uppercase tracking-widest cursor-pointer hover:bg-slate-100 select-none transition-colors"><span className="inline-flex items-center gap-1">Status <SortIcon field="status" /></span></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -464,6 +558,13 @@ export default function CustomerOrders() {
                     className="flex-1 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-50 transition shadow-sm flex items-center justify-center gap-1.5"
                   >
                     <FileText className="w-3.5 h-3.5" /> PDF
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); deleteMut.mutate(order.id); }}
+                    className="py-2.5 px-3 bg-white border border-slate-200 text-slate-400 rounded-xl hover:text-red-500 hover:border-red-200 hover:bg-red-50 transition shadow-sm flex items-center justify-center"
+                    title="Move to trash"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </div>

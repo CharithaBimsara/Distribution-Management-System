@@ -14,7 +14,7 @@ import {
   ArrowUp, ArrowDown, ArrowUpDown, Check, Download
 } from 'lucide-react';
 import type { Order, OrderStatus } from '../../types/order.types';
-import { ORDER_STATUSES } from '../../types/order.types';
+import { ORDER_STATUSES, FILTER_ORDER_STATUSES } from '../../types/order.types';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import StatusBadge from '../../components/common/StatusBadge';
@@ -120,6 +120,12 @@ export default function AdminOrders() {
     enabled: activeTab === 'trash',
   });
 
+  const { data: quickTrashData = [], isLoading: quickTrashLoading } = useQuery({
+    queryKey: ['admin-quick-orders-trash'],
+    queryFn: () => quickRequestApi.adminGetTrash('Order').then(r => r.data.data),
+    enabled: activeTab === 'trash',
+  });
+
   const { data: quickData = [] } = useQuery({
     queryKey: ['admin-quick-orders'],
     queryFn: () => quickRequestApi.adminGetAll('Order').then(r => r.data.data),
@@ -159,7 +165,11 @@ export default function AdminOrders() {
 
   const deleteMut = useMutation({
     mutationFn: (id: string) => ordersApi.adminDelete(id),
-    onSuccess: () => {
+    onSuccess: (_, id) => {
+      // Immediately remove from all cached pages so UI updates without waiting for refetch
+      queryClient.setQueriesData({ queryKey: ['admin-orders'] }, (old: any) =>
+        old ? { ...old, items: old.items?.filter((o: any) => o.id !== id), totalCount: Math.max(0, (old.totalCount ?? 0) - 1) } : old
+      );
       queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
       queryClient.invalidateQueries({ queryKey: ['admin-orders-trash'] });
       setDeleteOrder(null);
@@ -173,6 +183,15 @@ export default function AdminOrders() {
       queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
       queryClient.invalidateQueries({ queryKey: ['admin-orders-trash'] });
       toast.success('Order restored');
+    },
+  });
+
+  const quickRestoreMut = useMutation({
+    mutationFn: (id: string) => quickRequestApi.adminRestore(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-quick-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-quick-orders-trash'] });
+      toast.success('Quick order restored');
     },
   });
 
@@ -192,6 +211,9 @@ export default function AdminOrders() {
     return o.orderNumber.toLowerCase().includes(q) || o.customerName.toLowerCase().includes(q);
   });
 
+  const reps: { id: string; fullName: string }[] = repsData || [];
+  const customers: { id: string; shopName: string; customerType?: string }[] = customersData || [];
+
   const sortedOrders = useMemo(() => {
     return [...orders].sort((a, b) => {
       let av: any, bv: any;
@@ -210,16 +232,33 @@ export default function AdminOrders() {
     });
   }, [orders, sortField, sortDir]);
 
-  const quickOrderRows = useMemo(() => (quickData as any[]).map((r: any) => ({
-    _isQuick: true, _quick: r,
-    id: r.id, orderNumber: r.requestNumber,
-    customerName: r.customerName, repName: r.repName,
-    orderDate: r.createdAt, status: r.status,
-    items: [] as any[], totalAmount: 0, isFromApprovedQuotation: false,
-  })), [quickData]);
+  const quickOrderRows = useMemo(() => {
+    let rows = (quickData as any[]).map((r: any) => ({
+      _isQuick: true, _quick: r,
+      id: r.id, orderNumber: r.requestNumber,
+      customerName: r.customerName, repName: r.repName,
+      orderDate: r.createdAt, status: r.status,
+      items: [] as any[], totalAmount: 0, isFromApprovedQuotation: false,
+    }));
+    if (status)         rows = rows.filter(r => r.status === status);
+    if (repIdFilter)    rows = rows.filter(r => r._quick.repId === repIdFilter);
+    if (customerIdFilter) {
+      const custName = customers.find(c => c.id === customerIdFilter)?.shopName?.toLowerCase();
+      if (custName) rows = rows.filter(r => (r.customerName || '').toLowerCase() === custName);
+    }
+    if (fromDate)  rows = rows.filter(r => r.orderDate && r.orderDate >= fromDate);
+    if (toDate)    rows = rows.filter(r => r.orderDate && r.orderDate.slice(0, 10) <= toDate);
+    return rows;
+  }, [quickData, status, repIdFilter, customerIdFilter, customers, fromDate, toDate]);
 
   const allRows: any[] = useMemo(() => {
-    const merged = [...orders, ...quickOrderRows];
+    const q = search.toLowerCase();
+    const merged = [...orders, ...quickOrderRows].filter(r =>
+      !q ||
+      (r.orderNumber || '').toLowerCase().includes(q) ||
+      (r.customerName || '').toLowerCase().includes(q) ||
+      (r.repName || '').toLowerCase().includes(q)
+    );
     return merged.sort((a, b) => {
       let av: any, bv: any;
       switch (sortField) {
@@ -235,13 +274,10 @@ export default function AdminOrders() {
       if (av > bv) return sortDir === 'asc' ? 1 : -1;
       return 0;
     });
-  }, [orders, quickOrderRows, sortField, sortDir]);
+  }, [orders, quickOrderRows, sortField, sortDir, search]);
 
   const activeFilterCount =
     (status ? 1 : 0) + (repIdFilter ? 1 : 0) + (customerIdFilter ? 1 : 0) + ((fromDate || toDate) ? 1 : 0);
-
-  const reps: { id: string; fullName: string }[] = repsData || [];
-  const customers: { id: string; shopName: string; customerType?: string }[] = customersData || [];
 
   const toggleSelection = (id: string) => {
     setSelectedIds((prev) => {
@@ -269,8 +305,19 @@ export default function AdminOrders() {
     try {
       await Promise.all([
         ...regularIds.map((id) => ordersApi.adminDelete(id)),
-        ...quickIds.map((id) => quickRequestApi.adminDelete(id)),
+        ...quickIds.map((id) => quickRequestApi.adminSoftDelete(id)),
       ]);
+      // Immediately remove deleted rows from caches
+      if (regularIds.length > 0) {
+        queryClient.setQueriesData({ queryKey: ['admin-orders'] }, (old: any) =>
+          old ? { ...old, items: old.items?.filter((o: any) => !regularIds.includes(o.id)), totalCount: Math.max(0, (old.totalCount ?? 0) - regularIds.length) } : old
+        );
+      }
+      if (quickIds.length > 0) {
+        queryClient.setQueriesData({ queryKey: ['admin-quick-orders'] }, (old: any) =>
+          Array.isArray(old) ? old.filter((q: any) => !quickIds.includes(q.id)) : old
+        );
+      }
       queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
       queryClient.invalidateQueries({ queryKey: ['admin-orders-trash'] });
       if (quickIds.length > 0) queryClient.invalidateQueries({ queryKey: ['admin-quick-orders'] });
@@ -285,11 +332,16 @@ export default function AdminOrders() {
   const handleBulkStatusChange = async () => {
     if (!bulkStatusValue) return;
     const ids = [...selectedIds];
+    const rowMap = new Map(allRows.map((r: any) => [r.id, r]));
+    const regularIds = ids.filter(id => !rowMap.get(id)?._isQuick);
+    const quickIds = ids.filter(id => rowMap.get(id)?._isQuick);
     try {
-      await Promise.all(
-        ids.map((id) => ordersApi.adminUpdateStatus(id, { status: bulkStatusValue as OrderStatus }))
-      );
+      await Promise.all([
+        ...regularIds.map((id) => ordersApi.adminUpdateStatus(id, { status: bulkStatusValue as OrderStatus })),
+        ...quickIds.map((id) => quickRequestApi.adminUpdateStatus(id, { status: bulkStatusValue })),
+      ]);
       queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
+      if (quickIds.length > 0) queryClient.invalidateQueries({ queryKey: ['admin-quick-orders'] });
       setShowBulkStatusModal(false);
       setSelectedIds(new Set());
       toast.success(`${ids.length} order(s) updated to ${bulkStatusValue}`);
@@ -811,7 +863,7 @@ export default function AdminOrders() {
                   <div>
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2.5">Filter by Status</p>
                     <div className="flex flex-wrap gap-2">
-                      {ORDER_STATUSES.map(s => (
+                      {FILTER_ORDER_STATUSES.map(s => (
                         <button key={s}
                           onClick={() => { setStatus(prev => prev === s ? '' : s); setPage(1); }}
                           className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
@@ -1085,7 +1137,7 @@ export default function AdminOrders() {
 
                       {/* Status chips */}
                       <div className="flex flex-wrap gap-1.5 pt-0.5" onClick={e => e.stopPropagation()}>
-                        {ORDER_STATUSES.map(s => (
+                        {FILTER_ORDER_STATUSES.map(s => (
                           <button
                             key={s}
                             disabled={updateStatusMut.isPending}
@@ -1393,7 +1445,7 @@ export default function AdminOrders() {
                               {/* Buttons on the right */}
                               <div className="flex items-center gap-0.5 flex-wrap justify-end" onClick={e => e.stopPropagation()}>
                                 {/* Status chips */}
-                                {ORDER_STATUSES.map(s => (
+                                {FILTER_ORDER_STATUSES.map(s => (
                                   <button
                                     key={s}
                                     disabled={updateStatusMut.isPending}
@@ -1548,77 +1600,100 @@ export default function AdminOrders() {
       {/* ── Trash tab content ────────────────────────────────────────────── */}
       {activeTab === 'trash' && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          {trashLoading ? (
+          {(trashLoading || quickTrashLoading) ? (
             <div className="p-10 text-center text-slate-400 text-sm">Loading trash…</div>
-          ) : !trashData?.items?.length ? (
-            <div className="flex flex-col items-center justify-center py-20 text-slate-400">
-              <Trash2 className="w-10 h-10 mb-3 opacity-20" />
-              <p className="text-sm font-medium">Trash is empty</p>
-              <p className="text-xs mt-1 text-slate-300">Deleted orders appear here for 30 days</p>
-            </div>
-          ) : (<>
-            {/* ── Mobile / tablet cards (< lg) ── */}
-            <div className="lg:hidden divide-y divide-slate-100">
-              {trashData.items.map((order) => (
-                <div key={order.id} className="px-4 py-3.5">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-bold text-slate-700 truncate">{order.orderNumber}</p>
-                      <p className="text-xs text-slate-400 mt-0.5 truncate">{order.shopName || order.customerName || '—'}</p>
-                      <p className="text-[10px] text-slate-300 mt-0.5">Deleted {order.deletedAt ? formatDate(order.deletedAt) : '—'}</p>
+          ) : (() => {
+            const repName = repIdFilter ? (reps.find(r => r.id === repIdFilter)?.fullName || '').toLowerCase() : '';
+            const custName = customerIdFilter ? (customers.find(c => c.id === customerIdFilter)?.shopName || '').toLowerCase() : '';
+            const regularItems = (trashData?.items || []).map((o: any) => ({ ...o, _isQuick: false, displayNumber: o.orderNumber, deletedOn: o.deletedAt }));
+            const quickItems = (quickTrashData as any[]).map((q: any) => ({ ...q, _isQuick: true, displayNumber: q.requestNumber, deletedOn: q.deletedAt, shopName: q.customerName, totalAmount: null }));
+            let allTrashItems = [...regularItems, ...quickItems].sort((a, b) => new Date(b.deletedOn || 0).getTime() - new Date(a.deletedOn || 0).getTime());
+            // Apply active filters to trash
+            if (status)           allTrashItems = allTrashItems.filter(o => o.status === status);
+            if (repName)          allTrashItems = allTrashItems.filter(o => (o.repName || '').toLowerCase().includes(repName));
+            if (custName)         allTrashItems = allTrashItems.filter(o => (o.customerName || o.shopName || '').toLowerCase().includes(custName));
+            if (fromDate)         allTrashItems = allTrashItems.filter(o => { const d = o.deletedOn || o.orderDate || o.createdAt; return d && d >= fromDate; });
+            if (toDate)           allTrashItems = allTrashItems.filter(o => { const d = o.deletedOn || o.orderDate || o.createdAt; return d && d.slice(0, 10) <= toDate; });
+            if (search.trim())    { const sq = search.toLowerCase(); allTrashItems = allTrashItems.filter(o => (o.displayNumber || '').toLowerCase().includes(sq) || (o.customerName || o.shopName || '').toLowerCase().includes(sq)); }
+            if (!allTrashItems.length) return (
+              <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+                <Trash2 className="w-10 h-10 mb-3 opacity-20" />
+                <p className="text-sm font-medium">Trash is empty</p>
+                <p className="text-xs mt-1 text-slate-300">Deleted orders appear here for 7 days</p>
+              </div>
+            );
+            return (<>
+              {/* ── Mobile / tablet cards (< lg) ── */}
+              <div className="lg:hidden divide-y divide-slate-100">
+                {allTrashItems.map((order: any) => (
+                  <div key={order.id} className="px-4 py-3.5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-sm font-bold text-slate-700 truncate">{order.displayNumber}</p>
+                          {order._isQuick && <span className="shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-violet-100 text-violet-700">Quick</span>}
+                        </div>
+                        <p className="text-xs text-slate-400 mt-0.5 truncate">{order.shopName || order.customerName || '—'}</p>
+                        <p className="text-[10px] text-slate-300 mt-0.5">Deleted {order.deletedOn ? formatDate(order.deletedOn) : '—'}</p>
+                      </div>
+                      {!order._isQuick && <p className="text-sm font-bold text-slate-900 tabular-nums shrink-0">{fmtAmt(order.totalAmount)}</p>}
                     </div>
-                    <p className="text-sm font-bold text-slate-900 tabular-nums shrink-0">{fmtAmt(order.totalAmount)}</p>
+                    <div className="flex items-center justify-between mt-2.5">
+                      <StatusBadge status={order.status} />
+                      <button
+                        onClick={() => order._isQuick ? quickRestoreMut.mutate(order.id) : restoreMut.mutate(order.id)}
+                        disabled={restoreMut.isPending || quickRestoreMut.isPending}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-600 border border-indigo-200 rounded-lg text-xs font-medium hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition disabled:opacity-50"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" /> Restore
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between mt-2.5">
-                    <StatusBadge status={order.status} />
-                    <button
-                      onClick={() => restoreMut.mutate(order.id)}
-                      disabled={restoreMut.isPending}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-600 border border-indigo-200 rounded-lg text-xs font-medium hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition disabled:opacity-50"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" /> Restore
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
 
-            {/* ── Desktop table (>= lg) ── */}
-            <div className="hidden lg:block">
-              <table className="w-full text-sm border-collapse">
-                <thead>
-                  <tr className="bg-slate-800 text-white">
-                    <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-wider border-r border-slate-600">Order #</th>
-                    <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-wider border-r border-slate-600">Customer</th>
-                    <th className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-wider border-r border-slate-600">Total</th>
-                    <th className="px-4 py-3.5 text-center text-xs font-semibold uppercase tracking-wider border-r border-slate-600">Status</th>
-                    <th className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-wider border-r border-slate-600">Deleted At</th>
-                    <th className="px-4 py-3.5 text-center text-xs font-semibold uppercase tracking-wider">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {trashData.items.map((order, i) => (
-                    <tr key={order.id} className={`border-b border-slate-100 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`}>
-                      <td className="px-4 py-3 border-r border-slate-100 font-bold text-slate-700">{order.orderNumber}</td>
-                      <td className="px-4 py-3 border-r border-slate-100 text-slate-500">{order.shopName || order.customerName || '—'}</td>
-                      <td className="px-4 py-3 border-r border-slate-100 text-right font-bold text-slate-900">{fmtAmt(order.totalAmount)}</td>
-                      <td className="px-4 py-3 border-r border-slate-100 text-center"><StatusBadge status={order.status} /></td>
-                      <td className="px-4 py-3 border-r border-slate-100 text-right text-slate-400 text-xs">{order.deletedAt ? formatDate(order.deletedAt) : '—'}</td>
-                      <td className="px-4 py-3 text-center">
-                        <button
-                          onClick={() => restoreMut.mutate(order.id)}
-                          disabled={restoreMut.isPending}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-600 border border-indigo-200 rounded-lg text-xs font-medium hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition disabled:opacity-50"
-                        >
-                          <RotateCcw className="w-3.5 h-3.5" /> Restore
-                        </button>
-                      </td>
+              {/* ── Desktop table (>= lg) ── */}
+              <div className="hidden lg:block">
+                <table className="w-full text-sm border-collapse">
+                  <thead>
+                    <tr className="bg-slate-800 text-white">
+                      <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-wider border-r border-slate-600">Order #</th>
+                      <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-wider border-r border-slate-600">Customer</th>
+                      <th className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-wider border-r border-slate-600">Total</th>
+                      <th className="px-4 py-3.5 text-center text-xs font-semibold uppercase tracking-wider border-r border-slate-600">Status</th>
+                      <th className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-wider border-r border-slate-600">Deleted At</th>
+                      <th className="px-4 py-3.5 text-center text-xs font-semibold uppercase tracking-wider">Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>)}
+                  </thead>
+                  <tbody>
+                    {allTrashItems.map((order: any, i: number) => (
+                      <tr key={order.id} className={`border-b border-slate-100 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`}>
+                        <td className="px-4 py-3 border-r border-slate-100 font-bold text-slate-700">
+                          <div className="flex items-center gap-1.5">
+                            {order.displayNumber}
+                            {order._isQuick && <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-violet-100 text-violet-700">Quick</span>}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 border-r border-slate-100 text-slate-500">{order.shopName || order.customerName || '—'}</td>
+                        <td className="px-4 py-3 border-r border-slate-100 text-right font-bold text-slate-900">{order._isQuick ? '—' : fmtAmt(order.totalAmount)}</td>
+                        <td className="px-4 py-3 border-r border-slate-100 text-center"><StatusBadge status={order.status} /></td>
+                        <td className="px-4 py-3 border-r border-slate-100 text-right text-slate-400 text-xs">{order.deletedOn ? formatDate(order.deletedOn) : '—'}</td>
+                        <td className="px-4 py-3 text-center">
+                          <button
+                            onClick={() => order._isQuick ? quickRestoreMut.mutate(order.id) : restoreMut.mutate(order.id)}
+                            disabled={restoreMut.isPending || quickRestoreMut.isPending}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-600 border border-indigo-200 rounded-lg text-xs font-medium hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition disabled:opacity-50"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" /> Restore
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>);
+          })()}
           {trashData && trashData.totalPages > 1 && (
             <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-between">
               <span className="text-xs text-slate-500">{trashData.totalCount} total · page {trashData.page} of {trashData.totalPages}</span>
@@ -1658,7 +1733,7 @@ export default function AdminOrders() {
               </div>
               <div className="p-5 space-y-4">
                 <select value={statusPickerValue} onChange={(e) => setStatusPickerValue(e.target.value as OrderStatus)} className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500/15 focus:border-indigo-300 transition">
-                  {ORDER_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                  {FILTER_ORDER_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
                 <div className="flex gap-3">
                   <button onClick={() => setStatusChangeOrder(null)} className="flex-1 py-2.5 bg-slate-100 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-200 transition">Cancel</button>
@@ -1694,7 +1769,7 @@ export default function AdminOrders() {
               <div className="p-5 space-y-4">
                 <select value={bulkStatusValue} onChange={(e) => setBulkStatusValue(e.target.value as OrderStatus)} className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500/15 transition">
                   <option value="">Select new status</option>
-                  {ORDER_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                  {FILTER_ORDER_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
                 <div className="flex gap-3">
                   <button onClick={() => setShowBulkStatusModal(false)} className="flex-1 py-2.5 bg-slate-100 rounded-xl text-sm font-medium hover:bg-slate-200 transition">Cancel</button>
@@ -1759,7 +1834,7 @@ export default function AdminOrders() {
               <div className="flex-1 min-w-0">
                 <h3 className="text-base font-semibold text-slate-900">Move to Trash</h3>
                 <p className="mt-1 text-sm text-slate-500">
-                  Move <span className="font-semibold text-slate-700">{selectedIds.size} order{selectedIds.size !== 1 ? 's' : ''}</span> to trash? They will be permanently deleted after 30 days.
+                  Move <span className="font-semibold text-slate-700">{selectedIds.size} order{selectedIds.size !== 1 ? 's' : ''}</span> to trash? They will be permanently deleted after 7 days.
                 </p>
               </div>
             </div>
@@ -1787,7 +1862,7 @@ function DeleteOrderModal({ orderNumber, isPending, onClose, onConfirm }: { orde
           <div className="flex-1 min-w-0">
             <h3 className="text-base font-semibold text-slate-900">Move to Trash</h3>
             <p className="mt-1 text-sm text-slate-500">
-              Move order <span className="font-semibold text-slate-700">{orderNumber}</span> to trash? Trashed orders are permanently deleted after 30 days.
+              Move order <span className="font-semibold text-slate-700">{orderNumber}</span> to trash? Trashed orders are permanently deleted after 7 days.
             </p>
           </div>
         </div>

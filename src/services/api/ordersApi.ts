@@ -40,6 +40,15 @@ export const ordersApi = {
   repGetById: (id: string) =>
     api.get<ApiResponse<Order>>(`/rep/orders/${id}`),
 
+  repDelete: (id: string) =>
+    api.delete<ApiResponse<void>>(`/rep/orders/${id}`),
+
+  repGetTrash: (page = 1, pageSize = 20) =>
+    api.get<ApiResponse<PagedResult<Order>>>('/rep/orders/trash', { params: { page, pageSize } }),
+
+  repRestore: (id: string) =>
+    api.post<ApiResponse<string>>(`/rep/orders/${id}/restore`),
+
   repCancel: (id: string, reason?: string) =>
     api.post<ApiResponse<Order>>(`/rep/orders/${id}/cancel`, reason || '', {
       headers: { 'Content-Type': 'application/json' },
@@ -63,6 +72,15 @@ export const ordersApi = {
   coordinatorUpdateStatus: (id: string, data: UpdateOrderStatusRequest) =>
     api.put<ApiResponse<Order>>(`/coordinator/orders/${id}/status`, data),
 
+  coordinatorDelete: (id: string) =>
+    api.delete<ApiResponse<void>>(`/coordinator/orders/${id}`),
+
+  coordinatorGetTrash: (page = 1, pageSize = 20) =>
+    api.get<ApiResponse<PagedResult<Order>>>('/coordinator/orders/trash', { params: { page, pageSize } }),
+
+  coordinatorRestore: (id: string) =>
+    api.post<ApiResponse<string>>(`/coordinator/orders/${id}/restore`),
+
   // Customer
   customerCreate: (data: CreateOrderRequest) =>
     api.post<ApiResponse<Order>>('/customer/orders', data),
@@ -75,6 +93,15 @@ export const ordersApi = {
 
   customerTrack: (id: string) =>
     api.get<ApiResponse<unknown>>(`/customer/orders/${id}/track`),
+
+  customerDelete: (id: string) =>
+    api.delete<ApiResponse<void>>(`/customer/orders/${id}`),
+
+  customerGetTrash: (page = 1, pageSize = 20) =>
+    api.get<ApiResponse<PagedResult<Order>>>('/customer/orders/trash', { params: { page, pageSize } }),
+
+  customerRestore: (id: string) =>
+    api.post<ApiResponse<string>>(`/customer/orders/${id}/restore`),
 
   customerCancel: (id: string, reason?: string) =>
     api.post<ApiResponse<Order>>(`/customer/orders/${id}/cancel`, reason || '', {
