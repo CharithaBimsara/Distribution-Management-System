@@ -6,6 +6,9 @@ export const formatCurrency = (amount: number) =>
 export const formatNumber = (amount: number) =>
   new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
 
+// Sri Lanka is UTC+5:30, no daylight saving
+const SL_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+
 function toUtcDate(d: string | Date) {
   if (typeof d === 'string') {
     // append Z if no timezone present so that JS treats it as UTC
@@ -16,11 +19,15 @@ function toUtcDate(d: string | Date) {
   return new Date(d);
 }
 
+function toSLDate(d: string | Date): Date {
+  return new Date(toUtcDate(d).getTime() + SL_OFFSET_MS);
+}
+
 export const formatDate = (date: string | Date) =>
-  format(toUtcDate(date), 'MMM dd, yyyy');
+  format(toSLDate(date), 'MMM dd, yyyy');
 
 export const formatDateTime = (date: string | Date) =>
-  format(toUtcDate(date), 'MMM dd, yyyy HH:mm');
+  format(toSLDate(date), 'MMM dd, yyyy') + ' | ' + format(toSLDate(date), 'HH:mm');
 
 export const formatRelative = (date: string | Date) =>
   formatDistanceToNow(toUtcDate(date), { addSuffix: true });

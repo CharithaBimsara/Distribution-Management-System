@@ -15,7 +15,7 @@ import { customersApi } from '../../services/api/customersApi';
 import { coordinatorGetReps } from '../../services/api/coordinatorApi';
 import type { Order, OrderStatus } from '../../types/order.types';
 import { FILTER_ORDER_STATUSES } from '../../types/order.types';
-import { formatCurrency, formatDate } from '../../utils/formatters';
+import { formatCurrency, formatDate, formatDateTime } from '../../utils/formatters';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
 import MobileTileList from '../../components/common/MobileTileList';
 import StatusBadge from '../../components/common/StatusBadge';
@@ -404,7 +404,7 @@ export default function CoordinatorOrders() {
                             </div>
                           </td>
                           <td className="px-4 py-3 text-slate-600">{o.customerName}</td>
-                          <td className="px-4 py-3 text-slate-500">{formatDate(o.deletedOn || o.orderDate || o.createdAt)}</td>
+                          <td className="px-4 py-3 text-slate-500">{formatDateTime(o.deletedOn || o.orderDate || o.createdAt)}</td>
                           <td className="px-4 py-3"><StatusBadge status={o.status} /></td>
                           <td className="px-4 py-3 text-right">
                             <button
@@ -482,7 +482,7 @@ export default function CoordinatorOrders() {
                               <td className="px-4 py-3 border-r border-slate-100"><span className="text-slate-500">{qr.repName || '—'}</span></td>
                               <td className="px-3 py-3 text-center border-r border-slate-100"><span className="text-slate-400">—</span></td>
                               <td className="px-4 py-3 text-right border-r border-slate-100"><span className="text-slate-400">—</span></td>
-                              <td className="px-4 py-3 text-right border-r border-slate-100 whitespace-nowrap"><span className="text-slate-500">{formatDate(qr.createdAt)}</span></td>
+                              <td className="px-4 py-3 text-right border-r border-slate-100 whitespace-nowrap"><span className="text-slate-500">{formatDateTime(qr.createdAt)}</span></td>
                               <td className="px-4 py-3 text-center"><StatusBadge status={qr.status} /></td>
                             </tr>
                             {isExpanded && (
@@ -576,7 +576,7 @@ export default function CoordinatorOrders() {
                               <span className="font-bold text-slate-900">{formatCurrency(row.totalAmount)}</span>
                             </td>
                             <td className="px-4 py-3 text-right border-r border-slate-100 whitespace-nowrap">
-                              <span className="text-slate-500">{formatDate(row.orderDate)}</span>
+                              <span className="text-slate-500">{formatDateTime(row.orderDate)}</span>
                             </td>
                             <td className="px-4 py-3 text-center">
                               <StatusBadge status={row.status} />

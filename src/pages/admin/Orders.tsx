@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ordersApi } from '../../services/api/ordersApi';
 import { repsApi } from '../../services/api/repsApi';
 import { customersApi } from '../../services/api/customersApi';
-import { formatCurrency, formatDate } from '../../utils/formatters';
+import { formatCurrency, formatDate, formatDateTime } from '../../utils/formatters';
 import { taxCodeToRate } from '../../utils/calculations';
 import {
   ShoppingCart, CheckCircle, XCircle, ChevronRight,
@@ -1286,7 +1286,7 @@ export default function AdminOrders() {
                           <span className="text-slate-400">—</span>
                         </td>
                         <td className="px-4 py-3 text-right border-r border-slate-100 whitespace-nowrap">
-                          <span className="text-slate-500">{formatDate(qr.createdAt)}</span>
+                          <span className="text-slate-500">{formatDateTime(qr.createdAt)}</span>
                         </td>
                         <td className="px-4 py-3 text-center">
                           <StatusBadge status={qr.status} />
@@ -1420,7 +1420,7 @@ export default function AdminOrders() {
                         <span className="font-bold text-slate-900">{fmtAmt(displayFinalAmount)}</span>
                       </td>
                       <td className="px-4 py-3 text-right border-r border-slate-100 whitespace-nowrap">
-                        <span className="text-slate-500">{formatDate(order.orderDate)}</span>
+                        <span className="text-slate-500">{formatDateTime(order.orderDate)}</span>
                       </td>
                       <td className="px-4 py-3 text-center">
                         <StatusBadge status={order.status} />
@@ -1634,7 +1634,7 @@ export default function AdminOrders() {
                           {order._isQuick && <span className="shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-violet-100 text-violet-700">Quick</span>}
                         </div>
                         <p className="text-xs text-slate-400 mt-0.5 truncate">{order.shopName || order.customerName || '—'}</p>
-                        <p className="text-[10px] text-slate-300 mt-0.5">Deleted {order.deletedOn ? formatDate(order.deletedOn) : '—'}</p>
+                        <p className="text-[10px] text-slate-300 mt-0.5">Deleted {order.deletedOn ? formatDateTime(order.deletedOn) : '—'}</p>
                       </div>
                       {!order._isQuick && <p className="text-sm font-bold text-slate-900 tabular-nums shrink-0">{fmtAmt(order.totalAmount)}</p>}
                     </div>
@@ -1677,7 +1677,7 @@ export default function AdminOrders() {
                         <td className="px-4 py-3 border-r border-slate-100 text-slate-500">{order.shopName || order.customerName || '—'}</td>
                         <td className="px-4 py-3 border-r border-slate-100 text-right font-bold text-slate-900">{order._isQuick ? '—' : fmtAmt(order.totalAmount)}</td>
                         <td className="px-4 py-3 border-r border-slate-100 text-center"><StatusBadge status={order.status} /></td>
-                        <td className="px-4 py-3 border-r border-slate-100 text-right text-slate-400 text-xs">{order.deletedOn ? formatDate(order.deletedOn) : '—'}</td>
+                        <td className="px-4 py-3 border-r border-slate-100 text-right text-slate-400 text-xs">{order.deletedOn ? formatDateTime(order.deletedOn) : '—'}</td>
                         <td className="px-4 py-3 text-center">
                           <button
                             onClick={() => order._isQuick ? quickRestoreMut.mutate(order.id) : restoreMut.mutate(order.id)}

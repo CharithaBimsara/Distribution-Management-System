@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { ordersApi } from '../../services/api/ordersApi';
 import { customersApi } from '../../services/api/customersApi';
 import { quickRequestApi } from '../../services/api/quickRequestApi';
-import { formatCurrency, formatDate } from '../../utils/formatters';
+import { formatCurrency, formatDate, formatDateTime } from '../../utils/formatters';
 import { ShoppingCart, Plus, ChevronRight, X, Download, FileSpreadsheet, Trash2, RotateCcw } from 'lucide-react';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
 import { toast } from 'react-hot-toast';
@@ -163,7 +163,7 @@ export default function RepOrders() {
       ),
     },
     { key: 'customerName', header: 'Customer', sortable: true, className: 'w-[22%]', render: (o: any) => <span className="truncate block" title={o._isQuick ? o.customerName : getCustomerDisplayName(o)}>{o._isQuick ? o.customerName : getCustomerDisplayName(o)}</span> },
-    { key: 'orderDate', header: 'Date', sortable: true, render: (o: any) => <span className="text-sm text-slate-500">{formatDate(o.orderDate)}</span> },
+    { key: 'orderDate', header: 'Date', sortable: true, render: (o: any) => <span className="text-sm text-slate-500">{formatDateTime(o.orderDate || o.createdAt)}</span> },
     { key: 'totalAmount', header: 'Total', sortable: true, className: 'w-[14%]', align: 'right' as const, render: (o: any) => o._isQuick ? <span className="text-slate-400">—</span> : <span className="font-semibold tabular-nums">{formatCurrency(o.totalAmount)}</span> },
     { key: 'items', header: 'Items', align: 'center' as const, render: (o: any) => o._isQuick ? <span className="text-slate-400">—</span> : (o.items?.length || 0) },
     { key: 'status', header: 'Status', sortable: true, className: 'w-[14%]', align: 'center' as const, render: (o: any) => <StatusBadge status={o.status} type="orders" /> },
@@ -224,7 +224,7 @@ export default function RepOrders() {
                             {o._isQuick && <span className="inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-violet-100 text-violet-700">Quick</span>}
                           </div>
                           <p className="text-xs text-slate-400 mt-0.5 truncate">{o.customerName || '—'}</p>
-                          <p className="text-[10px] text-slate-300 mt-0.5">Deleted {o.deletedOn ? formatDate(o.deletedOn) : '—'}</p>
+                          <p className="text-[10px] text-slate-300 mt-0.5">Deleted {o.deletedOn ? formatDateTime(o.deletedOn) : '—'}</p>
                         </div>
                         <StatusBadge status={o.status} type="orders" />
                       </div>
@@ -262,7 +262,7 @@ export default function RepOrders() {
                             </div>
                           </td>
                           <td className="px-4 py-3 text-slate-600">{o.customerName}</td>
-                          <td className="px-4 py-3 text-slate-500">{formatDate(o.deletedOn || o.orderDate || o.createdAt)}</td>
+                          <td className="px-4 py-3 text-slate-500">{formatDateTime(o.deletedOn || o.orderDate || o.createdAt)}</td>
                           <td className="px-4 py-3"><StatusBadge status={o.status} type="orders" /></td>
                           <td className="px-4 py-3">
                             <div className="flex items-center justify-end">

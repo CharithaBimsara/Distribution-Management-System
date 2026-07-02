@@ -6,7 +6,7 @@ import { repGetQuotations, repDeleteQuotation, repGetQuotationsTrash, repRestore
 import toast from 'react-hot-toast';
 import { customersApi } from '../../services/api/customersApi';
 import { quickRequestApi } from '../../services/api/quickRequestApi';
-import { formatCurrency, formatRelative, formatDate } from '../../utils/formatters';
+import { formatCurrency, formatRelative, formatDate, formatDateTime } from '../../utils/formatters';
 import { taxCodeToRate } from '../../utils/calculations';
 import { downloadQuotationPdf } from '../../utils/quotationPdf';
 import { useNavigate } from 'react-router-dom';
@@ -302,7 +302,7 @@ export default function RepQuotations() {
                             <td className="px-3 py-3.5 text-center text-slate-400">—</td>
                             <td className="px-4 py-3.5 text-right text-slate-400">—</td>
                             <td className="px-4 py-3.5 text-center"><StatusBadge status={qr.status} type="quotations" /></td>
-                            <td className="px-4 py-3.5 text-xs text-slate-500 whitespace-nowrap">{formatRelative(qr.createdAt)}</td>
+                            <td className="px-4 py-3.5 text-xs text-slate-500 whitespace-nowrap">{formatDateTime(qr.createdAt)}</td>
                             <td className="px-2 py-3.5 text-center">
                               <button
                                 onClick={e => { e.stopPropagation(); quickDeleteMut.mutate(qr.id); }}
@@ -336,7 +336,7 @@ export default function RepQuotations() {
                         <td className="px-4 py-3.5 text-center">
                           <StatusBadge status={q.status} type="quotations" />
                         </td>
-                        <td className="px-4 py-3.5 text-xs text-slate-500 whitespace-nowrap">{formatRelative(q.createdAt)}</td>
+                        <td className="px-4 py-3.5 text-xs text-slate-500 whitespace-nowrap">{formatDateTime(q.createdAt)}</td>
                         <td className="px-2 py-3.5 text-center">
                           <button
                             onClick={e => { e.stopPropagation(); deleteMut.mutate(q.id); }}
@@ -563,7 +563,7 @@ export default function RepQuotations() {
                             <p className="text-sm font-bold text-slate-700 truncate">{q.quotationNumber}</p>
                             {q._isQuick && <span className="inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">Quick</span>}
                             <p className="text-xs text-slate-400 mt-0.5 truncate">{q.customerName || '—'}</p>
-                            <p className="text-[10px] text-slate-300 mt-0.5">Deleted {q.deletedAt ? formatDate(q.deletedAt) : '—'}</p>
+                            <p className="text-[10px] text-slate-300 mt-0.5">Deleted {q.deletedAt ? formatDateTime(q.deletedAt) : '—'}</p>
                           </div>
                           {left !== null && (
                             <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${left <= 1 ? 'bg-red-100 text-red-600' : 'bg-amber-50 text-amber-600'}`}>
@@ -608,7 +608,7 @@ export default function RepQuotations() {
                             </td>
                             <td className="px-4 py-3 border-r border-slate-100 text-slate-500 truncate max-w-[200px]">{q.customerName || '—'}</td>
                             <td className="px-4 py-3 border-r border-slate-100 text-center"><StatusBadge status={q.status} type="quotations" /></td>
-                            <td className="px-4 py-3 border-r border-slate-100 text-right text-slate-400 text-xs">{q.deletedAt ? formatDate(q.deletedAt) : '—'}</td>
+                            <td className="px-4 py-3 border-r border-slate-100 text-right text-slate-400 text-xs">{q.deletedAt ? formatDateTime(q.deletedAt) : '—'}</td>
                             <td className="px-4 py-3 border-r border-slate-100 text-center">
                               {left !== null && (
                                 <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${left <= 1 ? 'bg-red-100 text-red-600' : 'bg-amber-50 text-amber-600'}`}>

@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { adminApproveQuotation, adminGetQuotations, adminRejectQuotation, adminSoftDeleteQuotation, adminGetQuotationsTrash, adminRestoreQuotation } from '../../services/api/quotationApi';
 import { repsApi } from '../../services/api/repsApi';
 import { customersApi } from '../../services/api/customersApi';
-import { formatCurrency, formatDate } from '../../utils/formatters';
+import { formatCurrency, formatDate, formatDateTime } from '../../utils/formatters';
 import { taxCodeToRate } from '../../utils/calculations';
 import { downloadQuotationPdf, downloadQuotationsExcel, downloadQuotationsPdf } from '../../utils/quotationPdf';
 import { downloadQuickRequestPdf, downloadQuickRequestExcel, downloadImage } from '../../utils/quickRequestPdf';
@@ -935,7 +935,7 @@ export default function AdminQuotations() {
                         <td className="px-3 py-3 text-center border-r border-slate-100"><span className="text-slate-400">—</span></td>
                         <td className="px-4 py-3 text-right border-r border-slate-100"><span className="text-slate-400">—</span></td>
                         <td className="px-4 py-3 text-right border-r border-slate-100 whitespace-nowrap">
-                          <span className="text-slate-500">{qr.createdAt ? formatDate(qr.createdAt) : '—'}</span>
+                          <span className="text-slate-500">{qr.createdAt ? formatDateTime(qr.createdAt) : '—'}</span>
                         </td>
                         <td className="px-4 py-3 text-right border-r border-slate-100"><span className="text-slate-400">—</span></td>
                         <td className="px-4 py-3 text-center"><StatusBadge status={qr.status} /></td>
@@ -1053,7 +1053,7 @@ export default function AdminQuotations() {
                           <span className="font-bold text-slate-900">{fmtAmt(q.totalAmount)}</span>
                         </td>
                         <td className="px-4 py-3 text-right border-r border-slate-100 whitespace-nowrap">
-                          <span className="text-slate-500">{q.createdAt ? formatDate(q.createdAt) : '—'}</span>
+                          <span className="text-slate-500">{q.createdAt ? formatDateTime(q.createdAt) : '—'}</span>
                         </td>
                         <td className="px-4 py-3 text-right border-r border-slate-100 whitespace-nowrap">
                           <span className="text-slate-500">{q.validUntil ? formatDate(q.validUntil) : '—'}</span>
@@ -1262,7 +1262,7 @@ export default function AdminQuotations() {
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-bold text-slate-700 truncate">{q.quotationNumber}</p>
                       <p className="text-xs text-slate-400 mt-0.5 truncate">{q.shopName || q.customerName || '—'}</p>
-                      <p className="text-[10px] text-slate-300 mt-0.5">Deleted {q.deletedAt ? formatDate(q.deletedAt) : '—'}</p>
+                      <p className="text-[10px] text-slate-300 mt-0.5">Deleted {q.deletedAt ? formatDateTime(q.deletedAt) : '—'}</p>
                     </div>
                     <p className="text-sm font-bold text-slate-900 tabular-nums shrink-0">{fmtAmt(q.totalAmount)}</p>
                   </div>
@@ -1300,7 +1300,7 @@ export default function AdminQuotations() {
                       <td className="px-4 py-3 border-r border-slate-100 text-slate-500">{q.shopName || q.customerName || '—'}</td>
                       <td className="px-4 py-3 border-r border-slate-100 text-right font-bold text-slate-900">{fmtAmt(q.totalAmount)}</td>
                       <td className="px-4 py-3 border-r border-slate-100 text-center"><StatusBadge status={q.status} /></td>
-                      <td className="px-4 py-3 border-r border-slate-100 text-right text-slate-400 text-xs">{q.deletedAt ? formatDate(q.deletedAt) : '—'}</td>
+                      <td className="px-4 py-3 border-r border-slate-100 text-right text-slate-400 text-xs">{q.deletedAt ? formatDateTime(q.deletedAt) : '—'}</td>
                       <td className="px-4 py-3 text-center">
                         <button
                           onClick={() => restoreMut.mutate(q.id)}
