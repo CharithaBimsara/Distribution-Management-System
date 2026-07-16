@@ -12,6 +12,21 @@ import type { Product } from '../../types/product.types';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
 import ProductDropdown from '../../components/common/ProductDropdown';
 
+function createClientRowId() {
+  const cryptoApi = globalThis.crypto;
+
+  if (
+    cryptoApi &&
+    typeof cryptoApi.randomUUID === 'function'
+  ) {
+    return cryptoApi.randomUUID();
+  }
+
+  return `row-${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2, 10)}`;
+}
+
 export default function RepSelectProducts() {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
@@ -19,10 +34,19 @@ export default function RepSelectProducts() {
   const [draft, setDraft] = useState(orderDraftUtils.get());
   const isDesktop = useIsDesktop();
 
+  useEffect(() => {
+    if (draft.customerId) return;
+
+    toast.error('Select a customer first');
+    navigate('/rep/orders/new', {
+      replace: true,
+    });
+  }, [draft.customerId, navigate]);
+
   interface QuickRow { id: string; product?: Product; qty: number; }
   const [quickRows, setQuickRows] = useState<QuickRow[]>([]);
   const [rowSearches, setRowSearches] = useState<Record<string, string>>({});
-  const addQuickRow = () => setQuickRows(r => [...r, { id: crypto.randomUUID(), qty: 1 }]);
+  const addQuickRow = () => setQuickRows(r => [...r, { id: createClientRowId(), qty: 1 }]);
   const updateQuickRow = (id: string, changes: Partial<QuickRow>) => {
     setQuickRows(r => r.map(row => row.id === id ? { ...row, ...changes } : row));
   };
@@ -44,7 +68,7 @@ export default function RepSelectProducts() {
   useEffect(() => {
     const d = orderDraftUtils.get();
     const rows: QuickRow[] = d.items.map(i => ({
-      id: crypto.randomUUID(),
+      id: createClientRowId(),
       product: {
         id: i.productId,
         name: i.name,
@@ -53,11 +77,11 @@ export default function RepSelectProducts() {
       } as Product,
       qty: i.quantity,
     }));
-    if (rows.length === 0) rows.push({ id: crypto.randomUUID(), qty: 1 });
+    if (rows.length === 0) rows.push({ id: createClientRowId(), qty: 1 });
     setQuickRows(rows);
   }, []);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['rep-products-catalog', searchTerm, currentPage],
     queryFn: () => productsApi.customerCatalog({
       page: currentPage,
@@ -195,70 +219,126 @@ export default function RepSelectProducts() {
     ? quickTotalGross - quickTotalDiscount
     : quickTotalGross + quickTotalTax - quickTotalDiscount;
 
-  return (
-    <div className="min-h-screen bg-slate-50/50 pb-24 md:pb-28 lg:pb-6">
-      <div className="px-4 md:px-5 lg:px-6 pt-4 md:pt-6 max-w-[1200px] mx-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-5">
-          <div className="flex items-center gap-3">
-            <button onClick={() => navigate(-1)} className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center hover:bg-slate-50 transition">
-              <ArrowLeft className="w-5 h-5 text-slate-600" />
-            </button>
-            <div>
-              <h1 className="text-xl font-bold text-slate-900">Add Products</h1>
-              <p className="text-xs text-slate-500">Browse the catalog and add items to your order</p>
-            </div>
-          </div>
-          <button onClick={() => navigate(-1)}
-            className="hidden sm:inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white font-semibold rounded-xl hover:bg-emerald-700 transition text-sm active:scale-[0.98]">
-            Continue &rarr;
-          </button>
+  if (!draft.customerId) {
+    return (
+      <div className="flex min-h-[50dvh] items-center justify-center px-4">
+        <div className="rounded-2xl border border-slate-200 bg-white px-6 py-8 text-center shadow-sm">
+          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-emerald-600 border-t-transparent" />
+          <p className="mt-4 text-sm font-semibold text-slate-600">
+            Returning to Create Order...
+          </p>
         </div>
+      </div>
+    );
+  }
 
-        {/* Stats Row (mobile) */}
-        {!isDesktop && (
-          <div className="flex gap-2 mb-4">
-            <div className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-center">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Items</p>
-              <p className="text-lg font-bold text-slate-900">{cartCount}</p>
+  return (
+    <div className="min-h-screen bg-slate-50/50 pb-16 md:pb-20 lg:pb-8">
+      <div className="mx-auto max-w-[1200px] px-3 pt-2 sm:px-5 sm:pt-4 lg:px-6">
+        {/* Header */}
+        <section className="relative overflow-hidden rounded-2xl bg-emerald-700 px-4 py-5 text-white shadow-sm sm:px-5 sm:py-6">
+          <div className="pointer-events-none absolute -right-16 -top-20 h-48 w-48 rounded-full bg-white/10 blur-3xl" />
+
+          <div className="relative flex items-start gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-100">
+                Create Order
+              </p>
+              <h1 className="mt-0.5 text-xl font-bold tracking-tight sm:text-2xl">
+                Select Products
+              </h1>
+              <p className="mt-1 text-xs leading-5 text-emerald-100 sm:text-sm">
+                Search products and set quantities
+              </p>
             </div>
-            <div className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-center">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Catalog</p>
-              <p className="text-lg font-bold text-slate-900">{data?.items?.length || 0}</p>
-            </div>
-            <div className="flex-1 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5 text-center">
-              <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider">Total</p>
-              <p className="text-lg font-bold text-emerald-700">{formatCurrency(cartTotal)}</p>
+
+            <div className="hidden rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-right sm:block">
+              <p className="text-[9px] font-bold uppercase tracking-wide text-emerald-100">
+                Selected
+              </p>
+              <p className="mt-0.5 text-sm font-black text-white">
+                {cartCount}
+              </p>
             </div>
           </div>
-        )}
+        </section>
 
-        {/* Search Bar */}
-        <div className="sticky top-0 z-20 bg-slate-50/95 backdrop-blur-sm pb-4">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+        {/* Search and Continue */}
+        <section className="sticky top-2 z-30 mt-3 rounded-xl border border-slate-200 bg-white/95 p-2.5 shadow-sm backdrop-blur-md sm:p-3">
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            <div className="relative min-w-0 flex-1">
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+
               <input
-                type="text"
+                type="search"
                 value={searchTerm}
-                onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-                placeholder="Search by product name, SKU, or brand..."
-                className="w-full pl-11 pr-4 py-3.5 text-sm border-0 outline-none placeholder-slate-400"
+                onChange={(event) => {
+                  setSearchTerm(event.target.value);
+                  setCurrentPage(1);
+                }}
+                placeholder="Search product or SKU"
+                className="min-h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-2 focus:ring-emerald-500/15"
               />
             </div>
+
+            <button
+              type="button"
+              disabled={cartCount === 0}
+              onClick={() => navigate(-1)}
+              className="inline-flex min-h-11 flex-shrink-0 items-center justify-center gap-1.5 rounded-xl bg-emerald-700 px-3.5 text-xs font-black text-white transition active:scale-[0.98] disabled:bg-slate-200 disabled:text-slate-400 sm:px-5 sm:text-sm"
+            >
+              Continue
+              <ShoppingCart className="h-4 w-4" />
+            </button>
           </div>
-        </div>
+
+          <div className="mt-2 flex items-center justify-between gap-3 px-1 text-[11px]">
+            <span className="truncate text-slate-500">
+              {data?.totalCount ?? data?.items?.length ?? 0} products
+            </span>
+
+            <span className="flex-shrink-0 font-bold text-emerald-700">
+              {cartCount} item{cartCount === 1 ? '' : 's'} · {formatCurrency(cartTotal)}
+            </span>
+          </div>
+        </section>
 
         {/* Loading */}
         {isLoading && (
-          <div className="text-center py-20">
-            <div className="inline-block w-8 h-8 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin" />
-            <p className="text-sm text-slate-500 mt-4">Loading products...</p>
+          <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3">
+            {Array.from({ length: 12 }).map((_, index) => (
+              <div
+                key={index}
+                className="h-[66px] animate-pulse rounded-xl border border-slate-200 bg-white px-3 py-2.5"
+              >
+                <div className="h-3.5 w-3/4 rounded bg-slate-200" />
+                <div className="mt-2 h-3.5 w-1/3 rounded bg-slate-100" />
+              </div>
+            ))}
           </div>
         )}
 
+        {!isLoading && isError && (
+          <section className="mt-4 rounded-2xl border border-red-100 bg-white px-5 py-12 text-center shadow-sm">
+            <Package className="mx-auto h-12 w-12 text-red-200" />
+            <h2 className="mt-4 text-base font-bold text-slate-800">
+              Could not load products
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Check the connection and try again.
+            </p>
+            <button
+              type="button"
+              onClick={() => refetch()}
+              className="mt-4 rounded-xl bg-emerald-700 px-5 py-2.5 text-xs font-bold text-white"
+            >
+              Retry
+            </button>
+          </section>
+        )}
+
         {/* Products */}
-        {!isLoading && data && (
+        {!isLoading && !isError && data && (
           <>
             {data.items.length === 0 ? (
               <div className="text-center py-20">
@@ -376,74 +456,86 @@ export default function RepSelectProducts() {
                     </div>
                   </div>
                 ) : (
-                  /* Mobile: Product Cards */
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+                  /* Mobile / tablet: dense product selector */
+                  <div className="mb-5 mt-1 grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-2.5 md:grid-cols-3">
                     {data.items.map((product: Product) => {
                       const qty = getCartQty(product.id);
                       const basePrice = product.sellingPrice || 0;
-                      const taxAmt = product.taxAmount || 0;
-                      const allIncPrice = product.totalAmount || (basePrice + taxAmt);
-                      const displayPrice = isNonTaxCustomer ? allIncPrice : basePrice;
-                      const hasDiscount = (product.discountPercent || 0) > 0;
+                      const taxAmount = product.taxAmount || 0;
+                      const allInclusivePrice =
+                        product.totalAmount ||
+                        basePrice + taxAmount;
+                      const displayPrice = isNonTaxCustomer
+                        ? allInclusivePrice
+                        : basePrice;
+
                       return (
-                        <div key={product.id} className={`bg-white rounded-2xl border overflow-hidden transition-all active:scale-[0.98] ${qty > 0 ? 'border-emerald-300 ring-2 ring-emerald-100 shadow-sm shadow-emerald-50' : 'border-slate-200'}`}>
-                          <div className="p-3.5">
-                            {/* Product info */}
-                            <div className="flex items-start gap-2 mb-3">
-                              <div className="flex-1 min-w-0">
-                                <h3 className="text-sm font-bold text-slate-900 leading-snug break-words">{product.name}</h3>
-                                <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                                  <span className="text-[11px] text-slate-400 font-mono">{product.sku}</span>
-                                  {product.taxCode && (
-                                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">{product.taxCode}</span>
-                                  )}
-                                  {hasDiscount && (
-                                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">{product.discountPercent}% off</span>
-                                  )}
-                                </div>
-                              </div>
-                              {qty > 0 && (
-                                <div className="shrink-0 w-7 h-7 rounded-full bg-emerald-500 flex items-center justify-center">
-                                  <span className="text-[11px] font-bold text-white">{qty}</span>
-                                </div>
-                              )}
-                            </div>
+                        <article
+                          key={product.id}
+                          className={`flex min-h-[66px] min-w-0 items-center gap-2.5 rounded-xl border bg-white px-3 py-2.5 shadow-sm transition ${
+                            qty > 0
+                              ? 'border-emerald-500 bg-emerald-50/50 ring-1 ring-emerald-500/10'
+                              : 'border-slate-200'
+                          }`}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <h2
+                              className="line-clamp-2 break-words text-[12px] font-bold leading-4 text-slate-900 sm:text-[13px]"
+                              title={product.name}
+                            >
+                              {product.name}
+                            </h2>
 
-                            {/* Price */}
-                            <div className="mb-3">
-                              <span className="text-xl font-bold text-emerald-600">{formatCurrency(displayPrice)}</span>
-                              {!isNonTaxCustomer && taxAmt > 0 && (
-                                <span className="text-xs text-slate-400 ml-1.5">+{formatCurrency(taxAmt)} tax</span>
-                              )}
-                            </div>
-
-                            {/* Add/Qty controls */}
-                            {qty === 0 ? (
-                              <button onClick={() => handleAddToCart(product)}
-                                className="w-full py-3 bg-emerald-600 text-white font-semibold rounded-xl hover:bg-emerald-700 active:bg-emerald-800 transition flex items-center justify-center gap-2 active:scale-[0.97] text-sm">
-                                <Plus className="w-4 h-4" /> Add to Cart
-                              </button>
-                            ) : (
-                              <div className="flex items-center gap-2">
-                                <button onClick={() => handleDecrement(product.id)}
-                                  className="w-12 h-12 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 rounded-xl transition flex items-center justify-center active:scale-95 shrink-0">
-                                  <Minus className="w-5 h-5 text-slate-700" />
-                                </button>
-                                <div className="flex-1 h-12 bg-emerald-50 border-2 border-emerald-500 rounded-xl font-bold text-emerald-700 flex items-center justify-center text-xl">
-                                  {qty}
-                                </div>
-                                <button onClick={() => handleIncrement(product)}
-                                  className="w-12 h-12 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 rounded-xl transition flex items-center justify-center active:scale-95 shrink-0">
-                                  <Plus className="w-5 h-5 text-white" />
-                                </button>
-                              </div>
-                            )}
+                            <p className="mt-1 whitespace-nowrap text-[13px] font-black leading-4 text-emerald-700 sm:text-sm">
+                              {formatCurrency(displayPrice)}
+                            </p>
                           </div>
-                        </div>
+
+                          {qty === 0 ? (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleAddToCart(product)
+                              }
+                              className="inline-flex h-9 flex-shrink-0 items-center justify-center rounded-lg bg-emerald-700 px-3 text-[11px] font-bold text-white transition active:scale-[0.97] active:bg-emerald-800"
+                            >
+                              Add
+                            </button>
+                          ) : (
+                            <div className="flex flex-shrink-0 items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleDecrement(product.id)
+                                }
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-700 transition active:scale-95 active:bg-slate-200"
+                                aria-label={`Decrease ${product.name}`}
+                              >
+                                <Minus className="h-3.5 w-3.5" />
+                              </button>
+
+                              <div className="flex h-8 min-w-8 items-center justify-center rounded-lg border border-emerald-300 bg-white px-1.5 text-xs font-black text-emerald-700">
+                                {qty}
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleIncrement(product)
+                                }
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-700 text-white transition active:scale-95 active:bg-emerald-800"
+                                aria-label={`Increase ${product.name}`}
+                              >
+                                <Plus className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          )}
+                        </article>
                       );
                     })}
                   </div>
                 )}
+
 
                 {/* Pagination */}
                 {data.totalPages > 1 && (
@@ -479,24 +571,7 @@ export default function RepSelectProducts() {
         )}
       </div>
 
-      {/* Mobile Bottom Bar */}
-      {!isDesktop && cartCount > 0 && (
-        <div className="fixed left-0 right-0 bottom-[calc(env(safe-area-inset-bottom,0px)+70px)] md:bottom-[calc(env(safe-area-inset-bottom,0px)+74px)] z-40 px-3">
-          <div className="max-w-2xl mx-auto">
-            <button onClick={() => navigate('/rep/orders/new')}
-              className="w-full bg-emerald-600 text-white rounded-2xl shadow-xl shadow-emerald-600/30 p-4 flex items-center gap-3 active:scale-[0.98] transition">
-              <div className="w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
-                <ShoppingCart className="w-5 h-5" />
-              </div>
-              <div className="flex-1 text-left min-w-0">
-                <p className="text-[10px] font-semibold text-emerald-100 uppercase tracking-wider">{cartCount} Item{cartCount !== 1 ? 's' : ''}</p>
-                <p className="text-base font-bold">{formatCurrency(cartTotal)}</p>
-              </div>
-              <span className="px-5 py-2.5 bg-white text-emerald-700 rounded-xl text-sm font-bold shrink-0">Continue</span>
-            </button>
-          </div>
-        </div>
-      )}
+
     </div>
   );
 }

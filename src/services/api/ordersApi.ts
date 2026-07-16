@@ -1,11 +1,17 @@
 import api from './axiosConfig';
 import type { ApiResponse, PagedResult } from '../../types/api.types';
-import type { Order, OrderFilterRequest, CreateOrderRequest, UpdateOrderStatusRequest, RateOrderRequest } from '../../types/order.types';
+import type {
+  Order, OrderFilterRequest, CreateOrderRequest, UpdateOrderStatusRequest,
+  RateOrderRequest, UnifiedOrderFilterRequest, UnifiedOrderItem, OrderTrashItem,
+} from '../../types/order.types';
 
 export const ordersApi = {
   // Admin
   adminGetAll: (params?: OrderFilterRequest) =>
     api.get<ApiResponse<PagedResult<Order>>>('/admin/orders', { params }),
+
+  adminGetUnified: (params?: UnifiedOrderFilterRequest) =>
+    api.get<ApiResponse<PagedResult<UnifiedOrderItem>>>('/admin/orders/unified', { params }),
 
   adminGetById: (id: string) =>
     api.get<ApiResponse<Order>>(`/admin/orders/${id}`),
@@ -24,11 +30,17 @@ export const ordersApi = {
   adminDelete: (id: string) =>
     api.delete<ApiResponse<void>>(`/admin/orders/${id}`),
 
-  adminGetTrash: (page = 1, pageSize = 20) =>
-    api.get<ApiResponse<PagedResult<Order>>>('/admin/orders/trash', { params: { page, pageSize } }),
+  adminGetTrash: (params?: UnifiedOrderFilterRequest) =>
+    api.get<ApiResponse<PagedResult<UnifiedOrderItem>>>('/admin/orders/trash', { params }),
 
   adminRestore: (id: string) =>
     api.post<ApiResponse<string>>(`/admin/orders/${id}/restore`),
+
+  adminRestoreTrash: (items: OrderTrashItem[]) =>
+    api.post<ApiResponse<string>>('/admin/orders/trash/restore', { items }),
+  adminPurgeTrash: (items: OrderTrashItem[]) =>
+    api.post<ApiResponse<string>>('/admin/orders/trash/permanent', { items }),
+  adminEmptyTrash: () => api.delete<ApiResponse<string>>('/admin/orders/trash'),
 
   // Rep
   repCreate: (data: CreateOrderRequest) =>
@@ -37,17 +49,26 @@ export const ordersApi = {
   repGetAll: (params?: OrderFilterRequest) =>
     api.get<ApiResponse<PagedResult<Order>>>('/rep/orders', { params }),
 
+  repGetUnified: (params?: UnifiedOrderFilterRequest) =>
+    api.get<ApiResponse<PagedResult<UnifiedOrderItem>>>('/rep/orders/unified', { params }),
+
   repGetById: (id: string) =>
     api.get<ApiResponse<Order>>(`/rep/orders/${id}`),
 
   repDelete: (id: string) =>
     api.delete<ApiResponse<void>>(`/rep/orders/${id}`),
 
-  repGetTrash: (page = 1, pageSize = 20) =>
-    api.get<ApiResponse<PagedResult<Order>>>('/rep/orders/trash', { params: { page, pageSize } }),
+  repGetTrash: (params?: UnifiedOrderFilterRequest) =>
+    api.get<ApiResponse<PagedResult<UnifiedOrderItem>>>('/rep/orders/trash', { params }),
 
   repRestore: (id: string) =>
     api.post<ApiResponse<string>>(`/rep/orders/${id}/restore`),
+
+  repRestoreTrash: (items: OrderTrashItem[]) =>
+    api.post<ApiResponse<string>>('/rep/orders/trash/restore', { items }),
+  repPurgeTrash: (items: OrderTrashItem[]) =>
+    api.post<ApiResponse<string>>('/rep/orders/trash/permanent', { items }),
+  repEmptyTrash: () => api.delete<ApiResponse<string>>('/rep/orders/trash'),
 
   repCancel: (id: string, reason?: string) =>
     api.post<ApiResponse<Order>>(`/rep/orders/${id}/cancel`, reason || '', {
@@ -57,6 +78,9 @@ export const ordersApi = {
   // Coordinator
   coordinatorGetAll: (params?: OrderFilterRequest) =>
     api.get<ApiResponse<PagedResult<Order>>>('/coordinator/orders', { params }),
+
+  coordinatorGetUnified: (params?: UnifiedOrderFilterRequest) =>
+    api.get<ApiResponse<PagedResult<UnifiedOrderItem>>>('/coordinator/orders/unified', { params }),
 
   coordinatorGetById: (id: string) =>
     api.get<ApiResponse<Order>>(`/coordinator/orders/${id}`),
@@ -75,11 +99,17 @@ export const ordersApi = {
   coordinatorDelete: (id: string) =>
     api.delete<ApiResponse<void>>(`/coordinator/orders/${id}`),
 
-  coordinatorGetTrash: (page = 1, pageSize = 20) =>
-    api.get<ApiResponse<PagedResult<Order>>>('/coordinator/orders/trash', { params: { page, pageSize } }),
+  coordinatorGetTrash: (params?: UnifiedOrderFilterRequest) =>
+    api.get<ApiResponse<PagedResult<UnifiedOrderItem>>>('/coordinator/orders/trash', { params }),
 
   coordinatorRestore: (id: string) =>
     api.post<ApiResponse<string>>(`/coordinator/orders/${id}/restore`),
+
+  coordinatorRestoreTrash: (items: OrderTrashItem[]) =>
+    api.post<ApiResponse<string>>('/coordinator/orders/trash/restore', { items }),
+  coordinatorPurgeTrash: (items: OrderTrashItem[]) =>
+    api.post<ApiResponse<string>>('/coordinator/orders/trash/permanent', { items }),
+  coordinatorEmptyTrash: () => api.delete<ApiResponse<string>>('/coordinator/orders/trash'),
 
   // Customer
   customerCreate: (data: CreateOrderRequest) =>

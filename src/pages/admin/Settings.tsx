@@ -8,13 +8,24 @@ import {
   Palette,
   Save,
   Info,
+  Lock,
+  Search,
+  RefreshCw,
+  Unlock,
+  X,
+  ShieldOff,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { systemConfigApi } from '../../services/api/systemConfigApi';
 import { authApi } from '../../services/api/authApi';
 import toast from 'react-hot-toast';
 import PageHeader from '../../components/common/PageHeader';
-import type { AdminAccountInfo } from '../../types/auth.types';
+import ConfirmModal from '../../components/common/ConfirmModal';
+import MobileTileList from '../../components/common/MobileTileList';
+import { useIsDesktop } from '../../hooks/useMediaQuery';
+import type { AdminAccountInfo, LockedUserInfo } from '../../types/auth.types';
+
+const ROLE_OPTIONS = ['SalesRep', 'SalesCoordinator', 'Customer', 'Admin', 'SuperAdmin'] as const;
 
 type SettingsSection = 'organization' | 'account' | 'system';
 
@@ -77,6 +88,66 @@ export default function AdminSettings() {
     onSuccess: () => { setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' }); toast.success('Password changed'); },
     onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to change password'),
   });
+
+  // Locked accounts
+  const isDesktop = useIsDesktop();
+  const [lockedPage, setLockedPage] = useState(1);
+  const [lockedSearch, setLockedSearch] = useState('');
+  const [lockedRole, setLockedRole] = useState('');
+  const [unlockTarget, setUnlockTarget] = useState<LockedUserInfo | null>(null);
+
+  const lockedUsersQueryKey = ['admin-locked-users', lockedPage, lockedSearch, lockedRole];
+
+  const {
+    data: lockedUsersData,
+    isLoading: lockedUsersLoading,
+    isError: lockedUsersError,
+    refetch: refetchLockedUsers,
+    isFetching: lockedUsersFetching,
+  } = useQuery({
+    queryKey: lockedUsersQueryKey,
+    queryFn: () =>
+      authApi
+        .getLockedUsers({ page: lockedPage, pageSize: 10, search: lockedSearch || undefined, role: lockedRole || undefined })
+        .then(r => r.data.data),
+    enabled: user?.role === 'Admin' || user?.role === 'SuperAdmin',
+    placeholderData: (prev) => prev,
+  });
+
+  const lockedUsers = lockedUsersData?.items || [];
+
+  const unlockUserMut = useMutation({
+    mutationFn: (userId: string) => authApi.unlockUser(userId),
+    onSuccess: (response: any) => {
+      const result = response?.data?.data;
+      toast.success(result?.message || 'Account unlocked successfully');
+      setUnlockTarget(null);
+
+      qc.setQueryData(lockedUsersQueryKey, (old: any) => {
+        if (!old) return old;
+        const remaining = old.items.filter((u: LockedUserInfo) => u.userId !== result?.userId);
+        return { ...old, items: remaining, totalCount: Math.max(0, old.totalCount - 1) };
+      });
+
+      // If we just emptied the last row on a page beyond the first, step back a page.
+      if (lockedUsers.length === 1 && lockedPage > 1) {
+        setLockedPage(p => p - 1);
+      }
+
+      qc.invalidateQueries({ queryKey: ['admin-locked-users'] });
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to unlock account'),
+  });
+
+  const handleLockedSearchChange = (value: string) => {
+    setLockedSearch(value);
+    setLockedPage(1);
+  };
+
+  const handleLockedRoleChange = (value: string) => {
+    setLockedRole(value);
+    setLockedPage(1);
+  };
 
   const handleSaveConfig = () => {
     if (!configForm) return;
@@ -320,6 +391,152 @@ export default function AdminSettings() {
                 </button>
               </div>
             </div>
+
+            <div className={cardCls + ' xl:col-span-3'}>
+              <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
+                <div>
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Account Security</p>
+                  <h3 className={sectionTitleCls + ' mt-0.5'}>Locked Accounts</h3>
+                </div>
+                <span className="inline-flex items-center gap-1 rounded-lg bg-amber-50 text-amber-700 text-xs font-medium px-2 py-1">
+                  <Lock className="w-3.5 h-3.5" />
+                  {lockedUsersData?.totalCount ?? 0} locked
+                </span>
+              </div>
+              <p className="text-sm text-slate-500 mb-4">Accounts temporarily locked out after repeated failed logins. Unlocking clears the lockout without changing the password.</p>
+
+              <div className="flex flex-wrap items-center gap-2 mb-4">
+                <div className="relative flex-1 min-w-[200px]">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search by name, username, or code…"
+                    value={lockedSearch}
+                    onChange={e => handleLockedSearchChange(e.target.value)}
+                    className="w-full pl-8 pr-7 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm placeholder-slate-400 focus:bg-white focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/15 outline-none transition-all"
+                  />
+                  {lockedSearch && (
+                    <button onClick={() => handleLockedSearchChange('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+                <select
+                  value={lockedRole}
+                  onChange={e => handleLockedRoleChange(e.target.value)}
+                  className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/15 focus:border-indigo-400 transition cursor-pointer"
+                >
+                  <option value="">All Roles</option>
+                  {ROLE_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
+                </select>
+                <button
+                  onClick={() => refetchLockedUsers()}
+                  disabled={lockedUsersFetching}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-all disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${lockedUsersFetching ? 'animate-spin' : ''}`} />
+                  Refresh
+                </button>
+              </div>
+
+              {lockedUsersLoading ? (
+                <div className="p-10 text-center text-slate-400 text-sm">Loading locked accounts...</div>
+              ) : lockedUsersError ? (
+                <div className="flex flex-col items-center justify-center py-14 text-slate-400 gap-3">
+                  <ShieldOff className="w-9 h-9 opacity-30" />
+                  <p className="text-sm font-medium text-slate-500">Could not load locked accounts</p>
+                  <button onClick={() => refetchLockedUsers()} className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 text-xs font-semibold hover:bg-slate-200 transition">
+                    Retry
+                  </button>
+                </div>
+              ) : lockedUsers.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-14 text-slate-400 gap-1">
+                  <Shield className="w-9 h-9 opacity-30 mb-2" />
+                  <p className="text-sm font-medium text-slate-600">No locked accounts</p>
+                  <p className="text-xs text-slate-400">All user accounts are currently accessible.</p>
+                </div>
+              ) : isDesktop ? (
+                <div className="rounded-xl border border-slate-200 overflow-hidden">
+                  <table className="w-full text-sm border-collapse">
+                    <thead>
+                      <tr className="bg-slate-800 text-white">
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider border-r border-slate-600">User</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider border-r border-slate-600">Employee/Rep Code</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider border-r border-slate-600">Role</th>
+                        <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider border-r border-slate-600">Failed Attempts</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider border-r border-slate-600">Locked Until</th>
+                        <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {lockedUsers.map((u: LockedUserInfo) => (
+                        <tr key={u.userId} className="border-b border-slate-100 text-sm hover:bg-slate-50/70">
+                          <td className="px-4 py-3 border-r border-slate-100">
+                            <p className="font-semibold text-slate-800">{u.displayName}</p>
+                            <p className="text-xs text-slate-400">{u.username}</p>
+                          </td>
+                          <td className="px-4 py-3 text-slate-600 border-r border-slate-100">{u.employeeCode || '—'}</td>
+                          <td className="px-4 py-3 text-slate-600 border-r border-slate-100">{u.role}</td>
+                          <td className="px-4 py-3 text-center border-r border-slate-100">
+                            <span className="inline-flex items-center justify-center rounded-full bg-red-50 text-red-700 text-xs font-semibold px-2 py-0.5">{u.accessFailedCount}</span>
+                          </td>
+                          <td className="px-4 py-3 border-r border-slate-100">
+                            <p className="text-slate-800">{new Date(u.lockoutEnd).toLocaleString()}</p>
+                            <p className="text-xs text-slate-400">{u.lockedForDisplay} remaining</p>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <button
+                              onClick={() => setUnlockTarget(u)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium hover:bg-emerald-100 transition"
+                            >
+                              <Unlock className="w-3.5 h-3.5" /> Unlock
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {(lockedUsersData?.totalPages ?? 0) > 1 && (
+                    <div className="px-4 py-3 border-t border-slate-100 flex items-center justify-between bg-white">
+                      <span className="text-xs text-slate-500">{lockedUsersData?.totalCount} total · p{lockedUsersData?.page}/{lockedUsersData?.totalPages}</span>
+                      <div className="flex gap-1">
+                        <button onClick={() => setLockedPage(p => Math.max(1, p - 1))} disabled={lockedPage <= 1} className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none transition">Prev</button>
+                        <button onClick={() => setLockedPage(p => Math.min(lockedUsersData!.totalPages, p + 1))} disabled={lockedPage >= (lockedUsersData?.totalPages ?? 1)} className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none transition">Next</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <MobileTileList
+                  data={lockedUsers}
+                  keyExtractor={(u: LockedUserInfo) => u.userId}
+                  page={lockedUsersData?.page}
+                  totalPages={lockedUsersData?.totalPages}
+                  onPageChange={setLockedPage}
+                  renderTile={(u: LockedUserInfo) => (
+                    <div className="p-4 rounded-xl border border-slate-200/80 bg-white">
+                      <div className="flex items-start justify-between gap-3 mb-2">
+                        <div>
+                          <p className="font-semibold text-slate-900">{u.displayName}</p>
+                          <p className="text-xs text-slate-400">{u.username}{u.employeeCode ? ` · ${u.employeeCode}` : ''}</p>
+                        </div>
+                        <span className="inline-flex items-center justify-center rounded-full bg-red-50 text-red-700 text-xs font-semibold px-2 py-0.5">{u.accessFailedCount} failed</span>
+                      </div>
+                      <div className="text-xs text-slate-500 mb-3 space-y-0.5">
+                        <p>{u.role}</p>
+                        <p>Locked until {new Date(u.lockoutEnd).toLocaleString()} ({u.lockedForDisplay} remaining)</p>
+                      </div>
+                      <button
+                        onClick={() => setUnlockTarget(u)}
+                        className="w-full py-2 text-xs font-medium rounded-lg bg-emerald-50 text-emerald-700 active:scale-95 flex items-center justify-center gap-1.5"
+                      >
+                        <Unlock className="w-3.5 h-3.5" /> Unlock Account
+                      </button>
+                    </div>
+                  )}
+                />
+              )}
+            </div>
           </div>
         )}
 
@@ -373,6 +590,17 @@ export default function AdminSettings() {
           {updateConfigMut.isPending ? 'Saving...' : 'Save Configuration'}
         </button>
       </div>
+
+      <ConfirmModal
+        open={!!unlockTarget}
+        title="Unlock this account?"
+        description={unlockTarget ? `${unlockTarget.displayName} (${unlockTarget.username}) will be able to attempt login again. The password will not be changed.` : ''}
+        confirmLabel={unlockUserMut.isPending ? 'Unlocking...' : 'Unlock Account'}
+        cancelLabel="Cancel"
+        confirmVariant="emerald"
+        onConfirm={() => { if (unlockTarget && !unlockUserMut.isPending) unlockUserMut.mutate(unlockTarget.userId); }}
+        onCancel={() => { if (!unlockUserMut.isPending) setUnlockTarget(null); }}
+      />
     </div>
   );
 }

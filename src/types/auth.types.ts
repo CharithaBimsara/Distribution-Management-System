@@ -75,3 +75,21 @@ export interface AdminResetPasswordResult {
   mustChangePassword: boolean;
   generatedAtUtc: string;
 }
+
+export interface LockedUserInfo {
+  userId: string;
+  username: string;
+  displayName: string;
+  employeeCode?: string;
+  role: 'SuperAdmin' | 'Admin' | 'SalesRep' | 'Customer' | 'SalesCoordinator';
+  accessFailedCount: number;
+  lockoutEnd: string;
+  lockedForDisplay: string;
+}
+
+export interface UnlockUserResult {
+  userId: string;
+  username: string;
+  wasLocked: boolean;
+  message: string;
+}

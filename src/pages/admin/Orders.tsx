@@ -20,6 +20,7 @@ import * as XLSX from 'xlsx';
 import StatusBadge from '../../components/common/StatusBadge';
 import { quickRequestApi } from '../../services/api/quickRequestApi';
 import { downloadQuickRequestPdf, downloadQuickRequestExcel, downloadImage } from '../../utils/quickRequestPdf';
+import RoleOrderTrash from '../../components/orders/RoleOrderTrash';
 
 // Strip LKR prefix for display
 const fmtAmt = (n: number) => formatCurrency(n).replace(/^LKR[\s\u00A0]*/i, '');
@@ -117,13 +118,13 @@ export default function AdminOrders() {
   const { data: trashData, isLoading: trashLoading } = useQuery({
     queryKey: ['admin-orders-trash', page],
     queryFn: () => ordersApi.adminGetTrash(page, 20).then((r) => r.data.data),
-    enabled: activeTab === 'trash',
+    enabled: false,
   });
 
   const { data: quickTrashData = [], isLoading: quickTrashLoading } = useQuery({
     queryKey: ['admin-quick-orders-trash'],
     queryFn: () => quickRequestApi.adminGetTrash('Order').then(r => r.data.data),
-    enabled: activeTab === 'trash',
+    enabled: false,
   });
 
   const { data: quickData = [] } = useQuery({
@@ -1599,7 +1600,9 @@ export default function AdminOrders() {
       </>)} {/* end active tab */}
       {/* ── Trash tab content ────────────────────────────────────────────── */}
       {activeTab === 'trash' && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <>
+        <RoleOrderTrash role='admin' />
+        <div className="hidden bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           {(trashLoading || quickTrashLoading) ? (
             <div className="p-10 text-center text-slate-400 text-sm">Loading trash…</div>
           ) : (() => {
@@ -1619,7 +1622,7 @@ export default function AdminOrders() {
               <div className="flex flex-col items-center justify-center py-20 text-slate-400">
                 <Trash2 className="w-10 h-10 mb-3 opacity-20" />
                 <p className="text-sm font-medium">Trash is empty</p>
-                <p className="text-xs mt-1 text-slate-300">Deleted orders appear here for 7 days</p>
+                <p className="text-xs mt-1 text-slate-300">Items remain here until restored or permanently removed from your view.</p>
               </div>
             );
             return (<>
@@ -1704,6 +1707,7 @@ export default function AdminOrders() {
             </div>
           )}
         </div>
+        </>
       )}
 
       {quickLightbox && createPortal(
@@ -1834,7 +1838,7 @@ export default function AdminOrders() {
               <div className="flex-1 min-w-0">
                 <h3 className="text-base font-semibold text-slate-900">Move to Trash</h3>
                 <p className="mt-1 text-sm text-slate-500">
-                  Move <span className="font-semibold text-slate-700">{selectedIds.size} order{selectedIds.size !== 1 ? 's' : ''}</span> to trash? They will be permanently deleted after 7 days.
+                  Move <span className="font-semibold text-slate-700">{selectedIds.size} order{selectedIds.size !== 1 ? 's' : ''}</span> to your Admin trash only?
                 </p>
               </div>
             </div>
@@ -1862,7 +1866,7 @@ function DeleteOrderModal({ orderNumber, isPending, onClose, onConfirm }: { orde
           <div className="flex-1 min-w-0">
             <h3 className="text-base font-semibold text-slate-900">Move to Trash</h3>
             <p className="mt-1 text-sm text-slate-500">
-              Move order <span className="font-semibold text-slate-700">{orderNumber}</span> to trash? Trashed orders are permanently deleted after 7 days.
+              Move order <span className="font-semibold text-slate-700">{orderNumber}</span> to your Admin trash only?
             </p>
           </div>
         </div>

@@ -65,7 +65,21 @@ export interface SalesTarget {
   endDate: string;
   targetAmount: number;
   achievedAmount: number;
+  achievementPercentage: number;
+  balanceRemaining: number;
+  exceededBy: number;
   status: string;
+
+  // Current uploaded sales report (undefined until the first report is uploaded)
+  hasReport: boolean;
+  currentReportId?: string | null;
+  reportFromDate?: string | null;
+  reportAsAtDate?: string | null;
+  reportSourceFileName?: string | null;
+  reportUploadedAt?: string | null;
+  distinctOrderCount: number;
+  distinctCustomerCount: number;
+  performanceStatus: 'Below Target' | 'On Track' | 'Target Achieved' | 'Target Exceeded';
 }
 
 export interface AdHocVisitRequest {

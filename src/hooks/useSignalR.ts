@@ -3,6 +3,18 @@ import { HubConnectionBuilder, HubConnection, LogLevel, HubConnectionState } fro
 import { useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { useAuth } from './useAuth';
+import { paymentReportKeys } from '../services/queryKeys/paymentReportKeys';
+
+export interface PaymentReportEvent {
+  eventType: 'paymentReportCreated' | 'paymentReportStatusChanged' | 'paymentReportTrashed' | 'paymentReportRestored';
+  reportId: string;
+  salesRepUserId: string;
+  coordinatorUserId?: string | null;
+  oldStatus?: string | null;
+  newStatus?: string | null;
+  actionUrl?: string | null;
+  occurredAt: string;
+}
 
 // Debounce helper — collapses rapid repeated calls into one invocation after `delay` ms
 function debounce<T extends (...args: unknown[]) => void>(fn: T, delay: number): T {
@@ -113,6 +125,15 @@ export function useSignalR() {
     }
   }, [queryClient]);
 
+  const refreshPaymentReportQueries = useCallback((reportId?: string) => {
+    queryClient.invalidateQueries({ queryKey: paymentReportKeys.all });
+    if (reportId) {
+      (['admin', 'coordinator', 'rep'] as const).forEach((role) => {
+        queryClient.invalidateQueries({ queryKey: paymentReportKeys.detail(role, reportId) });
+      });
+    }
+  }, [queryClient]);
+
   const createConnection = useCallback((hubPath: string): HubConnection => {
     const token = localStorage.getItem('accessToken') || '';
     return new HubConnectionBuilder()
@@ -190,6 +211,10 @@ export function useSignalR() {
       queryClient.invalidateQueries({ queryKey: ['rep-catalog'] });
     });
 
+    conn.on('PaymentReportEvent', (evt: PaymentReportEvent) => {
+      refreshPaymentReportQueries(evt.reportId);
+    });
+
     conn.on('ProductsUpdated', debounce(() => {
       toast('Product catalog updated by admin', { icon: '🔄', duration: 4000 });
       queryClient.invalidateQueries({ queryKey: ['customer-products'] });
@@ -201,7 +226,7 @@ export function useSignalR() {
     startConnection(conn, cancelled, 'NotificationHub');
 
     return () => safeStop(conn, cancelled);
-  }, [isAuthenticated, createConnection, queryClient, refreshOrderQueries, refreshQuotationQueries, refreshSupportQueries, user?.id]);
+  }, [isAuthenticated, createConnection, queryClient, refreshOrderQueries, refreshQuotationQueries, refreshSupportQueries, refreshPaymentReportQueries, user?.id]);
 
   // Connect to OrderTrackingHub (all roles)
   useEffect(() => {

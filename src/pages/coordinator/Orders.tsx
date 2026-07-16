@@ -20,6 +20,7 @@ import { useIsDesktop } from '../../hooks/useMediaQuery';
 import MobileTileList from '../../components/common/MobileTileList';
 import StatusBadge from '../../components/common/StatusBadge';
 import { downloadQuickRequestPdf, downloadQuickRequestExcel } from '../../utils/quickRequestPdf';
+import RoleOrderTrash from '../../components/orders/RoleOrderTrash';
 
 const BASE = import.meta.env.VITE_API_URL?.replace('/api', '') || '';
 
@@ -85,13 +86,13 @@ export default function CoordinatorOrders() {
   const { data: trashData, isLoading: trashLoading } = useQuery({
     queryKey: ['coordinator-orders-trash', page],
     queryFn: () => ordersApi.coordinatorGetTrash(page, 20).then(r => r.data.data),
-    enabled: activeTab === 'trash',
+    enabled: false,
   });
 
   const { data: quickTrashData = [], isLoading: quickTrashLoading } = useQuery({
     queryKey: ['coordinator-quick-orders-trash'],
     queryFn: () => quickRequestApi.coordinatorGetTrash('Order').then(r => r.data.data),
-    enabled: activeTab === 'trash',
+    enabled: false,
   });
 
   /* ─ Mutations ─────────────────────────────────────────────── */
@@ -362,8 +363,10 @@ export default function CoordinatorOrders() {
 
       {/* Trash View */}
       {activeTab === 'trash' ? (
-        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-          <div className="px-5 py-3 border-b border-slate-100"><span className="text-sm font-semibold text-slate-700">Trash — auto-deleted after 7 days</span></div>
+        <>
+        <RoleOrderTrash role='coordinator' />
+        <div className="hidden bg-white rounded-2xl border border-slate-200 overflow-hidden">
+          <div className="px-5 py-3 border-b border-slate-100"><span className="text-sm font-semibold text-slate-700">Items remain until manually restored or removed</span></div>
           {(trashLoading || quickTrashLoading) ? <div className="p-8 text-center text-slate-400 text-sm">Loading...</div>
             : (() => {
                 const repName = repIdFilter ? (reps.find(r => r.id === repIdFilter)?.fullName || '').toLowerCase() : '';
@@ -421,6 +424,7 @@ export default function CoordinatorOrders() {
                 );
               })()}
         </div>
+        </>
       ) : (
         /* Active View */
         <>

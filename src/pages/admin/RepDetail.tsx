@@ -17,6 +17,7 @@ import {
 import toast from 'react-hot-toast';
 import StatusBadge from '../../components/common/StatusBadge';
 import ConfirmModal from '../../components/common/ConfirmModal';
+import AdminTargetCard from '../../components/targetReports/AdminTargetCard';
 
 // ─── Searchable multi-select panel ────────────────────────────────────────────
 
@@ -846,49 +847,10 @@ export default function AdminRepDetail() {
               <p className="text-sm mt-1">Add a target using the form above.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {targets.map((t: any) => {
-                const pct = t.targetAmount > 0 ? Math.min(Math.round((t.achievedAmount / t.targetAmount) * 100), 100) : 0;
-                const isAchieved = t.status === 'Achieved';
-                return (
-                  <div key={t.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-                    <div className="flex items-start justify-between mb-4">
-                      <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-sm font-bold text-slate-900">{t.targetPeriod}</span>
-                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
-                            isAchieved ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-slate-100 text-slate-600 border-slate-200'
-                          }`}>{t.status}</span>
-                        </div>
-                        <p className="text-xs text-slate-400 flex items-center gap-1">
-                          <Calendar className="w-3 h-3" />
-                          {formatDate(t.startDate)} – {formatDate(t.endDate)}
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => setDeleteTargetId(t.id)}
-                        className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-xs text-slate-500">Progress</span>
-                      <span className="text-sm font-bold text-slate-900">{pct}%</span>
-                    </div>
-                    <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden mb-2">
-                      <div
-                        className={`h-full rounded-full transition-all duration-700 ${isAchieved ? 'bg-blue-600' : 'bg-blue-400'}`}
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-slate-500">{formatCurrency(t.achievedAmount)}</span>
-                      <span className="text-xs text-slate-400">of {formatCurrency(t.targetAmount)}</span>
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="grid w-full grid-cols-1 gap-5">
+              {targets.map((t: any) => (
+                <AdminTargetCard key={t.id} target={t} repId={id!} onDeleteClick={setDeleteTargetId} />
+              ))}
             </div>
           )}
         </div>

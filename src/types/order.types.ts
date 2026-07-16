@@ -82,6 +82,54 @@ export interface OrderFilterRequest {
   pageSize?: number;
 }
 
+export interface UnifiedOrderFilterRequest {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  status?: string;
+  customerId?: string;
+  fromDate?: string;
+  toDate?: string;
+  sortField?: string;
+  sortDirection?: 'asc' | 'desc';
+}
+
+export interface OrderTrashItem {
+  id: string;
+  kind: 'Order' | 'QuickOrder';
+}
+
+export interface UnifiedQuickOrder {
+  id: string;
+  requestNumber: string;
+  type: 'Order';
+  customerName: string;
+  details: string;
+  status: string;
+  adminNotes?: string | null;
+  repId: string;
+  repName: string;
+  imageUrls: string[];
+  createdAt: string;
+  updatedAt?: string | null;
+}
+
+export interface UnifiedOrderItem extends OrderTrashItem {
+  number: string;
+  customerName: string;
+  shopName?: string | null;
+  customerId?: string | null;
+  repId?: string | null;
+  repName?: string | null;
+  status: string;
+  date: string;
+  createdAt: string;
+  totalAmount?: number | null;
+  deletedAt?: string | null;
+  order?: Order | null;
+  quickOrder?: UnifiedQuickOrder | null;
+}
+
 export interface UpdateOrderStatusRequest {
   status: OrderStatus;
   reason?: string;

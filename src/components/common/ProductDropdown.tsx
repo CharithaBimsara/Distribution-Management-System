@@ -1,7 +1,16 @@
-import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import type { CSSProperties } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import type {
+  CSSProperties,
+  KeyboardEvent,
+} from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronDown, Package } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import type { Product } from '../../types/product.types';
 
 export interface ProductDropdownProps {
@@ -14,6 +23,11 @@ export interface ProductDropdownProps {
   onChange: (value: string) => void;
 }
 
+const MAX_DROPDOWN_WIDTH = 420;
+const MIN_DROPDOWN_WIDTH = 260;
+const MAX_DROPDOWN_HEIGHT = 210;
+const VIEWPORT_GAP = 8;
+
 export default function ProductDropdown({
   rowId,
   value,
@@ -25,196 +39,404 @@ export default function ProductDropdown({
 }: ProductDropdownProps) {
   const [open, setOpen] = useState(false);
   const [highlighted, setHighlighted] = useState(0);
-  const [dropUp, setDropUp] = useState(false);
-  const [floatingStyle, setFloatingStyle] = useState<CSSProperties>({});
+  const [visibleCount, setVisibleCount] = useState(30);
+  const [floatingStyle, setFloatingStyle] =
+    useState<CSSProperties>({});
+
   const containerRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const [visibleCount, setVisibleCount] = useState(60);
-
   useEffect(() => {
-    setVisibleCount(60);
+    setVisibleCount(30);
+    setHighlighted(0);
   }, [value, products.length, currentProductId]);
 
-  // Auto-resize textarea based on content length
-  useEffect(() => {
-    if (inputRef.current) {
-      inputRef.current.style.height = 'auto';
-      inputRef.current.style.height = inputRef.current.scrollHeight + 'px';
-    }
-  }, [value]);
-
   const filtered = useMemo(() => {
-    const q = value.trim().toLowerCase();
-    const base = products.filter(
-      (p) => !selectedProductIds.has(p.id) || p.id === currentProductId
-    );
-    if (!q) return base;
-    return base
-      .filter((p) => p.name.toLowerCase().includes(q) || (p.sku || '').toLowerCase().includes(q))
-      .sort((a, b) => {
-        const aS = a.name.toLowerCase().startsWith(q) ? 0 : 1;
-        const bS = b.name.toLowerCase().startsWith(q) ? 0 : 1;
-        return aS - bS || a.name.localeCompare(b.name);
-      });
-  }, [products, value, selectedProductIds, currentProductId]);
+    const query = value.trim().toLowerCase();
 
-  const visibleItems = filtered.slice(0, visibleCount);
+    const available = products.filter(
+      (product) =>
+        !selectedProductIds.has(product.id) ||
+        product.id === currentProductId,
+    );
+
+    return available
+      .filter((product) => {
+        if (!query) return true;
+
+        return (
+          product.name.toLowerCase().includes(query) ||
+          (product.sku || '')
+            .toLowerCase()
+            .includes(query)
+        );
+      })
+      .sort((first, second) => {
+        if (!query) {
+          return first.name.localeCompare(second.name);
+        }
+
+        const firstStarts = first.name
+          .toLowerCase()
+          .startsWith(query)
+          ? 0
+          : 1;
+
+        const secondStarts = second.name
+          .toLowerCase()
+          .startsWith(query)
+          ? 0
+          : 1;
+
+        return (
+          firstStarts -
+            secondStarts ||
+          first.name.localeCompare(second.name)
+        );
+      });
+  }, [
+    products,
+    value,
+    selectedProductIds,
+    currentProductId,
+  ]);
+
+  const visibleItems = filtered.slice(
+    0,
+    visibleCount,
+  );
 
   const updatePosition = useCallback(() => {
     const container = containerRef.current;
+
     if (!container) return;
 
     const rect = container.getBoundingClientRect();
-    const buffer = 12;
-    const dropdownMaxHeight = 320;
-    const availableBelow = window.innerHeight - rect.bottom - buffer;
-    const availableAbove = rect.top - buffer;
 
-    const shouldDropUp = availableBelow < 220 && availableAbove > availableBelow;
-    setDropUp(shouldDropUp);
+    const width = Math.min(
+      MAX_DROPDOWN_WIDTH,
+      Math.max(
+        MIN_DROPDOWN_WIDTH,
+        rect.width,
+      ),
+    );
 
-    const top = shouldDropUp ? rect.top - (dropdownMaxHeight <= availableAbove ? dropdownMaxHeight : availableAbove) : rect.bottom + 8;
-    const maxHeight = shouldDropUp ? Math.min(dropdownMaxHeight, availableAbove) : Math.min(dropdownMaxHeight, availableBelow);
+    const left = Math.min(
+      Math.max(
+        VIEWPORT_GAP,
+        rect.left,
+      ),
+      Math.max(
+        VIEWPORT_GAP,
+        window.innerWidth -
+          width -
+          VIEWPORT_GAP,
+      ),
+    );
+
+    const availableBelow =
+      window.innerHeight -
+      rect.bottom -
+      VIEWPORT_GAP;
+
+    const availableAbove =
+      rect.top - VIEWPORT_GAP;
+
+    const dropUp =
+      availableBelow < 180 &&
+      availableAbove > availableBelow;
+
+    const maxHeight = Math.max(
+      120,
+      Math.min(
+        MAX_DROPDOWN_HEIGHT,
+        dropUp
+          ? availableAbove
+          : availableBelow,
+      ),
+    );
 
     setFloatingStyle({
       position: 'fixed',
-      left: rect.left,
-      width: rect.width,
-      top: shouldDropUp ? undefined : top,
-      bottom: shouldDropUp ? window.innerHeight - rect.top + 8 : undefined,
+      left,
+      width,
+      top: dropUp
+        ? undefined
+        : rect.bottom + 4,
+      bottom: dropUp
+        ? window.innerHeight -
+          rect.top +
+          4
+        : undefined,
       maxHeight,
       zIndex: 9999,
     });
   }, []);
 
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      const target = e.target as Node;
+    const handleOutsideClick = (
+      event: MouseEvent,
+    ) => {
+      const target = event.target as Node;
+
       if (
         containerRef.current?.contains(target) ||
         dropdownRef.current?.contains(target)
       ) {
         return;
       }
+
       setOpen(false);
     };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+
+    document.addEventListener(
+      'mousedown',
+      handleOutsideClick,
+    );
+
+    return () =>
+      document.removeEventListener(
+        'mousedown',
+        handleOutsideClick,
+      );
   }, []);
 
   useEffect(() => {
     if (!open) return;
+
     updatePosition();
 
-    window.addEventListener('resize', updatePosition);
-    window.addEventListener('scroll', updatePosition, true);
+    window.addEventListener(
+      'resize',
+      updatePosition,
+    );
+
+    window.addEventListener(
+      'scroll',
+      updatePosition,
+      true,
+    );
+
     return () => {
-      window.removeEventListener('resize', updatePosition);
-      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener(
+        'resize',
+        updatePosition,
+      );
+
+      window.removeEventListener(
+        'scroll',
+        updatePosition,
+        true,
+      );
     };
   }, [open, updatePosition]);
 
   useEffect(() => {
-    if (!listRef.current) return;
-    const item = listRef.current.children[highlighted] as HTMLElement | undefined;
-    item?.scrollIntoView({ block: 'nearest' });
-  }, [highlighted]);
+    if (!open || !listRef.current) return;
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (!open && (e.key === 'ArrowDown' || e.key === 'Enter')) { setOpen(true); return; }
-    if (e.key === 'ArrowDown') { e.preventDefault(); setHighlighted(h => Math.min(h + 1, filtered.length - 1)); }
-    else if (e.key === 'ArrowUp') { e.preventDefault(); setHighlighted(h => Math.max(h - 1, 0)); }
-    else if (e.key === 'Enter') {
-      e.preventDefault();
-      if (filtered[highlighted]) { onSelect(filtered[highlighted]); setOpen(false); }
-    } else if (e.key === 'Escape') { setOpen(false); }
+    const item = listRef.current.children[
+      highlighted
+    ] as HTMLElement | undefined;
+
+    item?.scrollIntoView({
+      block: 'nearest',
+    });
+  }, [highlighted, open]);
+
+  const selectProduct = (
+    product: Product,
+  ) => {
+    onSelect(product);
+    setOpen(false);
+  };
+
+  const handleKeyDown = (
+    event: KeyboardEvent<HTMLInputElement>,
+  ) => {
+    if (
+      !open &&
+      (event.key === 'ArrowDown' ||
+        event.key === 'Enter')
+    ) {
+      event.preventDefault();
+      setOpen(true);
+      return;
+    }
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+
+      setHighlighted((current) =>
+        Math.min(
+          current + 1,
+          Math.max(filtered.length - 1, 0),
+        ),
+      );
+
+      return;
+    }
+
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+
+      setHighlighted((current) =>
+        Math.max(current - 1, 0),
+      );
+
+      return;
+    }
+
+    if (event.key === 'Enter') {
+      event.preventDefault();
+
+      const selected = filtered[highlighted];
+
+      if (selected) {
+        selectProduct(selected);
+      }
+
+      return;
+    }
+
+    if (event.key === 'Escape') {
+      setOpen(false);
+    }
   };
 
   return (
-    <div ref={containerRef} className="relative w-full">
-      <div className={`relative flex items-center bg-transparent rounded-xl transition-all ${open ? 'ring-2 ring-orange-500/20 bg-white' : 'hover:bg-slate-50'}`}>
-        <textarea
+    <div
+      ref={containerRef}
+      className="relative w-full"
+      data-row-id={rowId}
+    >
+      <div
+        className={`relative flex h-8 items-center border bg-white transition ${
+          open
+            ? 'border-slate-950 ring-1 ring-slate-950/10'
+            : 'border-slate-300 hover:border-slate-500'
+        }`}
+      >
+        <input
           ref={inputRef}
-          rows={1}
+          type="text"
           value={value}
+          title={value}
           placeholder="Search product..."
-          onChange={e => { onChange(e.target.value); setOpen(true); setHighlighted(0); }}
-          onFocus={() => { setOpen(true); setHighlighted(0); }}
+          autoComplete="off"
+          spellCheck={false}
+          onChange={(event) => {
+            onChange(event.target.value);
+            setOpen(true);
+            setHighlighted(0);
+          }}
+          onFocus={() => {
+            setOpen(true);
+            setHighlighted(0);
+          }}
           onKeyDown={handleKeyDown}
-          className="w-full pl-3 pr-8 py-2.5 text-sm font-bold text-slate-800 bg-transparent border-transparent focus:outline-none focus:ring-0 focus:border-transparent resize-none overflow-hidden placeholder-slate-400 break-words"
-          style={{ minHeight: '40px' }}
+          className="h-full min-w-0 flex-1 bg-transparent px-2 pr-7 text-[13px] font-medium text-slate-950 outline-none placeholder:text-slate-400"
         />
+
         <button
           type="button"
           tabIndex={-1}
-          onClick={() => { setOpen(o => !o); inputRef.current?.focus(); }}
-          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 transition"
+          onClick={() => {
+            setOpen((current) => !current);
+            inputRef.current?.focus();
+          }}
+          className="absolute right-1 inline-flex h-6 w-6 items-center justify-center text-slate-400 transition hover:bg-slate-100 hover:text-slate-950"
+          aria-label={
+            open
+              ? 'Close products'
+              : 'Open products'
+          }
         >
-          <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${open ? 'rotate-180 text-orange-500' : ''}`} />
+          <ChevronDown
+            className={`h-3.5 w-3.5 transition-transform ${
+              open
+                ? 'rotate-180 text-slate-950'
+                : ''
+            }`}
+          />
         </button>
       </div>
 
-      {open && createPortal(
-        <div
-          ref={dropdownRef}
-          className="w-full max-w-full rounded-2xl overflow-hidden overflow-x-hidden bg-white border border-slate-200 animate-fade-in"
-          style={{
-            ...floatingStyle,
-            boxShadow: '0 10px 40px -10px rgba(0,0,0,0.15)',
-          }}
-        >
-          <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Select Product</span>
-            <span className="text-[10px] text-slate-400 font-bold bg-white px-2 py-0.5 rounded-full border border-slate-200">{filtered.length} found</span>
-          </div>
+      {open &&
+        createPortal(
+          <div
+            ref={dropdownRef}
+            className="overflow-hidden border border-slate-300 bg-white shadow-xl"
+            style={floatingStyle}
+          >
+            {filtered.length === 0 ? (
+              <div className="px-3 py-6 text-center">
+                <p className="text-xs font-bold text-slate-700">
+                  No products found
+                </p>
+              </div>
+            ) : (
+              <ul
+                ref={listRef}
+                className="max-h-[210px] overflow-y-auto overflow-x-hidden overscroll-contain"
+                style={{
+                  scrollbarWidth: 'thin',
+                }}
+                onScroll={(event) => {
+                  const target =
+                    event.currentTarget;
 
-          {filtered.length === 0 ? (
-            <div className="px-4 py-10 text-center">
-              <Package className="w-8 h-8 text-slate-200 mx-auto mb-3" />
-              <p className="text-sm text-slate-700 font-bold">No products found</p>
-              <p className="text-xs text-slate-500 mt-1">Try a different keyword</p>
-            </div>
-          ) : (
-            <ul
-              ref={listRef}
-              className="max-h-60 overflow-y-auto overflow-x-hidden overscroll-contain"
-              style={{ scrollbarWidth: 'thin' }}
-              onScroll={(e) => {
-                const t = e.target as HTMLElement;
-                if (t.scrollHeight - t.scrollTop - t.clientHeight < 36 && visibleCount < filtered.length) {
-                  setVisibleCount(prev => Math.min(prev + 50, filtered.length));
-                }
-              }}
-            >
-              {visibleItems.map((p, i) => (
-                <li
-                  key={p.id}
-                  onMouseDown={e => { e.preventDefault(); onSelect(p); setOpen(false); }}
-                  onMouseEnter={() => setHighlighted(i)}
-                  className={`px-4 py-3 cursor-pointer border-b border-slate-50 last:border-b-0 transition-all duration-100 ${
-                    i === highlighted
-                      ? 'bg-orange-50/50 border-l-[3px] border-l-orange-500'
-                      : 'border-l-[3px] border-l-transparent hover:bg-slate-50'
-                  }`}
-                >
-                  <p className={`text-sm font-bold leading-snug break-words ${i === highlighted ? 'text-orange-900' : 'text-slate-800'}`} style={{ whiteSpace: 'normal' }}>
-                    {p.name}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          )}
+                  const nearBottom =
+                    target.scrollHeight -
+                      target.scrollTop -
+                      target.clientHeight <
+                    32;
 
-          <div className="px-4 py-2 bg-slate-50 border-t border-slate-100 flex items-center gap-4">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1"><span>↑↓</span> Navigate</span>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1"><span>↵</span> Select</span>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1"><span>ESC</span> Close</span>
-          </div>
-        </div>
-      , document.body)}
+                  if (
+                    nearBottom &&
+                    visibleCount <
+                      filtered.length
+                  ) {
+                    setVisibleCount(
+                      (current) =>
+                        Math.min(
+                          current + 30,
+                          filtered.length,
+                        ),
+                    );
+                  }
+                }}
+              >
+                {visibleItems.map(
+                  (product, index) => (
+                    <li
+                      key={product.id}
+                      title={product.name}
+                      onMouseDown={(event) => {
+                        event.preventDefault();
+                        selectProduct(product);
+                      }}
+                      onMouseEnter={() =>
+                        setHighlighted(index)
+                      }
+                      className={`cursor-pointer border-b border-slate-100 px-2.5 py-1.5 last:border-b-0 ${
+                        index === highlighted
+                          ? 'bg-slate-950 text-white'
+                          : 'text-slate-950 hover:bg-slate-100'
+                      }`}
+                    >
+                      <p className="truncate text-[13px] font-medium">
+                        {product.name}
+                      </p>
+                    </li>
+                  ),
+                )}
+              </ul>
+            )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

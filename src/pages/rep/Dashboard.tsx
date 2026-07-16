@@ -1,308 +1,488 @@
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { repsApi } from '../../services/api/repsApi';
-import { customersApi } from '../../services/api/customersApi';
-import { ordersApi } from '../../services/api/ordersApi';
-import { formatCurrency } from '../../utils/formatters';
-import {
-  ShoppingCart,
-  Users,
-  MapPin,
-  TrendingUp,
-  Target,
-  ChevronRight,
-  FileText,
-} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import {
+  ArrowRight,
+  CalendarDays,
+  CheckCircle2,
+  FileText,
+  MapPin,
+  ShoppingCart,
+  Target,
+  Trophy,
+  Users,
+  Zap,
+} from 'lucide-react';
+import { repsApi } from '../../services/api/repsApi';
+import { formatCurrency, formatDate } from '../../utils/formatters';
+import type { SalesTarget } from '../../types/common.types';
 
 export default function RepDashboard() {
   const navigate = useNavigate();
 
-  const { data: performance } = useQuery({
-    queryKey: ['rep-performance'],
-    queryFn: () => repsApi.repGetPerformance().then(r => r.data.data),
+  const { data: targets = [], isFetching: targetsFetching } = useQuery({
+    queryKey: ['rep-targets'],
+    queryFn: () => repsApi.repGetTargets().then((response) => response.data.data),
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
   });
 
-  const { data: recentOrders } = useQuery({
-    queryKey: ['rep-recent-orders'],
-    queryFn: () => ordersApi.repGetAll({ page: 1, pageSize: 5 }).then(r => r.data.data),
+  const { data: profile } = useQuery({
+    queryKey: ['rep-profile'],
+    queryFn: () => repsApi.repGetProfile().then((response) => response.data.data),
+    staleTime: 5 * 60 * 1000,
   });
 
-  // Fallback: if backend doesn't return totalCustomers, fetch rep customers (pageSize=1) to get totalCount
-  const { data: customersCount } = useQuery({
-    queryKey: ['rep-customers-count'],
-    queryFn: () => customersApi.repGetCustomers({ page: 1, pageSize: 1 }).then(r => r.data.data),
-    enabled: performance?.totalCustomers === undefined,
-  });
+  const currentTarget = useMemo(() => {
+    if (!targets.length) return undefined;
 
-  const targetAmount = performance?.targetAmount || 0;
-  const achievedAmount = performance?.achievedAmount || 0;
-  const remainingAmount = Math.max(0, targetAmount - achievedAmount);
-  const achievement = performance?.achievementPercentage || 0;
-  const avgOrderValue = performance?.totalOrders
-    ? (performance.totalSales || 0) / performance.totalOrders
-    : 0;
-  const salesValue = formatCurrency(performance?.totalSales || 0);
-  const ordersValue = performance?.totalOrders || 0;
-  const customersValue = performance?.totalCustomers ?? customersCount?.totalCount ?? 0;
+    const now = new Date();
+    const sortedTargets = [...targets].sort(
+      (first: SalesTarget, second: SalesTarget) =>
+        new Date(second.startDate).getTime() -
+        new Date(first.startDate).getTime(),
+    );
+
+    return (
+      sortedTargets.find(
+        (target: SalesTarget) =>
+          new Date(target.startDate) <= now &&
+          now <= new Date(target.endDate),
+      ) ?? sortedTargets[0]
+    );
+  }, [targets]);
+
+  const targetAmount = currentTarget?.targetAmount ?? 0;
+  const actualSales = currentTarget?.achievedAmount ?? 0;
+  const remainingAmount = Math.max(targetAmount - actualSales, 0);
+  const exceededBy = Math.max(actualSales - targetAmount, 0);
+  const achievement = currentTarget?.achievementPercentage ?? 0;
+  const progressWidth = Math.min(Math.max(achievement, 0), 100);
+
+  const invoiceCount = currentTarget?.distinctOrderCount ?? 0;
+  const customerCount = currentTarget?.distinctCustomerCount ?? 0;
+  const averageInvoice = invoiceCount > 0 ? actualSales / invoiceCount : 0;
+
+  const statusLabel =
+    currentTarget?.performanceStatus ??
+    (achievement >= 100
+      ? 'Target Achieved'
+      : achievement >= 75
+        ? 'On Track'
+        : 'Below Target');
 
   return (
-    <div className="animate-fade-in pb-6">
-      <section className="relative overflow-hidden rounded-none md:rounded-3xl lg:rounded-3xl bg-gradient-to-br from-emerald-700 via-emerald-600 to-teal-600 px-4 md:px-6 lg:px-7 pt-5 md:pt-7 lg:pt-7 pb-7 md:pb-9 lg:pb-9">
-        <div className="absolute -top-16 -right-8 h-44 w-44 rounded-full bg-white/10 blur-2xl" />
-        <div className="absolute -bottom-20 left-0 h-48 w-48 rounded-full bg-emerald-300/20 blur-3xl" />
-        <div className="relative">
-          <p className="text-emerald-100 text-xs md:text-sm font-medium tracking-wide">Good {getGreeting()}</p>
-          <h1 className="text-white text-[26px] leading-8 md:text-3xl lg:text-3xl font-semibold mt-1">Sales Command Center</h1>
-          <p className="text-emerald-100/90 text-xs md:text-sm mt-1">Track progress, act fast, and keep momentum high.</p>
+    <div className="mx-auto w-full max-w-[1600px] animate-fade-in space-y-4 px-3 pb-8 pt-2 sm:space-y-5 sm:px-5 sm:pt-4 xl:space-y-6 xl:px-8 xl:pt-6">
+      {/* Header */}
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="max-w-full break-words text-xl font-bold leading-tight tracking-tight text-slate-900 sm:text-2xl">
+            Good {getGreeting()},{' '}
+            <span className="text-emerald-700">
+              {profile?.fullName || 'Sales Rep'}
+            </span>
+          </h1>
+          <p className="mt-1 text-xs leading-5 text-slate-500 sm:text-sm">
+            Current target performance overview
+          </p>
+        </div>
 
-          <div className="mt-3 md:mt-4 grid grid-cols-2 gap-2 md:hidden">
-            <MiniPill label="Achieved" value={formatCurrency(achievedAmount)} />
-            <MiniPill label="Remaining" value={formatCurrency(remainingAmount)} />
+        <div className="w-full sm:w-auto">
+          <div className="flex min-h-10 w-full items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 shadow-sm sm:w-auto">
+            <CalendarDays className="h-4 w-4 flex-shrink-0 text-slate-400" />
+            <span className="min-w-0 break-words">
+              {currentTarget
+                ? `${formatDate(currentTarget.startDate)} – ${formatDate(
+                    currentTarget.endDate,
+                  )}`
+                : 'No active period'}
+            </span>
           </div>
         </div>
+      </header>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-2.5 md:gap-3 mt-5 md:mt-6">
-          {[
-            { label: 'Total Sales', value: salesValue, icon: TrendingUp },
-            { label: 'Orders', value: ordersValue, icon: ShoppingCart },
-            { label: 'Customers', value: customersValue, icon: Users },
-            { label: 'Target Hit', value: `${achievement.toFixed(0)}%`, icon: Target },
-          ].map((stat) => (
-            <div
-              key={stat.label}
-              className="rounded-2xl border border-white/20 bg-white/10 backdrop-blur-md px-3 py-3 md:px-3.5 md:py-3.5"
-            >
-              <div className="flex items-center gap-2 text-emerald-100">
-                <stat.icon className="w-3.5 h-3.5 md:w-4 md:h-4" />
-                <span className="text-[11px] font-semibold tracking-wide uppercase">{stat.label}</span>
-              </div>
-              <p className="text-white text-base md:text-lg lg:text-xl font-bold mt-2 truncate">{stat.value}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <div className="px-4 md:px-0 lg:px-0 mt-4 lg:mt-6 space-y-4 lg:space-y-6">
-        <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4 lg:gap-6">
-          <div className="md:col-span-2 lg:col-span-7 card p-4 lg:p-5 border border-slate-200/80 shadow-sm">
-            <div className="flex items-center justify-between gap-3 mb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
-                  <Target className="w-4 h-4 text-white" />
-                </div>
-                <h2 className="text-sm lg:text-base font-semibold text-slate-800">Target Progress</h2>
-              </div>
-              <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
-                achievement >= 100 ? 'bg-emerald-100 text-emerald-700' :
-                achievement >= 70 ? 'bg-teal-100 text-teal-700' :
-                'bg-amber-100 text-amber-700'
-              }`}>
-                {achievement.toFixed(0)}%
-              </span>
-            </div>
-
-            {targetAmount > 0 ? (
-              <>
-                <div className="h-3 rounded-full bg-slate-100 overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all duration-500 ${
-                      achievement >= 100
-                        ? 'bg-gradient-to-r from-emerald-500 to-green-400'
-                        : achievement >= 70
-                        ? 'bg-gradient-to-r from-emerald-500 to-teal-400'
-                        : 'bg-gradient-to-r from-amber-500 to-yellow-400'
-                    }`}
-                    style={{ width: `${Math.min(100, achievement)}%` }}
-                  />
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-4">
-                  <MetricChip label="Achieved" value={formatCurrency(achievedAmount)} tone="emerald" />
-                  <MetricChip label="Remaining" value={formatCurrency(remainingAmount)} tone="amber" />
-                  <MetricChip label="Avg Order" value={formatCurrency(avgOrderValue)} tone="teal" />
-                </div>
-              </>
-            ) : (
-              <div className="rounded-xl bg-slate-50 border border-slate-200 p-4 text-sm text-slate-500">
-                No monthly target configured yet.
-              </div>
+      {/* Mobile compact summary — full-width amounts with no clipping */}
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm md:hidden">
+        <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-slate-600">Current Target</p>
+            {currentTarget && (
+              <p className="mt-0.5 text-[10px] leading-4 text-slate-400">
+                {formatDate(currentTarget.startDate)} –{' '}
+                {formatDate(currentTarget.endDate)}
+              </p>
             )}
           </div>
 
-          <div className="md:col-span-2 lg:col-span-5 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-2 gap-3">
-            <QuickActionCard
-              title="New Order"
-              subtitle="Create in seconds"
-              icon={ShoppingCart}
-              iconClass="from-emerald-500 to-teal-600"
-              onClick={() => navigate('/rep/orders/new')}
+          <span
+            className={`inline-flex flex-shrink-0 items-center rounded-full px-3 py-1.5 text-xs font-bold ${
+              achievement >= 100
+                ? 'bg-emerald-100 text-emerald-700'
+                : achievement >= 75
+                  ? 'bg-teal-100 text-teal-700'
+                  : 'bg-amber-100 text-amber-700'
+            }`}
+          >
+            {achievement.toFixed(1)}%
+          </span>
+        </div>
+
+        <div className="px-4 py-3.5">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+            Actual Sales
+          </p>
+
+          <div className="mt-1 flex min-w-0 items-baseline gap-1.5">
+            <span className="flex-shrink-0 text-xs font-bold text-emerald-700">
+              LKR
+            </span>
+            <span className="min-w-0 break-words text-[clamp(1.45rem,7vw,2rem)] font-extrabold leading-tight tracking-tight text-slate-950 [overflow-wrap:anywhere]">
+              {formatAmountNumber(actualSales)}
+            </span>
+          </div>
+
+          <div className="mt-3 flex items-start justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2.5">
+            <span className="flex-shrink-0 text-xs font-semibold text-slate-500">
+              Target
+            </span>
+            <span className="min-w-0 break-words text-right text-sm font-bold leading-5 text-slate-800 [overflow-wrap:anywhere]">
+              LKR {formatAmountNumber(targetAmount)}
+            </span>
+          </div>
+
+          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100">
+            <div
+              className="h-full rounded-full bg-emerald-600 transition-all duration-700"
+              style={{ width: `${progressWidth}%` }}
             />
-            <QuickActionCard
+          </div>
+        </div>
+      </section>
+
+      {/* Main responsive layout:
+          - Mobile: one column
+          - Tablet: main card full width, secondary cards below in 3 columns
+          - Desktop: 8/4 bento layout */}
+      <div className="grid grid-cols-1 gap-4 sm:gap-5 xl:grid-cols-12 xl:gap-6">
+        {/* Main Target Progress Card */}
+        <section className="order-1 hidden relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm md:block xl:col-span-8">
+          <div className="pointer-events-none absolute right-0 top-0 h-40 w-40 translate-x-1/3 -translate-y-1/3 rounded-full bg-emerald-50 blur-3xl sm:h-64 sm:w-64" />
+
+          <div className="relative p-4 sm:p-5 md:p-6">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <h2 className="text-base font-bold text-slate-900 sm:text-lg">
+                  Target Progress
+                </h2>
+                <p className="mt-1 max-w-xl text-xs leading-5 text-slate-500">
+                  Sales against the current target period
+                </p>
+              </div>
+
+              <span
+                className={`inline-flex w-fit flex-shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold ${
+                  achievement >= 100
+                    ? 'bg-emerald-100 text-emerald-700'
+                    : achievement >= 75
+                      ? 'bg-teal-100 text-teal-700'
+                      : 'bg-amber-100 text-amber-700'
+                }`}
+              >
+                {achievement >= 100 ? (
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                ) : (
+                  <Target className="h-3.5 w-3.5" />
+                )}
+                {statusLabel}
+              </span>
+            </div>
+
+            {/* Amounts: stack on mobile so large currency text never clips */}
+            <div className="mt-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                  Actual Sales
+                </p>
+                <p className="mt-1 break-words text-3xl font-extrabold leading-tight tracking-tight text-slate-900 sm:text-4xl md:text-[42px]">
+                  {formatCurrency(actualSales)}
+                </p>
+              </div>
+
+              <div className="min-w-0 rounded-xl bg-slate-50 px-3 py-2.5 sm:max-w-[260px] sm:bg-transparent sm:px-0 sm:py-0 sm:text-right">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                  Target
+                </p>
+                <p className="mt-1 break-words text-base font-bold text-slate-700 sm:text-lg">
+                  {formatCurrency(targetAmount)}
+                </p>
+              </div>
+            </div>
+
+            {/* Progress */}
+            <div className="mt-5">
+              <div className="relative h-2.5 overflow-hidden rounded-full bg-slate-100">
+                <div
+                  className={`absolute inset-y-0 left-0 rounded-full transition-all duration-700 ease-out ${
+                    achievement >= 100
+                      ? 'bg-gradient-to-r from-emerald-500 to-lime-400'
+                      : achievement >= 75
+                        ? 'bg-gradient-to-r from-emerald-500 to-teal-400'
+                        : 'bg-gradient-to-r from-amber-500 to-yellow-400'
+                  }`}
+                  style={{ width: `${progressWidth}%` }}
+                />
+              </div>
+
+              <div className="mt-2 flex items-center justify-between gap-3">
+                <p className="text-xs font-semibold text-slate-500">
+                  {achievement.toFixed(1)}% achieved
+                </p>
+                {currentTarget?.hasReport && currentTarget.reportAsAtDate && (
+                  <p className="text-right text-[11px] text-slate-400">
+                    As at {formatDate(currentTarget.reportAsAtDate)}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Sub Metrics:
+                - 2 columns mobile
+                - 3 columns tablet and desktop */}
+            <div className="mt-6 grid grid-cols-2 gap-3 border-t border-slate-100 pt-5 md:grid-cols-3">
+              <SubMetric
+                label={exceededBy > 0 ? 'Exceeded By' : 'Remaining'}
+                value={formatCurrency(
+                  exceededBy > 0 ? exceededBy : remainingAmount,
+                )}
+                fullWidthOnSmall
+              />
+              <SubMetric
+                label="Invoices"
+                value={invoiceCount.toLocaleString('en-US')}
+              />
+              <SubMetric
+                label="Latest Report"
+                value={
+                  currentTarget?.hasReport && currentTarget.reportAsAtDate
+                    ? formatDate(currentTarget.reportAsAtDate)
+                    : 'Not uploaded'
+                }
+              />
+            </div>
+
+            {!currentTarget && !targetsFetching && (
+              <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-medium leading-5 text-amber-700">
+                No target has been configured yet.
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* Secondary column:
+            Tablet uses 3-column balanced layout.
+            Desktop returns to vertical side column. */}
+        <div className="order-3 hidden grid-cols-2 gap-4 md:order-2 md:grid md:grid-cols-3 xl:col-span-4 xl:grid-cols-2 xl:gap-4">
+          {/* Achievement card */}
+          <section className="relative col-span-2 overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-600 p-4 text-white shadow-lg shadow-emerald-600/10 md:col-span-1 md:p-5 xl:col-span-2 xl:p-6">
+            <div className="pointer-events-none absolute -bottom-12 -right-12 h-36 w-36 rounded-full bg-white/10 blur-2xl" />
+
+            <div className="relative flex h-full flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between gap-3">
+                  <Trophy className="h-5 w-5 text-emerald-100 sm:h-6 sm:w-6" />
+                  <span className="rounded-full bg-white/15 px-2 py-1 text-[10px] font-bold backdrop-blur-sm sm:text-xs">
+                    {achievement >= 100
+                      ? 'Excellent'
+                      : achievement >= 75
+                        ? 'Good'
+                        : 'Needs Focus'}
+                  </span>
+                </div>
+
+                <p className="mt-5 text-4xl font-extrabold tracking-tight sm:text-5xl">
+                  {achievement.toFixed(0)}%
+                </p>
+                <p className="mt-1 text-xs text-emerald-100 sm:text-sm">
+                  Target Achievement
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => navigate('/rep/performance')}
+                className="mt-5 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-white px-4 text-sm font-bold text-emerald-700 transition active:scale-[0.99] sm:hover:bg-emerald-50"
+              >
+                Performance
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
+          </section>
+
+          <MiniStatCard
+            icon={Users}
+            label="Customers"
+            value={customerCount.toLocaleString('en-US')}
+            color="blue"
+          />
+          <MiniStatCard
+            icon={Zap}
+            label="Avg. Invoice"
+            value={formatCurrency(averageInvoice)}
+            color="amber"
+          />
+        </div>
+
+        {/* Quick Actions */}
+        <section className="order-1 rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-sm sm:p-5 md:order-3 md:p-6 xl:col-span-12">
+          <div className="mb-3 sm:mb-5">
+            <h2 className="text-base font-bold text-slate-900 sm:text-lg">
+              Quick Actions
+            </h2>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <QuickActionButton
+              title="New Order"
+              icon={ShoppingCart}
+              onClick={() => navigate('/rep/orders/new')}
+              primary
+            />
+            <QuickActionButton
               title="Customers"
-              subtitle="Manage accounts"
               icon={Users}
-              iconClass="from-emerald-500 to-green-600"
               onClick={() => navigate('/rep/customers')}
             />
-            <QuickActionCard
+            <QuickActionButton
               title="Quotations"
-              subtitle="Create & track"
               icon={FileText}
-              iconClass="from-teal-500 to-emerald-600"
               onClick={() => navigate('/rep/quotations')}
             />
-            <QuickActionCard
+            <QuickActionButton
               title="My Routes"
-              subtitle="Plan your day"
               icon={MapPin}
-              iconClass="from-emerald-500 to-lime-600"
               onClick={() => navigate('/rep/routes')}
             />
           </div>
         </section>
-
-        <section className="card overflow-hidden border border-slate-200/80 shadow-sm">
-          <div className="flex items-center justify-between px-4 py-3.5 border-b border-slate-100 bg-slate-50/70">
-            <h2 className="text-sm font-bold text-slate-800">Recent Orders</h2>
-            <button
-              onClick={() => navigate('/rep/orders')}
-              className="text-xs text-emerald-700 font-semibold flex items-center gap-0.5"
-            >
-              View all <ChevronRight className="w-3 h-3" />
-            </button>
-          </div>
-
-          {recentOrders?.items?.length ? (
-            <>
-              <div className="hidden lg:flex items-center gap-3 px-4 py-2 border-b border-slate-100 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                <div className="flex-1">Customer</div>
-                <div className="w-28 text-right">Amount</div>
-                <div className="w-24 text-right">Status</div>
-              </div>
-              <div className="lg:hidden p-3 md:p-4 grid grid-cols-1 md:grid-cols-2 gap-3 bg-slate-50/30">
-                {recentOrders.items.slice(0, 6).map((order: any) => (
-                  <button
-                    key={order.id}
-                    onClick={() => navigate(`/rep/orders/${order.id}`)}
-                    className="text-left rounded-2xl border border-slate-200 bg-white p-3.5 hover:border-slate-300 transition"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-slate-800 truncate">{order.customerName}</p>
-                        <p className="text-[11px] text-slate-400 mt-0.5 truncate">{order.orderNumber}</p>
-                      </div>
-                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full inline-block w-fit ${
-                        order.status === 'Delivered' ? 'bg-emerald-50 text-emerald-700' :
-                        order.status === 'Pending' ? 'bg-amber-50 text-amber-700' :
-                        'bg-teal-50 text-teal-700'
-                      }`}>
-                        {order.status}
-                      </span>
-                    </div>
-                    <div className="mt-2.5 flex items-center justify-between">
-                      <p className="text-sm font-bold text-slate-900">{formatCurrency(order.totalAmount)}</p>
-                      <span className="text-xs font-medium text-emerald-700">Open</span>
-                    </div>
-                  </button>
-                ))}
-              </div>
-              <div className="divide-y divide-slate-100">
-                {recentOrders.items.slice(0, 6).map((order: any) => (
-                  <div key={order.id} className="hidden lg:flex items-center justify-between px-4 py-3 hover:bg-slate-50/70 transition-colors">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-slate-800 truncate">{order.customerName}</p>
-                      <p className="text-[11px] text-slate-400">{order.orderNumber}</p>
-                    </div>
-                    <div className="text-right ml-3 flex items-center gap-3">
-                      <p className="text-sm font-bold text-slate-900">{formatCurrency(order.totalAmount)}</p>
-                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full inline-block w-fit ${
-                        order.status === 'Delivered' ? 'bg-emerald-50 text-emerald-700' :
-                        order.status === 'Pending' ? 'bg-amber-50 text-amber-700' :
-                        'bg-teal-50 text-teal-700'
-                      }`}>
-                        {order.status}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </>
-          ) : (
-            <div className="p-6">
-              <div className="rounded-xl bg-slate-50 border border-slate-200 p-6 text-center">
-                <ShoppingCart className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                <p className="text-sm text-slate-400">No recent orders</p>
-              </div>
-            </div>
-          )}
-        </section>
       </div>
     </div>
   );
 }
 
-function QuickActionCard({
-  title,
-  subtitle,
+function SubMetric({
+  label,
+  value,
+  fullWidthOnSmall = false,
+}: {
+  label: string;
+  value: string;
+  fullWidthOnSmall?: boolean;
+}) {
+  return (
+    <div
+      className={`min-w-0 rounded-xl bg-slate-50 p-3 ${
+        fullWidthOnSmall ? 'col-span-2 md:col-span-1' : ''
+      }`}
+    >
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+        {label}
+      </p>
+      <p className="mt-1 break-words text-sm font-bold leading-5 text-slate-900 sm:text-base">
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function MiniStatCard({
   icon: Icon,
-  iconClass,
+  label,
+  value,
+  color,
+}: {
+  icon: typeof Users;
+  label: string;
+  value: string;
+  color: 'blue' | 'amber';
+}) {
+  const colors =
+    color === 'blue'
+      ? 'bg-blue-50 text-blue-600'
+      : 'bg-amber-50 text-amber-600';
+
+  return (
+    <article className="min-w-0 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm md:p-5">
+      <div
+        className={`flex h-9 w-9 items-center justify-center rounded-lg ${colors}`}
+      >
+        <Icon className="h-4 w-4" />
+      </div>
+      <p className="mt-3 text-xs font-medium text-slate-500">
+        {label}
+      </p>
+      <p className="mt-1 break-words text-lg font-bold leading-6 text-slate-900">
+        {value}
+      </p>
+    </article>
+  );
+}
+
+function QuickActionButton({
+  title,
+  icon: Icon,
   onClick,
+  primary = false,
 }: {
   title: string;
-  subtitle: string;
-  icon: any;
-  iconClass: string;
+  icon: typeof ShoppingCart;
   onClick: () => void;
+  primary?: boolean;
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
-      className="card p-4 md:p-3.5 lg:p-4 text-left border border-slate-200/80 hover:border-slate-300 hover:shadow-md transition-all active:scale-[0.98] min-h-[132px] md:min-h-[118px] lg:min-h-0"
+      className={`group flex min-h-[88px] min-w-0 flex-col items-start justify-between rounded-xl border p-3 text-left transition active:scale-[0.98] sm:min-h-[112px] sm:p-4 md:min-h-0 md:flex-row md:items-center md:gap-3 ${
+        primary
+          ? 'border-emerald-600 bg-emerald-600 text-white shadow-md shadow-emerald-600/10 sm:hover:bg-emerald-700'
+          : 'border-slate-200 bg-slate-50 text-slate-900 sm:hover:border-emerald-200 sm:hover:bg-emerald-50/50'
+      }`}
     >
-      <div className={`w-10 h-10 md:w-9 md:h-9 lg:w-10 lg:h-10 rounded-xl bg-gradient-to-br ${iconClass} flex items-center justify-center shadow-lg mb-3`}>
-        <Icon className="w-5 h-5 text-white" />
+      <div
+        className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg sm:h-10 sm:w-10 ${
+          primary
+            ? 'bg-white/20 text-white'
+            : 'border border-slate-100 bg-white text-emerald-600 shadow-sm'
+        }`}
+      >
+        <Icon className="h-5 w-5" />
       </div>
-      <p className="text-sm font-semibold text-slate-800">{title}</p>
-      <p className="text-[11px] text-slate-500 mt-0.5">{subtitle}</p>
+
+      <div className="flex min-w-0 w-full items-end justify-between gap-2 md:items-center">
+        <p className="min-w-0 break-words text-sm font-bold leading-5">
+          {title}
+        </p>
+        <ArrowRight
+          className={`h-4 w-4 flex-shrink-0 transition-transform sm:group-hover:translate-x-0.5 ${
+            primary ? 'text-white/80' : 'text-slate-400'
+          }`}
+        />
+      </div>
     </button>
   );
 }
 
-function MiniPill({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl bg-white/15 border border-white/20 px-3 py-2 backdrop-blur-sm">
-      <p className="text-[10px] uppercase tracking-wide text-emerald-100/90">{label}</p>
-      <p className="text-sm font-bold text-white mt-0.5 truncate">{value}</p>
-    </div>
-  );
-}
-
-function MetricChip({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string;
-  tone: 'emerald' | 'amber' | 'teal';
-}) {
-  const toneClass =
-    tone === 'emerald'
-      ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
-      : tone === 'amber'
-      ? 'bg-amber-50 text-amber-700 border-amber-100'
-      : 'bg-teal-50 text-teal-700 border-teal-100';
-
-  return (
-    <div className={`rounded-xl border px-3 py-2 ${toneClass}`}>
-      <p className="text-[10px] uppercase tracking-wide font-semibold opacity-80">{label}</p>
-      <p className="text-xs lg:text-sm font-bold mt-0.5">{value}</p>
-    </div>
-  );
+function formatAmountNumber(value: number) {
+  return new Intl.NumberFormat('en-LK', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
 }
 
 function getGreeting() {
-  const h = new Date().getHours();
-  if (h < 12) return 'Morning';
-  if (h < 17) return 'Afternoon';
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Morning';
+  if (hour < 17) return 'Afternoon';
   return 'Evening';
 }

@@ -7,7 +7,7 @@ import { notificationsApi } from '../../services/api/notificationsApi';
 import {
   LayoutDashboard, Package, ShoppingCart, Users, UserCheck,
   BarChart3, Bell, Settings, LogOut, Menu, X, ChevronLeft,
-  MessageSquare, Shield, FileText, MapPin, Gift, TrendingUp
+  MessageSquare, Shield, FileText, MapPin, Gift, TrendingUp, CreditCard
 } from 'lucide-react';
 import ConfirmModal from '../common/ConfirmModal';
 import NotificationPanel from '../common/NotificationPanel';
@@ -27,6 +27,8 @@ const baseNavItems = [
   { to: '/admin/routes', icon: MapPin, label: 'Route Manage' },
   { to: '/admin/reports', icon: BarChart3, label: 'Reports' },
   { to: '/admin/outstanding-reports', icon: TrendingUp, label: 'Outstanding' },
+  { to: '/admin/sales-summary', icon: BarChart3, label: 'Sales Summary' },
+  { to: '/admin/payment-reports', icon: CreditCard, label: 'Pay Reports' },
   { to: '/admin/support', icon: MessageSquare, label: 'Support' },
   { to: '/admin/settings', icon: Settings, label: 'Settings' },
 ];

@@ -254,7 +254,7 @@ export default function CustomerOrders() {
         {activeTab === 'trash' ? (
           <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
             <div className="px-5 py-3 border-b border-slate-100">
-              <span className="text-sm font-semibold text-slate-700">Trash (auto-deleted after 7 days)</span>
+              <span className="text-sm font-semibold text-slate-700">Trash (items remain until restored)</span>
             </div>
             {trashLoading ? (
               <div className="p-8 text-center text-slate-400 text-sm">Loading...</div>

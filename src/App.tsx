@@ -34,8 +34,11 @@ import AdminRepDetail from './pages/admin/RepDetail';
 import CreateRep from './pages/admin/CreateRep';
 import AdminOrderDetail from './pages/admin/OrderDetail';
 import AdminPayments from './pages/admin/Payments';
+import AdminPaymentReports from './pages/admin/PaymentReports';
+import PaymentReportDetail from './pages/shared/PaymentReportDetail';
 import AdminReports from './pages/admin/Reports';
 import AdminOutstandingReports from './pages/admin/OutstandingReports';
+import AdminSalesSummary from './pages/admin/SalesSummary';
 import AdminSupport from './pages/admin/Support';
 import AdminSupportDetail from './pages/admin/SupportDetail';
 import AdminNotifications from './pages/admin/Notifications';
@@ -58,6 +61,7 @@ import RepVisitDetail from './pages/rep/VisitDetail';
 import RepRouteDetail from './pages/rep/RouteDetail';
 import RepOrders from './pages/rep/Orders';
 import RepPayments from './pages/rep/Payments';
+import RepPaymentReports from './pages/rep/PaymentReports';
 import RepCustomers from './pages/rep/Customers';
 import RepCustomerDetail from './pages/rep/CustomerDetail';
 import RepPerformance from './pages/rep/Performance';
@@ -77,6 +81,7 @@ import RepProfileEdit from './pages/rep/RepProfileEdit';
 import RepProducts from './pages/rep/RepProducts';
 import RepSelectQuotationProducts from './pages/rep/RepSelectQuotationProducts';
 import RepOutstandingReports from './pages/rep/RepOutstandingReports';
+import RepSalesSummary from './pages/rep/RepSalesSummary';
 import RepQuickRequest from './pages/rep/RepQuickRequest';
 
 // Coordinator pages
@@ -92,6 +97,7 @@ import CoordinatorSupport from './pages/coordinator/Support';
 import CoordinatorCreateSupport from './pages/coordinator/CreateSupport';
 import CoordinatorProfile from './pages/coordinator/Profile';
 import CoordinatorCustomerSpecialPrices from './pages/coordinator/CustomerSpecialPrices';
+import CoordinatorPaymentReports from './pages/coordinator/PaymentReports';
 
 // Customer pages
 import CustomerHome from './pages/customer/Home';
@@ -165,8 +171,11 @@ export default function App() {
           <Route path="reps/new" element={<CreateRep />} />
           <Route path="reps/:id" element={<AdminRepDetail />} />
           <Route path="payments" element={<AdminPayments />} />
+          <Route path="payment-reports" element={<AdminPaymentReports />} />
+          <Route path="payment-reports/:reportId" element={<PaymentReportDetail role="admin" />} />
           <Route path="reports" element={<AdminReports />} />
           <Route path="outstanding-reports" element={<AdminOutstandingReports />} />
+          <Route path="sales-summary" element={<AdminSalesSummary />} />
           <Route path="support" element={<AdminSupport />} />
           <Route path="support/:id" element={<AdminSupportDetail />} />
           <Route path="notifications" element={<AdminNotifications />} />
@@ -206,7 +215,10 @@ export default function App() {
           <Route path="quotations/new/products" element={<RepSelectQuotationProducts />} />
           <Route path="products" element={<RepProducts />} />
           <Route path="outstanding-reports" element={<RepOutstandingReports />} />
+          <Route path="sales-summary" element={<RepSalesSummary />} />
           <Route path="quick-requests" element={<RepQuickRequest />} />
+          <Route path="payment-reports" element={<RepPaymentReports />} />
+          <Route path="payment-reports/:reportId" element={<PaymentReportDetail role="rep" />} />
           <Route path="profile" element={<RepProfile />} />
           <Route path="profile/edit" element={<RepProfileEdit />} />
         </Route>
@@ -245,6 +257,8 @@ export default function App() {
           <Route path="support/new" element={<CoordinatorCreateSupport />} />
           <Route path="quotations" element={<CoordinatorQuotations />} />
           <Route path="notifications" element={<CoordinatorNotifications />} />
+          <Route path="payment-reports" element={<CoordinatorPaymentReports />} />
+          <Route path="payment-reports/:reportId" element={<PaymentReportDetail role="coordinator" />} />
           <Route path="profile" element={<CoordinatorProfile />} />
         </Route>
 

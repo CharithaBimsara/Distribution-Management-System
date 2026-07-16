@@ -1,6 +1,6 @@
 import api from './axiosConfig';
-import type { ApiResponse } from '../../types/api.types';
-import type { LoginRequest, AuthResponse, RegisterRequest, ChangePasswordRequest, CreateAdminAccountRequest, UserInfo, AdminAccountInfo, UpdateAdminAccountRequest, AdminResetPasswordResult } from '../../types/auth.types';
+import type { ApiResponse, PagedResult } from '../../types/api.types';
+import type { LoginRequest, AuthResponse, RegisterRequest, ChangePasswordRequest, CreateAdminAccountRequest, UserInfo, AdminAccountInfo, UpdateAdminAccountRequest, AdminResetPasswordResult, LockedUserInfo, UnlockUserResult } from '../../types/auth.types';
 
 export const authApi = {
   login: (data: LoginRequest) =>
@@ -38,4 +38,10 @@ export const authApi = {
 
   logout: () =>
     api.post<ApiResponse<string>>('/auth/logout'),
+
+  getLockedUsers: (params?: Record<string, unknown>) =>
+    api.get<ApiResponse<PagedResult<LockedUserInfo>>>('/auth/admin/locked-users', { params }),
+
+  unlockUser: (userId: string) =>
+    api.post<ApiResponse<UnlockUserResult>>(`/auth/admin/users/${userId}/unlock`),
 };

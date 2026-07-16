@@ -7,7 +7,7 @@ import { notificationsApi } from '../../services/api/notificationsApi';
 import {
   LayoutDashboard, Users, UserCheck, FileText,
   LogOut, Bell, Menu, X, ChevronLeft,
-  Shield, UsersRound, ShoppingCart, MessageSquare, User, MapPin
+  Shield, UsersRound, ShoppingCart, MessageSquare, User, MapPin, CreditCard
 } from 'lucide-react';
 import ConfirmModal from '../common/ConfirmModal';
 import NotificationPanel from '../common/NotificationPanel';
@@ -23,6 +23,7 @@ const navItems = [
   { to: '/coordinator/approvals', icon: UserCheck, label: 'Approvals' },
   { to: '/coordinator/support', icon: MessageSquare, label: 'Support' },
   { to: '/coordinator/quotations', icon: FileText, label: 'Quotations' },
+  { to: '/coordinator/payment-reports', icon: CreditCard, label: 'Payments' },
   { to: '/coordinator/profile', icon: User, label: 'Profile' },
 ];
 

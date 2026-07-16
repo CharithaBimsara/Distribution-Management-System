@@ -27,6 +27,9 @@ const colorMap: Record<string, string> = {
   Allocated:          'bg-blue-50 text-blue-700 ring-blue-200',
   Bounced:            'bg-red-50 text-red-700 ring-red-200',
   PendingApproval:    'bg-blue-50 text-blue-700 ring-blue-200',
+  // Rep payment report statuses
+  AwaitingConfirmation: 'bg-amber-50 text-amber-700 ring-amber-200',
+  Confirmed:          'bg-emerald-50 text-emerald-700 ring-emerald-200',
   // Customer / user statuses
   Active:             'bg-emerald-50 text-emerald-700 ring-emerald-200',
   Inactive:           'bg-slate-100 text-slate-600 ring-slate-200',
