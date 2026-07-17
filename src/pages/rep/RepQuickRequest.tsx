@@ -1,25 +1,14 @@
 // @ts-nocheck
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import {
-  useMutation,
-  useQueryClient,
-} from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Camera,
   CheckCircle2,
   FileText,
   ImagePlus,
-  Package,
-  Plus,
   Send,
   ShoppingCart,
-  Trash2,
   User,
   X,
 } from 'lucide-react';
@@ -27,35 +16,6 @@ import toast from 'react-hot-toast';
 import { quickRequestApi } from '../../services/api/quickRequestApi';
 
 type RequestType = 'Order' | 'Quotation';
-
-type ItemRow = {
-  id: string;
-  item: string;
-  quantity: string;
-};
-
-function createClientId() {
-  const cryptoApi = globalThis.crypto;
-
-  if (
-    cryptoApi &&
-    typeof cryptoApi.randomUUID === 'function'
-  ) {
-    return cryptoApi.randomUUID();
-  }
-
-  return `row-${Date.now()}-${Math.random()
-    .toString(36)
-    .slice(2, 10)}`;
-}
-
-function createEmptyRow(): ItemRow {
-  return {
-    id: createClientId(),
-    item: '',
-    quantity: '1',
-  };
-}
 
 function ImagePreview({
   url,
@@ -94,72 +54,32 @@ export default function RepQuickRequest() {
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
 
-  const [type, setType] =
-    useState<RequestType>('Order');
-  const [customerName, setCustomerName] =
-    useState('');
-  const [itemRows, setItemRows] =
-    useState<ItemRow[]>([createEmptyRow()]);
-  const [pendingImages, setPendingImages] =
-    useState<File[]>([]);
-  const [previewUrls, setPreviewUrls] =
-    useState<string[]>([]);
-  const [fullPreview, setFullPreview] =
-    useState<string | null>(null);
-
-  const validRows = useMemo(
-    () =>
-      itemRows.filter(
-        (row) => row.item.trim().length > 0,
-      ),
-    [itemRows],
-  );
-
-  const totalQuantity = useMemo(
-    () =>
-      validRows.reduce(
-        (sum, row) =>
-          sum +
-          Math.max(
-            0,
-            Number(row.quantity) || 0,
-          ),
-        0,
-      ),
-    [validRows],
-  );
-
-  const requestDetails = useMemo(
-    () =>
-      validRows
-        .map((row) => {
-          const quantity = Math.max(
-            1,
-            Number(row.quantity) || 1,
-          );
-
-          return `${row.item.trim()} — Qty ${quantity}`;
-        })
-        .join('\n'),
-    [validRows],
-  );
+  const [type, setType] = useState<RequestType>('Order');
+  const [customerName, setCustomerName] = useState('');
+  const [details, setDetails] = useState('');
+  const [pendingImages, setPendingImages] = useState<File[]>([]);
+  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
+  const [fullPreview, setFullPreview] = useState<string | null>(null);
 
   const submitMutation = useMutation({
     mutationFn: async () => {
-      const response =
-        await quickRequestApi.create({
-          type,
-          customerName: customerName.trim(),
-          details: requestDetails,
-        });
+      /*
+       * The existing backend creates the Quick Request first and uploads images
+       * afterwards. It currently expects a non-empty details value, so an
+       * image-only request uses a small neutral description internally.
+       */
+      const requestDetails = details.trim() || 'Image attachment only';
+
+      const response = await quickRequestApi.create({
+        type,
+        customerName: customerName.trim(),
+        details: requestDetails,
+      });
 
       const created = response.data.data;
 
       if (pendingImages.length > 0) {
-        await quickRequestApi.uploadImages(
-          created.id,
-          pendingImages,
-        );
+        await quickRequestApi.uploadImages(created.id, pendingImages);
       }
 
       return created;
@@ -169,9 +89,10 @@ export default function RepQuickRequest() {
       toast.success(`${type} submitted successfully`);
 
       setCustomerName('');
-      setItemRows([createEmptyRow()]);
+      setDetails('');
       setPendingImages([]);
       setPreviewUrls([]);
+      setFullPreview(null);
 
       queryClient.invalidateQueries({
         queryKey: ['rep-quick-requests'],
@@ -184,45 +105,9 @@ export default function RepQuickRequest() {
 
     onError: (error: any) =>
       toast.error(
-        error?.response?.data?.message ||
-          'Submission failed',
+        error?.response?.data?.message || 'Submission failed',
       ),
   });
-
-  const addRow = () => {
-    setItemRows((current) => [
-      ...current,
-      createEmptyRow(),
-    ]);
-  };
-
-  const updateRow = (
-    rowId: string,
-    changes: Partial<ItemRow>,
-  ) => {
-    setItemRows((current) =>
-      current.map((row) =>
-        row.id === rowId
-          ? {
-              ...row,
-              ...changes,
-            }
-          : row,
-      ),
-    );
-  };
-
-  const removeRow = (rowId: string) => {
-    setItemRows((current) => {
-      const next = current.filter(
-        (row) => row.id !== rowId,
-      );
-
-      return next.length
-        ? next
-        : [createEmptyRow()];
-    });
-  };
 
   const addImages = (files: FileList | null) => {
     if (!files) return;
@@ -256,9 +141,7 @@ export default function RepQuickRequest() {
       const reader = new FileReader();
 
       reader.onload = (event) => {
-        const result =
-          event.target?.result as string;
-
+        const result = event.target?.result as string;
         if (!result) return;
 
         setPreviewUrls((current) => [
@@ -274,15 +157,13 @@ export default function RepQuickRequest() {
   const removeImage = (index: number) => {
     setPendingImages((current) =>
       current.filter(
-        (_, currentIndex) =>
-          currentIndex !== index,
+        (_, currentIndex) => currentIndex !== index,
       ),
     );
 
     setPreviewUrls((current) =>
       current.filter(
-        (_, currentIndex) =>
-          currentIndex !== index,
+        (_, currentIndex) => currentIndex !== index,
       ),
     );
   };
@@ -293,42 +174,17 @@ export default function RepQuickRequest() {
       return;
     }
 
-    if (validRows.length === 0) {
-      toast.error('Add at least one item');
-      return;
-    }
-
-    const invalidQuantity = validRows.some(
-      (row) =>
-        !Number.isFinite(Number(row.quantity)) ||
-        Number(row.quantity) < 1,
-    );
-
-    if (invalidQuantity) {
-      toast.error(
-        'Every item quantity must be at least 1',
-      );
+    if (!details.trim() && pendingImages.length === 0) {
+      toast.error('Enter request details or attach an image');
       return;
     }
 
     submitMutation.mutate();
   };
 
-  useEffect(() => {
-    if (
-      itemRows.length > 0 &&
-      itemRows[itemRows.length - 1].item.trim()
-    ) {
-      setItemRows((current) => [
-        ...current,
-        createEmptyRow(),
-      ]);
-    }
-  }, [itemRows]);
-
   const canSubmit =
     customerName.trim().length > 0 &&
-    validRows.length > 0 &&
+    (details.trim().length > 0 || pendingImages.length > 0) &&
     !submitMutation.isPending;
 
   return (
@@ -356,7 +212,7 @@ export default function RepQuickRequest() {
             </h1>
 
             <p className="mt-1 text-xs text-emerald-100 sm:text-sm">
-              Add items, quantities and photos
+              Enter request details, attach photos, or use both
             </p>
           </div>
 
@@ -381,33 +237,28 @@ export default function RepQuickRequest() {
                 </label>
 
                 <div className="grid grid-cols-2 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-1">
-                  {(
-                    [
-                      'Order',
-                      'Quotation',
-                    ] as const
-                  ).map((requestType) => (
-                    <button
-                      key={requestType}
-                      type="button"
-                      onClick={() =>
-                        setType(requestType)
-                      }
-                      className={`inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-bold transition ${
-                        type === requestType
-                          ? 'bg-emerald-700 text-white shadow-sm'
-                          : 'text-slate-500 hover:bg-white'
-                      }`}
-                    >
-                      {requestType === 'Order' ? (
-                        <ShoppingCart className="h-3.5 w-3.5" />
-                      ) : (
-                        <FileText className="h-3.5 w-3.5" />
-                      )}
+                  {(['Order', 'Quotation'] as const).map(
+                    (requestType) => (
+                      <button
+                        key={requestType}
+                        type="button"
+                        onClick={() => setType(requestType)}
+                        className={`inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-bold transition ${
+                          type === requestType
+                            ? 'bg-emerald-700 text-white shadow-sm'
+                            : 'text-slate-500 hover:bg-white'
+                        }`}
+                      >
+                        {requestType === 'Order' ? (
+                          <ShoppingCart className="h-3.5 w-3.5" />
+                        ) : (
+                          <FileText className="h-3.5 w-3.5" />
+                        )}
 
-                      {requestType}
-                    </button>
-                  ))}
+                        {requestType}
+                      </button>
+                    ),
+                  )}
                 </div>
               </div>
 
@@ -422,9 +273,7 @@ export default function RepQuickRequest() {
                   <input
                     value={customerName}
                     onChange={(event) =>
-                      setCustomerName(
-                        event.target.value,
-                      )
+                      setCustomerName(event.target.value)
                     }
                     placeholder="Enter customer or shop name"
                     className="min-h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-3 text-sm font-semibold text-slate-900 outline-none transition placeholder:font-normal placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-2 focus:ring-emerald-500/15"
@@ -434,123 +283,36 @@ export default function RepQuickRequest() {
             </div>
           </section>
 
-          {/* Item entry table */}
+          {/* Request details */}
           <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3.5 sm:px-5">
-              <div className="flex items-center gap-2.5">
-                <div className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
-                  <Package className="h-4 w-4" />
-                </div>
-
-                <div>
-                  <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
-                    Items
-                  </p>
-
-                  <h2 className="mt-0.5 text-sm font-black text-slate-900">
-                    Item Entry
-                  </h2>
-                </div>
+            <div className="flex items-center gap-2.5 border-b border-slate-100 px-4 py-3.5 sm:px-5">
+              <div className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+                <FileText className="h-4 w-4" />
               </div>
 
-              <button
-                type="button"
-                onClick={addRow}
-                className="hidden min-h-9 items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 text-xs font-bold text-emerald-700 transition active:bg-emerald-100 sm:inline-flex"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Add Row
-              </button>
+              <div>
+                <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
+                  Request
+                </p>
+
+                <h2 className="mt-0.5 text-sm font-black text-slate-900">
+                  Request Details
+                </h2>
+              </div>
             </div>
 
-            <div className="w-full">
-              <div className="grid grid-cols-[minmax(0,1fr)_58px_36px] border-b border-emerald-200 bg-emerald-50 text-[10px] font-bold uppercase tracking-wide text-emerald-950 sm:grid-cols-[32px_minmax(0,1fr)_76px_38px]">
-                <div className="hidden px-2 py-2.5 text-center sm:block">
-                  #
-                </div>
+            <div className="p-4 sm:p-5">
+              <textarea
+                value={details}
+                onChange={(event) => setDetails(event.target.value)}
+                placeholder="Type the requested items, quantities, notes, or any other details here..."
+                rows={7}
+                className="min-h-[160px] w-full resize-y rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium leading-6 text-slate-900 outline-none transition placeholder:font-normal placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-2 focus:ring-emerald-500/15"
+              />
 
-                <div className="px-3 py-2.5 sm:border-l sm:border-emerald-200">
-                  Item
-                </div>
-
-                <div className="border-l border-emerald-200 px-1 py-2.5 text-center">
-                  Qty
-                </div>
-
-                <div className="border-l border-emerald-200" />
-              </div>
-
-              <div className="divide-y divide-slate-100">
-                {itemRows.map(
-                  (row, rowIndex) => (
-                    <div
-                      key={row.id}
-                      className="grid grid-cols-[minmax(0,1fr)_58px_36px] items-center bg-white sm:grid-cols-[32px_minmax(0,1fr)_76px_38px]"
-                    >
-                      <div className="hidden px-2 py-2 text-center text-[10px] font-bold text-slate-400 sm:block">
-                        {rowIndex + 1}
-                      </div>
-
-                      <div className="min-w-0 p-1.5 sm:border-l sm:border-slate-100">
-                        <input
-                          value={row.item}
-                          onChange={(event) =>
-                            updateRow(row.id, {
-                              item:
-                                event.target.value,
-                            })
-                          }
-                          placeholder="Item name"
-                          className="h-9 w-full min-w-0 rounded-lg border border-transparent bg-transparent px-2 text-[13px] font-semibold text-slate-900 outline-none transition placeholder:font-normal placeholder:text-slate-400 focus:border-emerald-300 focus:bg-emerald-50/40 sm:px-2.5 sm:text-sm"
-                        />
-                      </div>
-
-                      <div className="border-l border-slate-100 p-1">
-                        <input
-                          type="number"
-                          min="1"
-                          inputMode="numeric"
-                          value={row.quantity}
-                          onChange={(event) =>
-                            updateRow(row.id, {
-                              quantity:
-                                event.target.value,
-                            })
-                          }
-                          onBlur={() => {
-                            if (
-                              !row.quantity ||
-                              Number(row.quantity) <
-                                1
-                            ) {
-                              updateRow(row.id, {
-                                quantity: '1',
-                              });
-                            }
-                          }}
-                          className="h-9 w-full appearance-none rounded-lg border border-transparent bg-transparent px-1 text-center text-[13px] font-black text-slate-900 outline-none transition focus:border-emerald-300 focus:bg-emerald-50/40 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                          style={{
-                            MozAppearance:
-                              'textfield',
-                          }}
-                        />
-                      </div>
-
-                      <div className="flex items-center justify-center border-l border-slate-100">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            removeRow(row.id)
-                          }
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition active:bg-red-50 active:text-red-600 sm:hover:bg-red-50 sm:hover:text-red-600"
-                          aria-label="Remove row"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  ),
-                )}
+              <div className="mt-2 flex items-center justify-between gap-3 text-[10px] font-semibold text-slate-400">
+                <span>Text or photo is required</span>
+                <span>{details.length} characters</span>
               </div>
             </div>
           </section>
@@ -583,47 +345,37 @@ export default function RepQuickRequest() {
 
             <div className="p-4 sm:p-5">
               <div className="flex flex-wrap gap-2.5">
-                {previewUrls.map(
-                  (url, index) => (
-                    <div
-                      key={`${url}-${index}`}
-                      className="group relative h-[76px] w-[76px] overflow-visible rounded-xl border border-slate-200 bg-slate-100 sm:h-20 sm:w-20"
+                {previewUrls.map((url, index) => (
+                  <div
+                    key={`${url}-${index}`}
+                    className="group relative h-[76px] w-[76px] overflow-visible rounded-xl border border-slate-200 bg-slate-100 sm:h-20 sm:w-20"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setFullPreview(url)}
+                      className="h-full w-full overflow-hidden rounded-xl"
                     >
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setFullPreview(url)
-                        }
-                        className="h-full w-full overflow-hidden rounded-xl"
-                      >
-                        <img
-                          src={url}
-                          alt={`Attachment ${
-                            index + 1
-                          }`}
-                          className="h-full w-full object-cover"
-                        />
-                      </button>
+                      <img
+                        src={url}
+                        alt={`Attachment ${index + 1}`}
+                        className="h-full w-full object-cover"
+                      />
+                    </button>
 
-                      <button
-                        type="button"
-                        onClick={() =>
-                          removeImage(index)
-                        }
-                        className="absolute -right-2 -top-2 inline-flex h-7 w-7 items-center justify-center rounded-full border border-rose-100 bg-white text-rose-600 shadow-md transition active:scale-95 active:bg-rose-50"
-                        aria-label="Remove image"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  ),
-                )}
+                    <button
+                      type="button"
+                      onClick={() => removeImage(index)}
+                      className="absolute -right-2 -top-2 inline-flex h-7 w-7 items-center justify-center rounded-full border border-rose-100 bg-white text-rose-600 shadow-md transition active:scale-95 active:bg-rose-50"
+                      aria-label="Remove image"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
 
                 <button
                   type="button"
-                  onClick={() =>
-                    galleryRef.current?.click()
-                  }
+                  onClick={() => galleryRef.current?.click()}
                   className="inline-flex h-20 w-24 flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 text-slate-500 transition active:border-emerald-400 active:bg-emerald-50 active:text-emerald-700"
                 >
                   <ImagePlus className="h-5 w-5" />
@@ -634,9 +386,7 @@ export default function RepQuickRequest() {
 
                 <button
                   type="button"
-                  onClick={() =>
-                    cameraRef.current?.click()
-                  }
+                  onClick={() => cameraRef.current?.click()}
                   className="inline-flex h-20 w-24 flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 text-slate-500 transition active:border-emerald-400 active:bg-emerald-50 active:text-emerald-700"
                 >
                   <Camera className="h-5 w-5" />
@@ -671,8 +421,6 @@ export default function RepQuickRequest() {
               />
             </div>
           </section>
-
-
         </main>
 
         {/* Summary / submit */}
@@ -692,27 +440,21 @@ export default function RepQuickRequest() {
               <div className="space-y-3 text-xs">
                 <SummaryRow
                   label="Customer"
+                  value={customerName.trim() || 'Not entered'}
+                />
+
+                <SummaryRow
+                  label="Details"
                   value={
-                    customerName.trim() ||
-                    'Not entered'
+                    details.trim()
+                      ? `${details.trim().length} characters`
+                      : 'Image only'
                   }
                 />
 
                 <SummaryRow
-                  label="Item lines"
-                  value={String(validRows.length)}
-                />
-
-                <SummaryRow
-                  label="Total quantity"
-                  value={String(totalQuantity)}
-                />
-
-                <SummaryRow
                   label="Photos"
-                  value={String(
-                    pendingImages.length,
-                  )}
+                  value={String(pendingImages.length)}
                 />
               </div>
 
@@ -721,7 +463,7 @@ export default function RepQuickRequest() {
                   <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-emerald-700" />
 
                   <p className="text-[11px] font-semibold leading-5 text-emerald-800">
-                    Items and quantities will be submitted in order.
+                    Enter request details, attach an image, or use both.
                   </p>
                 </div>
               </div>
