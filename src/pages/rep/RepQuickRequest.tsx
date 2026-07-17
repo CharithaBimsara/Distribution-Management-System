@@ -421,10 +421,36 @@ export default function RepQuickRequest() {
               />
             </div>
           </section>
+
+          {/* Mobile submit — summary is intentionally hidden on phones */}
+          <section className="lg:hidden">
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={!canSubmit}
+              className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 text-sm font-black text-white shadow-lg shadow-emerald-700/15 transition active:scale-[0.99] active:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
+            >
+              {submitMutation.isPending ? (
+                <>
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                  Submitting...
+                </>
+              ) : (
+                <>
+                  <Send className="h-4 w-4" />
+                  Submit {type}
+                </>
+              )}
+            </button>
+
+            <p className="mt-2 text-center text-[10px] font-medium text-slate-400">
+              Add request details, a photo, or both
+            </p>
+          </section>
         </main>
 
-        {/* Summary / submit */}
-        <aside className="min-w-0">
+        {/* Desktop summary / submit */}
+        <aside className="hidden min-w-0 lg:block">
           <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:sticky lg:top-4">
             <div className="bg-emerald-700 px-4 py-4 text-white">
               <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-emerald-100">
@@ -437,20 +463,45 @@ export default function RepQuickRequest() {
             </div>
 
             <div className="p-4">
-              <div className="space-y-3 text-xs">
-                <SummaryRow
-                  label="Customer"
-                  value={customerName.trim() || 'Not entered'}
-                />
+              <div className="space-y-4">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+                  <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
+                    Customer
+                  </p>
 
-                <SummaryRow
-                  label="Details"
-                  value={
-                    details.trim()
-                      ? `${details.trim().length} characters`
-                      : 'Image only'
-                  }
-                />
+                  <p className="mt-1 break-words text-sm font-black text-slate-900">
+                    {customerName.trim() || 'Not entered'}
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 bg-white px-3 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
+                      Request Overview
+                    </p>
+
+                    <span className="flex-shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-bold text-slate-500">
+                      {details.trim()
+                        ? `${details
+                            .trim()
+                            .split(/\r?\n/)
+                            .filter((line) => line.trim()).length} lines`
+                        : 'Image only'}
+                    </span>
+                  </div>
+
+                  {details.trim() ? (
+                    <div className="mt-2 max-h-72 overflow-y-auto rounded-lg bg-slate-50 px-3 py-2.5">
+                      <p className="whitespace-pre-wrap break-words text-xs font-semibold leading-5 text-slate-700">
+                        {details.trim()}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="mt-2 rounded-lg bg-slate-50 px-3 py-3 text-xs font-semibold text-slate-400">
+                      No text details entered. This request will use the attached image.
+                    </p>
+                  )}
+                </div>
 
                 <SummaryRow
                   label="Photos"
@@ -463,7 +514,7 @@ export default function RepQuickRequest() {
                   <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-emerald-700" />
 
                   <p className="text-[11px] font-semibold leading-5 text-emerald-800">
-                    Enter request details, attach an image, or use both.
+                    Review the request overview before submitting.
                   </p>
                 </div>
               </div>
