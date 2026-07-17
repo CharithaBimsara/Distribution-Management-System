@@ -122,7 +122,9 @@ export default function AdminTargetCard({ target: t, repId, onDeleteClick }: Adm
       <div className="flex items-start justify-between mb-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-sm font-bold text-slate-900">{t.targetPeriod}</span>
+            <span className="text-sm font-bold text-slate-900">
+              {t.targetName?.trim() || `${t.targetPeriod} Target`}
+            </span>
             <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
               t.performanceStatus === 'Target Achieved' || t.performanceStatus === 'Target Exceeded'
                 ? 'bg-blue-50 text-blue-700 border-blue-200'

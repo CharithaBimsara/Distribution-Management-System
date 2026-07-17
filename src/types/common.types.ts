@@ -60,6 +60,7 @@ export interface RepPerformance {
 export interface SalesTarget {
   id: string;
   repId: string;
+  targetName?: string | null;
   targetPeriod: string;
   startDate: string;
   endDate: string;

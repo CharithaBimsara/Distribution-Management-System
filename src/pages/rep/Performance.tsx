@@ -910,11 +910,11 @@ function CurrentTargetCard({
       <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-4 sm:flex-row sm:items-start sm:justify-between sm:px-5 lg:px-6">
         <div className="min-w-0">
           <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-emerald-600">
-            Current Target
+            Sales Target
           </p>
 
-          <h2 className="mt-1 text-lg font-black text-slate-900 sm:text-xl">
-            {target.targetPeriod}
+          <h2 className="mt-1 break-words text-lg font-black text-slate-900 sm:text-xl">
+            {target.targetName?.trim() || `${target.targetPeriod} Target`}
           </h2>
 
           <p className="mt-1 inline-flex items-center gap-1.5 text-[11px] text-slate-500 sm:text-xs">
@@ -1053,17 +1053,27 @@ export default function RepPerformancePage() {
         ),
   });
 
-  const currentTarget = useMemo(() => {
-    if (!targets.length) return undefined;
+  const sortedTargets = useMemo(() => {
+    const now = Date.now();
 
-    const now = new Date();
+    return [...targets].sort(
+      (first: SalesTarget, second: SalesTarget) => {
+        const firstStart = new Date(first.startDate).getTime();
+        const firstEnd = new Date(first.endDate).getTime();
+        const secondStart = new Date(second.startDate).getTime();
+        const secondEnd = new Date(second.endDate).getTime();
 
-    return (
-      targets.find(
-        (target: SalesTarget) =>
-          new Date(target.startDate) <= now &&
-          now <= new Date(target.endDate),
-      ) ?? targets[0]
+        const firstIsCurrent =
+          firstStart <= now && now <= firstEnd;
+        const secondIsCurrent =
+          secondStart <= now && now <= secondEnd;
+
+        if (firstIsCurrent !== secondIsCurrent) {
+          return firstIsCurrent ? -1 : 1;
+        }
+
+        return secondStart - firstStart;
+      },
     );
   }, [targets]);
 
@@ -1082,7 +1092,7 @@ export default function RepPerformancePage() {
           </h1>
 
           <p className="mt-1 text-xs text-emerald-100 sm:text-sm">
-            Target progress and current report
+            View each target, progress and its current report
           </p>
         </div>
       </header>
@@ -1095,10 +1105,19 @@ export default function RepPerformancePage() {
             Loading performance…
           </p>
         </section>
+      ) : sortedTargets.length === 0 ? (
+        <CurrentTargetCard />
       ) : (
-        <CurrentTargetCard
-          target={currentTarget}
-        />
+        <div className="space-y-4">
+          {sortedTargets.map(
+            (target: SalesTarget) => (
+              <CurrentTargetCard
+                key={target.id}
+                target={target}
+              />
+            ),
+          )}
+        </div>
       )}
     </div>
   );

@@ -253,7 +253,11 @@ export default function AdminRepDetail() {
   // Targets
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [targetForm, setTargetForm] = useState({
-    targetPeriod: 'Monthly', startDate: '', endDate: '', targetAmount: '',
+    targetName: '',
+    targetPeriod: 'Monthly',
+    startDate: '',
+    endDate: '',
+    targetAmount: '',
   });
 
   // ── Queries ────────────────────────────────────────────────────────────────
@@ -365,7 +369,13 @@ export default function AdminRepDetail() {
     mutationFn: (data: any) => repsApi.adminSetTarget(id!, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-rep-targets', id] });
-      setTargetForm({ targetPeriod: 'Monthly', startDate: '', endDate: '', targetAmount: '' });
+      setTargetForm({
+        targetName: '',
+        targetPeriod: 'Monthly',
+        startDate: '',
+        endDate: '',
+        targetAmount: '',
+      });
       toast.success('Target added');
     },
     onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed'),
@@ -792,7 +802,18 @@ export default function AdminRepDetail() {
               <h3 className="text-sm font-semibold text-slate-800">New Target</h3>
             </div>
             <div className="p-5">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4 mb-4">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Target Name</label>
+                  <input
+                    type="text"
+                    maxLength={100}
+                    placeholder="e.g. July Main Target"
+                    value={targetForm.targetName}
+                    onChange={e => setTargetForm(p => ({ ...p, targetName: e.target.value }))}
+                    className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                  />
+                </div>
                 <div className="flex flex-col gap-1.5">
                   <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Period</label>
                   <select
@@ -824,12 +845,19 @@ export default function AdminRepDetail() {
               <div className="flex justify-end">
                 <button
                   onClick={() => setTargetMut.mutate({
+                    targetName: targetForm.targetName.trim(),
                     targetPeriod: targetForm.targetPeriod,
                     startDate: targetForm.startDate,
                     endDate: targetForm.endDate,
                     targetAmount: Number(targetForm.targetAmount),
                   })}
-                  disabled={setTargetMut.isPending || !targetForm.startDate || !targetForm.endDate || !targetForm.targetAmount}
+                  disabled={
+                    setTargetMut.isPending ||
+                    !targetForm.targetName.trim() ||
+                    !targetForm.startDate ||
+                    !targetForm.endDate ||
+                    !targetForm.targetAmount
+                  }
                   className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition shadow-sm"
                 >
                   <Plus className="w-4 h-4" />
