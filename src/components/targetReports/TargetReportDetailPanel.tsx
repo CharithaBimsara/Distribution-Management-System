@@ -227,7 +227,7 @@ export default function TargetReportDetailPanel({
     dateGroups.length > 0 && expandedDates.size === dateGroups.length;
 
   return (
-    <div className="border-t-2 border-violet-200">
+    <div className="min-w-0 border-t-2 border-violet-200">
       <div className="border-b border-slate-200 bg-violet-50/60 px-4 py-3">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs font-bold text-slate-800">
@@ -429,69 +429,52 @@ export default function TargetReportDetailPanel({
             })}
           </div>
 
-          {(totalLabelRow || grandTotalRow) && (
-            <div className="mt-4 overflow-x-auto rounded-xl border-2 border-slate-500 bg-white shadow-sm">
-              <table className="min-w-[1120px] w-full table-fixed border-collapse text-xs">
-                <colgroup>
-                  <col className="w-[8%]" />
-                  <col className="w-[9.5%]" />
-                  <col className="w-[7%]" />
-                  <col className="w-[26%]" />
-                  <col className="w-[25%]" />
-                  <col className="w-[6.5%]" />
-                  <col className="w-[7.5%]" />
-                  <col className="w-[10.5%]" />
-                </colgroup>
+          {grandTotalRow && (
+            <section className="mt-4 overflow-hidden rounded-xl border-2 border-slate-500 bg-white shadow-sm">
+              <div className="bg-slate-700 px-4 py-3 text-white">
+                <h3 className="text-sm font-extrabold">
+                  Total
+                </h3>
+              </div>
 
-                <thead>
-                  <tr className="bg-slate-700 text-white">
-                    <th
-                      colSpan={5}
-                      className="border border-slate-500 px-3 py-2.5 text-left text-sm font-extrabold"
-                    >
-                      {totalLabelRow?.txnType || 'Total'}
-                    </th>
-                    <th className="border border-slate-500 px-3 py-2.5 text-right text-[11px] font-extrabold uppercase tracking-wide">
-                      Qty
-                    </th>
-                    <th className="border border-slate-500 px-3 py-2.5 text-right text-[11px] font-extrabold uppercase tracking-wide">
-                      Discount
-                    </th>
-                    <th className="border border-slate-500 px-3 py-2.5 text-right text-[11px] font-extrabold uppercase tracking-wide">
-                      Sales With Tax
-                    </th>
-                  </tr>
-                </thead>
+              <div className="grid grid-cols-1 gap-2.5 bg-slate-50 p-3 sm:grid-cols-3">
+                <div className="min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-3">
+                  <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
+                    Qty
+                  </p>
 
-                <tbody>
-                  {grandTotalRow && (
-                    <tr className="bg-slate-100 text-base font-black text-slate-950">
-                      <td
-                        colSpan={5}
-                        className="border border-slate-400 px-3 py-3 text-right text-xs font-bold uppercase tracking-wide text-slate-500"
-                      >
-                        Grand Total
-                      </td>
-                      <td className="border border-slate-500 px-3 py-3 text-right tabular-nums">
-                        {fmt(grandTotalRow.qty)}
-                      </td>
-                      <td
-                        className={`border border-slate-500 px-3 py-3 text-right tabular-nums ${
-                          Number(grandTotalRow.discount ?? 0) < 0
-                            ? 'text-red-600'
-                            : ''
-                        }`}
-                      >
-                        {fmt(grandTotalRow.discount)}
-                      </td>
-                      <td className="border border-slate-500 px-3 py-3 text-right tabular-nums text-emerald-700">
-                        {fmt(grandTotalRow.salesWithTax)}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                  <p className="mt-1 break-words text-lg font-black tabular-nums text-slate-900">
+                    {fmt(grandTotalRow.qty)}
+                  </p>
+                </div>
+
+                <div className="min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-3">
+                  <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
+                    Discount
+                  </p>
+
+                  <p
+                    className={`mt-1 break-words text-lg font-black tabular-nums ${
+                      Number(grandTotalRow.discount ?? 0) < 0
+                        ? 'text-red-600'
+                        : 'text-slate-900'
+                    }`}
+                  >
+                    {fmt(grandTotalRow.discount)}
+                  </p>
+                </div>
+
+                <div className="min-w-0 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3">
+                  <p className="text-[9px] font-bold uppercase tracking-wide text-emerald-600">
+                    Sales With Tax
+                  </p>
+
+                  <p className="mt-1 break-words text-lg font-black tabular-nums text-emerald-700">
+                    {fmt(grandTotalRow.salesWithTax)}
+                  </p>
+                </div>
+              </div>
+            </section>
           )}
         </div>
       )}
