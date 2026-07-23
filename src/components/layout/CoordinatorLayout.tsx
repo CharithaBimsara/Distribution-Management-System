@@ -23,7 +23,7 @@ const navItems = [
   { to: '/coordinator/approvals', icon: UserCheck, label: 'Approvals' },
   { to: '/coordinator/support', icon: MessageSquare, label: 'Support' },
   { to: '/coordinator/quotations', icon: FileText, label: 'Quotations' },
-  { to: '/coordinator/payment-reports', icon: CreditCard, label: 'Payments' },
+  { to: '/coordinator/payment-reports', icon: CreditCard, label: 'Receive Payments' },
   { to: '/coordinator/profile', icon: User, label: 'Profile' },
 ];
 

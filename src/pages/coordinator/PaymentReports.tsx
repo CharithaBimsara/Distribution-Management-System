@@ -347,10 +347,10 @@ export default function CoordinatorPaymentReports() {
     <div className="animate-fade-in flex flex-col gap-4 pb-24">
       <div>
         <h1 className="text-2xl font-bold text-slate-900">
-          Team Payment Reports
+          Team Receive Payments
         </h1>
         <p className="mt-1 text-sm text-slate-500">
-          Review payment reports submitted by your assigned sales representatives
+          Review received payments submitted by your assigned sales representatives
         </p>
       </div>
 
