@@ -177,7 +177,7 @@ export default function RepSalesSummary() {
                     <th className="text-left px-4 py-3 font-semibold">Region</th>
                     <th className="text-center px-3 py-3 font-semibold">Period</th>
                     <th className="text-center px-3 py-3 font-semibold">Rows</th>
-                    <th className="text-right px-3 py-3 font-semibold">Gross Sales</th>
+                    <th className="text-right px-3 py-3 font-semibold">Sales With Tax</th>
                     <th className="w-24 px-3 py-3"></th>
                   </tr>
                 </thead>
@@ -193,7 +193,7 @@ export default function RepSalesSummary() {
                             {r.periodFrom && r.periodTo ? `${fmtDate(r.periodFrom)} - ${fmtDate(r.periodTo)}` : '—'}
                           </td>
                           <td className="px-3 py-3 text-center text-slate-500">{rowCount}</td>
-                          <td className="px-3 py-3 text-right font-semibold text-emerald-700">{formatCurrency(total?.grossSales ?? 0)}</td>
+                          <td className="px-3 py-3 text-right font-semibold text-emerald-700">{formatCurrency(total?.salesWithTax ?? 0)}</td>
                           <td className="px-3 py-3 text-right">
                             <button onClick={() => toggleView(r.id)}
                               className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition flex items-center gap-1 ml-auto ${
@@ -233,7 +233,7 @@ export default function RepSalesSummary() {
                           {r.periodFrom && r.periodTo ? `${fmtDate(r.periodFrom)} - ${fmtDate(r.periodTo)}` : '—'}
                         </p>
                         <p className="text-xs text-slate-400 mt-0.5">{rowCount} rows</p>
-                        <p className="text-base font-bold text-emerald-700 mt-1">{formatCurrency(total?.grossSales ?? 0)}</p>
+                        <p className="text-base font-bold text-emerald-700 mt-1">{formatCurrency(total?.salesWithTax ?? 0)}</p>
                       </div>
                       <button onClick={() => toggleView(r.id)}
                         className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition flex items-center gap-1 flex-shrink-0 ${
