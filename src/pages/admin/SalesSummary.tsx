@@ -31,6 +31,27 @@ function parseDdMmYyyy(s: string): string | null {
   return isNaN(d.getTime()) ? null : d.toISOString();
 }
 
+type SalesSummaryReportListItem = SalesSummaryReportSummary & {
+  totalSalesWithTax: number | null;
+};
+
+function calculateSalesWithTaxTotal(reportDetail: any): number {
+  const entries = reportDetail?.entries ?? [];
+  const totalEntry = entries.find((entry: any) => entry.isTotal);
+
+  if (totalEntry) {
+    return Number(totalEntry.salesWithTax ?? 0);
+  }
+
+  return entries
+    .filter((entry: any) => !entry.isTotal)
+    .reduce(
+      (sum: number, entry: any) =>
+        sum + Number(entry.salesWithTax ?? 0),
+      0,
+    );
+}
+
 export default function AdminSalesSummary() {
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -45,9 +66,53 @@ export default function AdminSalesSummary() {
     queryFn: () => regionsApi.getAll().then(r => r.data),
   });
 
-  const { data: reports = [], isLoading, isError, refetch } = useQuery({
+  const { data: reports = [], isLoading, isError, refetch } = useQuery<
+    SalesSummaryReportListItem[]
+  >({
     queryKey: ['admin-sales-summary'],
-    queryFn: () => salesSummaryApi.getAllReports().then(r => r.data.data),
+    queryFn: async () => {
+      const summaries: SalesSummaryReportSummary[] =
+        await salesSummaryApi
+          .getAllReports()
+          .then((response) => response.data.data);
+
+      return Promise.all(
+        summaries.map(async (summary) => {
+          const summarySalesWithTax = Number(
+            (summary as any).totalSalesWithTax,
+          );
+
+          if (Number.isFinite(summarySalesWithTax)) {
+            return {
+              ...summary,
+              totalSalesWithTax: summarySalesWithTax,
+            };
+          }
+
+          try {
+            const reportDetail = await salesSummaryApi
+              .getReportById(summary.id)
+              .then((response) => response.data.data);
+
+            qc.setQueryData(
+              ['admin-sales-summary-detail', summary.id],
+              reportDetail,
+            );
+
+            return {
+              ...summary,
+              totalSalesWithTax:
+                calculateSalesWithTaxTotal(reportDetail),
+            };
+          } catch {
+            return {
+              ...summary,
+              totalSalesWithTax: null,
+            };
+          }
+        }),
+      );
+    },
   });
 
   const { data: detail, isLoading: detailLoading } = useQuery({
@@ -322,14 +387,14 @@ export default function AdminSalesSummary() {
                   <th className="text-left px-4 py-3 font-semibold">Region</th>
                   <th className="text-center px-3 py-3 font-semibold">Period</th>
                   <th className="text-center px-3 py-3 font-semibold">Rows</th>
-                  <th className="text-right px-3 py-3 font-semibold">Gross Sales</th>
+                  <th className="text-right px-3 py-3 font-semibold">Sales With Tax</th>
                   <th className="text-center px-3 py-3 font-semibold">Uploaded</th>
                   <th className="text-center px-3 py-3 font-semibold">By</th>
                   <th className="w-32 px-3 py-3"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {reports.map((r: SalesSummaryReportSummary) => (
+                {reports.map((r: SalesSummaryReportListItem) => (
                   <Fragment key={r.id}>
                     <tr className={`transition-colors ${viewingReportId === r.id ? 'bg-violet-50/40' : 'hover:bg-slate-50/60'}`}>
                       <td className="px-4 py-3 font-semibold text-slate-900">{r.regionName}</td>
@@ -337,7 +402,11 @@ export default function AdminSalesSummary() {
                         {r.periodFrom && r.periodTo ? `${fmtDate(r.periodFrom)} - ${fmtDate(r.periodTo)}` : '—'}
                       </td>
                       <td className="px-3 py-3 text-center text-slate-500">{r.rowCount}</td>
-                      <td className="px-3 py-3 text-right font-semibold text-emerald-700">{formatCurrency(r.totalGrossSales)}</td>
+                      <td className="px-3 py-3 text-right font-semibold text-emerald-700">
+                        {r.totalSalesWithTax === null
+                          ? '—'
+                          : formatCurrency(r.totalSalesWithTax)}
+                      </td>
                       <td className="px-3 py-3 text-center text-slate-500 text-xs">{fmtDate(r.uploadedAt)}</td>
                       <td className="px-3 py-3 text-center text-slate-500 text-xs truncate max-w-[120px]">{r.uploadedBy || '—'}</td>
                       <td className="px-3 py-3 text-right">
