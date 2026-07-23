@@ -325,7 +325,7 @@ export default function RepPaymentReports() {
     <div className="animate-fade-in flex flex-col gap-5 pb-24">
       <div className="hidden lg:block">
         <h1 className="text-2xl font-bold text-slate-900">
-          Payment Reports
+          Receive Payments 
         </h1>
         <p className="mt-1 text-sm text-slate-500">
           Submit customer payments and track their review status
@@ -335,7 +335,7 @@ export default function RepPaymentReports() {
       <div className="lg:hidden">
         <div className="mb-3">
           <h1 className="text-xl font-bold text-slate-900">
-            Payment Reports
+            Receive Payments
           </h1>
           <p className="mt-0.5 text-xs text-slate-500">
             Fast reporting while you are on the road
@@ -372,7 +372,7 @@ export default function RepPaymentReports() {
 
       <div className={`${mobileSection === 'submit' ? 'block' : 'hidden'} rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6 lg:block`}>
         <h2 className="text-lg font-semibold text-slate-900">
-          Submit Payment Report
+          Submit Payment
         </h2>
         <p className="mt-1 text-sm text-slate-500">
           Evidence is optional. JPEG, PNG, WebP and GIF files are supported.

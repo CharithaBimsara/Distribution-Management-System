@@ -401,9 +401,9 @@ export default function AdminPaymentReports() {
   return (
     <div className="animate-fade-in flex flex-col gap-4 pb-24">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Payment Reports</h1>
+        <h1 className="text-2xl font-bold text-slate-900">Receive Payments</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Review and manage payment reports submitted by sales representatives
+          Review and manage received payments submitted by sales representatives
         </p>
       </div>
 

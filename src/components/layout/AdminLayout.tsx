@@ -28,7 +28,7 @@ const baseNavItems = [
   { to: '/admin/reports', icon: BarChart3, label: 'Reports' },
   { to: '/admin/outstanding-reports', icon: TrendingUp, label: 'Outstanding' },
   { to: '/admin/sales-summary', icon: BarChart3, label: 'Sales Summary' },
-  { to: '/admin/payment-reports', icon: CreditCard, label: 'Pay Reports' },
+  { to: '/admin/payment-reports', icon: CreditCard, label: 'Receive Payments' },
   { to: '/admin/support', icon: MessageSquare, label: 'Support' },
   { to: '/admin/settings', icon: Settings, label: 'Settings' },
 ];

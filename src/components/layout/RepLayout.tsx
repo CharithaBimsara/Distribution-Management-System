@@ -20,7 +20,7 @@ const navItems = [
   { to: '/rep/orders', icon: ShoppingCart, label: 'Orders' },
   { to: '/rep/quotations', icon: FileText, label: 'Quotations' },
   { to: '/rep/quick-requests', icon: Sparkles, label: 'Quick Order' },
-  { to: '/rep/payment-reports', icon: CreditCard, label: 'Pay Reports' },
+  { to: '/rep/payment-reports', icon: CreditCard, label: 'Receive Payments' },
   { to: '/rep/products', icon: Package, label: 'Products' },
   { to: '/rep/customers', icon: Users, label: 'Clients' },
   { to: '/rep/outstanding-reports', icon: TrendingUp, label: 'Outstanding' },
